@@ -28,8 +28,13 @@ import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
-import org.apache.hadoop.metrics2.lib.MutableQuantiles;
+import org.apache.hadoop.metrics2.lib.MutableMetric;
+import org.apache.hadoop.ozone.metrics.MutableQuantiles;
 import org.apache.hadoop.ozone.metrics.MutableRate;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 /**
  *
@@ -67,30 +72,42 @@ public class ContainerMetrics {
     this.opsLatency = new MutableRate[numEnumEntries];
     this.opsLatQuantiles = new MutableQuantiles[numEnumEntries][len];
     this.registry = new MetricsRegistry("StorageContainerMetrics");
-    for (int i = 0; i < numEnumEntries; i++) {
-      numOpsArray[i] = registry.newCounter(
-          "num" + ContainerProtos.Type.forNumber(i + 1),
-          "number of " + ContainerProtos.Type.forNumber(i + 1) + " ops",
-          (long) 0);
-      opsBytesArray[i] = registry.newCounter(
-          "bytes" + ContainerProtos.Type.forNumber(i + 1),
-          "bytes used by " + ContainerProtos.Type.forNumber(i + 1) + "op",
-          (long) 0);
-      opsLatency[i] = new MutableRate(
-          "latency" + ContainerProtos.Type.forNumber(i + 1),
-          ContainerProtos.Type.forNumber(i + 1) + " op", false);
+    try {
+      Method add = this.registry.getClass().getDeclaredMethod("add",
+          String.class, MutableMetric.class);
+      add.setAccessible(true);
+      for (int i = 0; i < numEnumEntries; i++) {
+        numOpsArray[i] = registry.newCounter(
+            "num" + ContainerProtos.Type.forNumber(i + 1),
+            "number of " + ContainerProtos.Type.forNumber(i + 1) + " ops",
+            (long) 0);
+        opsBytesArray[i] = registry.newCounter(
+            "bytes" + ContainerProtos.Type.forNumber(i + 1),
+            "bytes used by " + ContainerProtos.Type.forNumber(i + 1) + "op",
+            (long) 0);
+        opsLatency[i] = new MutableRate(
+            "latency" + ContainerProtos.Type.forNumber(i + 1),
+            ContainerProtos.Type.forNumber(i + 1) + " op", false);
 
-      for (int j = 0; j < len; j++) {
-        int interval = intervals[j];
-        String quantileName = ContainerProtos.Type.forNumber(i + 1) + "Nanos"
-            + interval + "s";
-        opsLatQuantiles[i][j] = registry.newQuantiles(quantileName,
-            "latency of Container ops", "ops", "latency", interval);
+        for (int j = 0; j < len; j++) {
+          int interval = intervals[j];
+          String quantileName = ContainerProtos.Type.forNumber(i + 1) + "Nanos"
+              + interval + "s";
+          MutableQuantiles mutableQuantiles = new MutableQuantiles(quantileName,
+              "latency of Container ops", "ops", "latency", interval);
+          opsLatQuantiles[i][j] = mutableQuantiles;
+          add.invoke(this.registry, quantileName, mutableQuantiles);
+        }
       }
+      add.setAccessible(false);
+    } catch (InvocationTargetException | NoSuchMethodException
+             | IllegalAccessException ex) {
+      System.out.println("OOoooooooops!");
     }
   }
 
   public static ContainerMetrics create(ConfigurationSource conf) {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     // Percentile measurement is off by default, by watching no intervals
     int[] intervals =

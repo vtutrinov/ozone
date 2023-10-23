@@ -26,6 +26,7 @@ import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.ozone.container.common.statemachine.commandhandler.CommandHandler;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -84,6 +85,7 @@ public final class CommandHandlerMetrics implements MetricsSource {
    */
   public static CommandHandlerMetrics create(
       Map<Type, CommandHandler> handlerMap) {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     return ms.register(SOURCE_NAME, "CommandHandlerMetrics Metrics",
         new CommandHandlerMetrics(handlerMap));

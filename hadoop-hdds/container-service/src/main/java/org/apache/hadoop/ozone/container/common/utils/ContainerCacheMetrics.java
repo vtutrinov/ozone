@@ -19,10 +19,9 @@ package org.apache.hadoop.ozone.container.common.utils;
 
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsFactory;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
-import org.apache.hadoop.ozone.metrics.MutableMetricsFactory;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 import org.apache.hadoop.ozone.metrics.MutableRate;
 
 /**
@@ -60,7 +59,8 @@ public final class ContainerCacheMetrics {
   }
 
   public static ContainerCacheMetrics create() {
-    DefaultMetricsFactory.INSTANCE.setInstance(new MutableMetricsFactory());
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     String name = "ContainerCacheMetrics";
 

@@ -26,6 +26,7 @@ import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 import java.util.Map;
 
@@ -48,6 +49,7 @@ public class ReplicationSupervisorMetrics implements MetricsSource {
 
   public static ReplicationSupervisorMetrics create(ReplicationSupervisor
       supervisor) {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     return ms.register(SOURCE, "Container Replication Supervisor Metrics",
         new ReplicationSupervisorMetrics(supervisor));

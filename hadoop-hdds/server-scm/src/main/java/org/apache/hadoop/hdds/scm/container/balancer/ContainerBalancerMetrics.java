@@ -24,6 +24,7 @@ import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 /**
  * Metrics related to Container Balancer running in SCM.
@@ -96,6 +97,7 @@ public final class ContainerBalancerMetrics {
    * @return {@link ContainerBalancerMetrics}
    */
   public static ContainerBalancerMetrics create() {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     return ms.register(NAME, "Container Balancer Metrics",
         new ContainerBalancerMetrics(ms));

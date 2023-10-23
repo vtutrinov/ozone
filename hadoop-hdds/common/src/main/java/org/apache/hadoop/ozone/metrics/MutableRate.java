@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -22,6 +22,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.metrics2.MetricsInfo;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.lib.MutableStat;
+import org.apache.hadoop.metrics2.util.SampleStat;
 import org.apache.hadoop.util.Time;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -29,6 +30,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static org.apache.hadoop.metrics2.lib.Interns.info;
 
+/**
+ * A convenient mutable metric for throughput measurement.
+ * (non-synchronized version of org.apache.hadoop.metrics2.lib.MutableRate)
+ */
 public class MutableRate extends MutableStat {
 
   private final MetricsInfo numInfo;
@@ -66,29 +71,34 @@ public class MutableRate extends MutableStat {
     String desc = StringUtils.uncapitalize(description);
     String lsName = StringUtils.uncapitalize(sampleName);
     String lvName = StringUtils.uncapitalize(valueName);
-    numInfo = info(ucName +"Num"+ usName, "Number of "+ lsName +" for "+ desc);
-    iNumInfo = info(ucName +"INum"+ usName,
-        "Interval number of "+ lsName +" for "+ desc);
-    avgInfo = info(ucName +"Avg"+ uvName, "Average "+ lvName +" for "+ desc);
-    stdevInfo = info(ucName +"Stdev"+ uvName,
-        "Standard deviation of "+ lvName +" for "+ desc);
-    iMinInfo = info(ucName +"IMin"+ uvName,
-        "Interval min "+ lvName +" for "+ desc);
-    iMaxInfo = info(ucName + "IMax"+ uvName,
-        "Interval max "+ lvName +" for "+ desc);
-    minInfo = info(ucName +"Min"+ uvName, "Min "+ lvName +" for "+ desc);
-    maxInfo = info(ucName +"Max"+ uvName, "Max "+ lvName +" for "+ desc);
+    numInfo = info(ucName + "Num" + usName, "Number of " + lsName + " for "
+        + desc);
+    iNumInfo = info(ucName + "INum" + usName,
+        "Interval number of " + lsName + " for " + desc);
+    avgInfo = info(ucName + "Avg" + uvName, "Average " + lvName + " for "
+        + desc);
+    stdevInfo = info(ucName + "Stdev" + uvName,
+        "Standard deviation of " + lvName + " for " + desc);
+    iMinInfo = info(ucName + "IMin" + uvName,
+        "Interval min " + lvName + " for " + desc);
+    iMaxInfo = info(ucName + "IMax" + uvName,
+        "Interval max " + lvName + " for " + desc);
+    minInfo = info(ucName + "Min" + uvName, "Min " + lvName + " for " + desc);
+    maxInfo = info(ucName + "Max" + uvName, "Max " + lvName + " for " + desc);
     this.extended.set(extended);
   }
 
   /**
-   * Set whether to display the extended stats (stdev, min/max etc.) or not
+   * Set whether to display the extended stats (stdev, min/max etc.) or not.
    * @param extended enable/disable displaying extended stats
    */
   public void setExtended(boolean extended) {
     readLock.lock();
-    this.extended.set(extended);
-    readLock.unlock();
+    try {
+      this.extended.set(extended);
+    } finally {
+      readLock.unlock();
+    }
   }
 
   /**
@@ -97,8 +107,11 @@ public class MutableRate extends MutableStat {
    */
   public void setUpdateTimeStamp(boolean updateTimeStamp) {
     readLock.lock();
-    this.updateTimeStamp.set(updateTimeStamp);
-    readLock.unlock();
+    try {
+      this.updateTimeStamp.set(updateTimeStamp);
+    } finally {
+      readLock.unlock();
+    }
   }
 
   /**
@@ -107,14 +120,17 @@ public class MutableRate extends MutableStat {
    * Note that although use of this method will preserve accurate mean values,
    * large values for numSamples may result in inaccurate variance values due
    * to the use of a single step of the Welford method for variance calculation.
-   * @param numSamples  number of samples
+   * @param samplesCount  number of samples
    * @param sum of the samples
    */
-  public void add(long numSamples, long sum) {
+  public void add(long samplesCount, long sum) {
     readLock.lock();
-    intervalStat.add(numSamples, sum);
-    setChanged();
-    readLock.unlock();
+    try {
+      intervalStat.add(samplesCount, sum);
+      setChanged();
+    } finally {
+      readLock.unlock();
+    }
   }
 
   /**
@@ -123,10 +139,13 @@ public class MutableRate extends MutableStat {
    */
   public void add(long value) {
     readLock.lock();
-    intervalStat.add(value);
-    minMax.add(value);
-    setChanged();
-    readLock.unlock();
+    try {
+      intervalStat.add(value);
+      minMax.add(value);
+      setChanged();
+    } finally {
+      readLock.unlock();
+    }
   }
 
   @Override
@@ -186,7 +205,7 @@ public class MutableRate extends MutableStat {
   }
 
   /**
-   * Reset the all time min max of the metric
+   * Reset the all time min max of the metric.
    */
   public void resetMinMax() {
     minMax.reset();

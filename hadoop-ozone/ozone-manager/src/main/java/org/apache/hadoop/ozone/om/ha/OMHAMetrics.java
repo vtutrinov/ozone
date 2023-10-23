@@ -26,6 +26,7 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 /**
  * Class to maintain metrics and info related to OM HA.
@@ -91,6 +92,7 @@ public final class OMHAMetrics implements MetricsSource {
    */
   public static OMHAMetrics create(
       String nodeId, String leaderId) {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     OMHAMetrics metrics = new OMHAMetrics(nodeId, leaderId);
     return DefaultMetricsSystem.instance()
         .register(SOURCE_NAME, "Metrics for OM HA", metrics);

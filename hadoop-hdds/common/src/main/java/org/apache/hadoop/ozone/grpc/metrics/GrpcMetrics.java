@@ -28,11 +28,12 @@ import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
-import org.apache.hadoop.metrics2.lib.MutableQuantiles;
+import org.apache.hadoop.ozone.metrics.MutableQuantiles;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.ozone.metrics.MutableRate;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,11 +72,11 @@ public class GrpcMetrics implements MetricsSource {
           new MutableQuantiles[intervals.length];
       for (int i = 0; i < intervals.length; i++) {
         int interval = intervals[i];
-        grpcProcessingTimeMillisQuantiles[i] = registry
-            .newQuantiles("grpcQueueTime" + interval
+        grpcProcessingTimeMillisQuantiles[i] = new MutableQuantiles(
+            "grpcQueueTime" + interval
                     + "s", "grpc queue time in millisecond", "ops",
                 "latency", interval);
-        grpcProcessingTimeMillisQuantiles[i] = registry.newQuantiles(
+        grpcProcessingTimeMillisQuantiles[i] = new MutableQuantiles(
             "grpcProcessingTime" + interval + "s",
             "grpc processing time in millisecond",
             "ops", "latency", interval);
@@ -91,6 +92,7 @@ public class GrpcMetrics implements MetricsSource {
    */
   public static synchronized GrpcMetrics create(Configuration conf) {
     GrpcMetrics metrics = new GrpcMetrics(conf);
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     return DefaultMetricsSystem.instance().register(SOURCE_NAME,
         "Metrics for using gRPC", metrics);
   }

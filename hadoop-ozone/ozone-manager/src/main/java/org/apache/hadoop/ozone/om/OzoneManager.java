@@ -87,6 +87,7 @@ import org.apache.hadoop.hdds.utils.db.Table;
 import org.apache.hadoop.hdds.utils.db.Table.KeyValue;
 import org.apache.hadoop.hdds.utils.db.TableIterator;
 import org.apache.hadoop.ozone.OzoneManagerVersion;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 import org.apache.hadoop.ozone.om.helpers.SnapshotDiffJob;
 import org.apache.hadoop.ozone.om.ratis_snapshot.OmRatisSnapshotProvider;
 import org.apache.hadoop.ozone.om.ha.OMHAMetrics;
@@ -492,6 +493,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private OzoneManager(OzoneConfiguration conf, StartupOption startupOption)
       throws IOException, AuthenticationException {
     super(OzoneVersionInfo.OZONE_VERSION_INFO);
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     Preconditions.checkNotNull(conf);
     setConfiguration(conf);
     // Load HA related configurations

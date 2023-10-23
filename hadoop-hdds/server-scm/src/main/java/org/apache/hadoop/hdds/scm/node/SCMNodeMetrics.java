@@ -34,6 +34,7 @@ import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.ozone.OzoneConsts;
 
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 import org.apache.hadoop.util.StringUtils;
 
 /**
@@ -72,6 +73,7 @@ public final class SCMNodeMetrics implements MetricsSource {
    * @return SCMNodeMetrics
    */
   public static SCMNodeMetrics create(NodeManagerMXBean managerMXBean) {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     return ms.register(SOURCE_NAME, "SCM NodeManager Metrics",
         new SCMNodeMetrics(managerMXBean));

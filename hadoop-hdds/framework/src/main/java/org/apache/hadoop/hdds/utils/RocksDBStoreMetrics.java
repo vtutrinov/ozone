@@ -25,6 +25,7 @@ import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.Interns;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 import org.bouncycastle.util.Strings;
 import org.rocksdb.HistogramData;
 import org.rocksdb.HistogramType;
@@ -127,6 +128,7 @@ public class RocksDBStoreMetrics implements MetricsSource {
 
   public static RocksDBStoreMetrics create(Statistics statistics,
       RocksDatabase db, String contextName) {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     RocksDBStoreMetrics metrics = new RocksDBStoreMetrics(
         statistics, db, contextName);
     MetricsSystem ms = DefaultMetricsSystem.instance();

@@ -19,12 +19,8 @@ package org.apache.hadoop.ozone.om;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
-<<<<<<< Updated upstream
-import org.apache.hadoop.metrics2.lib.MutableRate;
-=======
 import org.apache.hadoop.ozone.metrics.MutableRate;
-import org.apache.hadoop.util.MetricUtil;
->>>>>>> Stashed changes
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 /**
  * Including OM performance related metrics.
@@ -34,6 +30,7 @@ public class OMPerformanceMetrics {
       OMPerformanceMetrics.class.getSimpleName();
 
   public static OMPerformanceMetrics register() {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     return ms.register(SOURCE_NAME,
             "OzoneManager Request Performance",

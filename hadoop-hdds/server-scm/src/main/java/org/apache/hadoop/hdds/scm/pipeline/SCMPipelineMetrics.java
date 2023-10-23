@@ -30,6 +30,7 @@ import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 import java.util.Map;
 import java.util.Optional;
@@ -75,6 +76,7 @@ public final class SCMPipelineMetrics implements MetricsSource {
     if (instance != null) {
       return instance;
     }
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     instance = ms.register(SOURCE_NAME, "SCM PipelineManager Metrics",
         new SCMPipelineMetrics());

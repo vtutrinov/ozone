@@ -24,10 +24,15 @@ import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
-import org.apache.hadoop.metrics2.lib.MutableCounterLong;
-import org.apache.hadoop.ozone.metrics.MutableRate;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
+import org.apache.hadoop.metrics2.lib.MutableCounterLong;
+import org.apache.hadoop.metrics2.lib.MutableMetric;
+import org.apache.hadoop.ozone.metrics.MutableRate;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 import org.apache.ratis.protocol.RaftGroupId;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 /**
  * This class is for maintaining Container State Machine statistics.
@@ -48,7 +53,6 @@ public class CSMMetrics {
 
   private @Metric MutableRate transactionLatencyMs;
   private MutableRate[] opsLatencyMs;
-  private MetricsRegistry registry = null;
 
   // Failure Metrics
   private @Metric MutableCounterLong numWriteStateMachineFails;
@@ -65,18 +69,32 @@ public class CSMMetrics {
   private @Metric MutableRate applyTransactionNs;
   private @Metric MutableRate writeStateMachineDataNs;
 
-  public CSMMetrics() {
+  private MetricsRegistry registry;
+
+  public CSMMetrics()  {
     int numCmdTypes = ContainerProtos.Type.values().length;
     this.opsLatencyMs = new MutableRate[numCmdTypes];
     this.registry = new MetricsRegistry(CSMMetrics.class.getSimpleName());
-    for (int i = 0; i < numCmdTypes; i++) {
-      opsLatencyMs[i] = new MutableRate(
-          ContainerProtos.Type.forNumber(i + 1).toString() + "Ms",
-          ContainerProtos.Type.forNumber(i + 1) + " op", false);
+    try {
+      Method add = this.registry.getClass().getDeclaredMethod("add",
+          String.class, MutableMetric.class);
+      add.setAccessible(true);
+      for (int i = 0; i < numCmdTypes; i++) {
+        String name = ContainerProtos.Type.forNumber(i + 1).toString() + "Ms";
+        MutableRate mutableRate = new MutableRate(name,
+            ContainerProtos.Type.forNumber(i + 1) + " op", false);
+        opsLatencyMs[i] = mutableRate;
+        add.invoke(this.registry, name, mutableRate);
+      }
+      add.setAccessible(false);
+    } catch (InvocationTargetException | NoSuchMethodException
+             | IllegalAccessException ex) {
+      System.out.println("Oooooooops!");
     }
   }
 
   public static CSMMetrics create(RaftGroupId gid) {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     return ms.register(SOURCE_NAME + gid.toString(),
         "Container State Machine",

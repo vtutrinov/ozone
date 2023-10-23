@@ -21,6 +21,7 @@ import org.apache.hadoop.hdds.annotation.InterfaceAudience;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 /**
  * This class captures the container meta-data scanner metrics on the
@@ -36,6 +37,7 @@ public final class ContainerMetadataScannerMetrics
   }
 
   public static ContainerMetadataScannerMetrics create() {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     String name = "ContainerMetadataScannerMetrics";
     return ms.register(name, null,

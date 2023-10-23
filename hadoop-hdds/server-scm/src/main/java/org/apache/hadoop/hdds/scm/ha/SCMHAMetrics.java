@@ -25,6 +25,7 @@ import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 /**
  * SCM HA metrics.
@@ -77,6 +78,7 @@ public final class SCMHAMetrics implements MetricsSource {
    * @return SCMHAMetrics
    */
   public static SCMHAMetrics create(String nodeId, String leaderId) {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     SCMHAMetrics metrics = new SCMHAMetrics(nodeId, leaderId);
     return DefaultMetricsSystem.instance()
         .register(SOURCE_NAME, "SCM HA metrics", metrics);

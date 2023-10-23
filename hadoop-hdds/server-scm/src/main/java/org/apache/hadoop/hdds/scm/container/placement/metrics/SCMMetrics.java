@@ -24,6 +24,7 @@ import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 /**
  * This class is for maintaining StorageContainerManager statistics.
@@ -64,6 +65,7 @@ public class SCMMetrics {
   }
 
   public static SCMMetrics create() {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     return ms.register(SOURCE_NAME, "Storage Container Manager Metrics",
         new SCMMetrics());

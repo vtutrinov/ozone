@@ -23,6 +23,7 @@ import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 import static org.apache.ratis.thirdparty.io.netty.util.internal.PlatformDependent.maxDirectMemory;
 import static org.apache.ratis.thirdparty.io.netty.util.internal.PlatformDependent.usedDirectMemory;
@@ -52,6 +53,7 @@ public final class NettyMetrics implements MetricsSource {
 
 
   public static NettyMetrics create() {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     NettyMetrics metrics = new NettyMetrics();
     return ms.register(SOURCE_NAME, "Netty metrics", metrics);

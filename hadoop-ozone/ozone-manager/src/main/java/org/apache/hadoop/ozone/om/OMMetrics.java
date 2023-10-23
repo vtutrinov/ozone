@@ -26,6 +26,7 @@ import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 /**
  * This class is for maintaining Ozone Manager statistics.
@@ -235,6 +236,7 @@ public class OMMetrics implements OmMetadataReaderMetrics {
   }
 
   public static OMMetrics create() {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     return ms.register(SOURCE_NAME,
         "Ozone Manager Metrics",

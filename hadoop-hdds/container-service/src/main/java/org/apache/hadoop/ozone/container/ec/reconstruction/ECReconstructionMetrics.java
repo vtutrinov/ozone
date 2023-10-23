@@ -24,6 +24,7 @@ import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 /**
  * Metrics class for EC Reconstruction.
@@ -44,6 +45,7 @@ public final class ECReconstructionMetrics {
   }
 
   public static ECReconstructionMetrics create() {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     return ms.register(SOURCE, "EC Reconstruction Coordinator Metrics",
         new ECReconstructionMetrics());

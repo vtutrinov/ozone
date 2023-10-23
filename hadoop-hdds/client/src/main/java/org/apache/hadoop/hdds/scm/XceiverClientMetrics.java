@@ -26,7 +26,12 @@ import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
+import org.apache.hadoop.metrics2.lib.MutableMetric;
 import org.apache.hadoop.ozone.metrics.MutableRate;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 /**
  * The client metrics for the Storage Container protocol.
@@ -57,25 +62,39 @@ public class XceiverClientMetrics {
     this.pendingOpsArray = new MutableCounterLong[numEnumEntries];
     this.opsArray = new MutableCounterLong[numEnumEntries];
     this.containerOpsLatency = new MutableRate[numEnumEntries];
-    for (int i = 0; i < numEnumEntries; i++) {
-      pendingOpsArray[i] = registry.newCounter(
-          "numPending" + ContainerProtos.Type.forNumber(i + 1),
-          "number of pending" + ContainerProtos.Type.forNumber(i + 1) + " ops",
-          (long) 0);
-      opsArray[i] = registry
-          .newCounter("opCount" + ContainerProtos.Type.forNumber(i + 1),
-              "number of" + ContainerProtos.Type.forNumber(i + 1) + " ops",
-              (long) 0);
-
-      containerOpsLatency[i] = new MutableRate(
-          ContainerProtos.Type.forNumber(i + 1) + "Latency",
-          "latency of " + ContainerProtos.Type.forNumber(i + 1)
-          + " ops", false);
+    try {
+      Method add = this.registry.getClass().getDeclaredMethod("add",
+          String.class, MutableMetric.class);
+      add.setAccessible(true);
+      for (int i = 0; i < numEnumEntries; i++) {
+        pendingOpsArray[i] = registry.newCounter(
+            "numPending" + ContainerProtos.Type.forNumber(i + 1),
+            "number of pending" + ContainerProtos.Type.forNumber(i + 1)
+                + " ops",
+            (long) 0);
+        opsArray[i] = registry
+            .newCounter("opCount" + ContainerProtos.Type.forNumber(i + 1),
+                "number of" + ContainerProtos.Type.forNumber(i + 1) + " ops",
+                (long) 0);
+        String mutableRateMetricName = ContainerProtos.Type.forNumber(i + 1)
+            + "Latency";
+        MutableRate mutableRateMetric = new MutableRate(
+            mutableRateMetricName,
+            "latency of " + ContainerProtos.Type.forNumber(i + 1)
+                + " ops", false);
+        containerOpsLatency[i] = mutableRateMetric;
+        add.invoke(this.registry, mutableRateMetricName, mutableRateMetric);
+      }
+      add.setAccessible(false);
+    } catch (InvocationTargetException | NoSuchMethodException
+             | IllegalAccessException ex) {
+      System.out.println("OOooooooops");
     }
   }
 
   public static XceiverClientMetrics create() {
     DefaultMetricsSystem.initialize(SOURCE_NAME);
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     return ms.register(SOURCE_NAME, "Storage Container Client Metrics",
         new XceiverClientMetrics());

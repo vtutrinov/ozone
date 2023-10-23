@@ -25,6 +25,7 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.ozone.container.common.impl.BlockDeletingService;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 /**
  * Metrics related to Block Deleting Service running on Datanode.
@@ -83,6 +84,7 @@ public final class BlockDeletingServiceMetrics {
 
   public static BlockDeletingServiceMetrics create() {
     if (instance == null) {
+      OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
       MetricsSystem ms = DefaultMetricsSystem.instance();
       instance = ms.register(SOURCE_NAME, "BlockDeletingService",
           new BlockDeletingServiceMetrics());

@@ -25,6 +25,7 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 /**
  * Class to hold RocksDB metrics.
@@ -43,6 +44,7 @@ public class RDBMetrics {
     if (instance != null) {
       return instance;
     }
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     instance = ms.register(SOURCE_NAME,
         "Rocks DB Metrics",

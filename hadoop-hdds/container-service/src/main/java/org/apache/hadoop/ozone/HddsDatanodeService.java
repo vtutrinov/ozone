@@ -55,7 +55,6 @@ import org.apache.hadoop.hdds.server.http.RatisDropwizardExports;
 import org.apache.hadoop.hdds.tracing.TracingUtil;
 import org.apache.hadoop.hdds.utils.HddsServerUtil;
 import org.apache.hadoop.hdds.utils.HddsVersionInfo;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsFactory;
 import org.apache.hadoop.metrics2.util.MBeans;
 import org.apache.hadoop.ozone.container.common.DatanodeLayoutStorage;
 import org.apache.hadoop.ozone.container.common.helpers.ContainerUtils;
@@ -65,7 +64,7 @@ import org.apache.hadoop.ozone.container.common.utils.StorageVolumeUtil;
 import org.apache.hadoop.ozone.container.common.volume.HddsVolume;
 import org.apache.hadoop.ozone.container.common.volume.MutableVolumeSet;
 import org.apache.hadoop.ozone.container.common.volume.StorageVolume;
-import org.apache.hadoop.ozone.metrics.MutableMetricsFactory;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 import org.apache.hadoop.ozone.util.OzoneNetUtils;
 import org.apache.hadoop.ozone.util.ShutdownHookManager;
 import org.apache.hadoop.security.SecurityUtil;
@@ -216,7 +215,7 @@ public class HddsDatanodeService extends GenericCli implements ServicePlugin {
   }
 
   public void start() {
-    DefaultMetricsFactory.INSTANCE.setInstance(new MutableMetricsFactory());
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     serviceRuntimeInfo.setStartTime();
 
     ratisReporterList = RatisDropwizardExports

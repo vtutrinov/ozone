@@ -25,6 +25,7 @@ import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 /**
  * This class emits table level cache metrics.
@@ -62,6 +63,7 @@ public final class TableCacheMetrics implements MetricsSource {
 
   public static TableCacheMetrics create(TableCache<?, ?> cache,
                                          String tableName) {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     TableCacheMetrics tableMetrics = new TableCacheMetrics(cache, tableName);
     return ms.register(tableMetrics.getSourceName(), "Table cache metrics",

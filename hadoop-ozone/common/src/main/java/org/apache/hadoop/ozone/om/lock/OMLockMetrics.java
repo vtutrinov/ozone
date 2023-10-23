@@ -27,6 +27,7 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableStat;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 /**
  * This class is for maintaining the various Ozone Manager Lock Metrics.
@@ -65,6 +66,7 @@ public final class OMLockMetrics implements MetricsSource {
    * @return OMLockMetrics object
    */
   public static OMLockMetrics create() {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     return ms.register(SOURCE_NAME, "Ozone Manager Lock Metrics",
         new OMLockMetrics());

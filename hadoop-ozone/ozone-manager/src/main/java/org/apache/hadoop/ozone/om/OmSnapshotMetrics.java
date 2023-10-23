@@ -23,6 +23,7 @@ import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 /**
  * This class is for maintaining Snapshot Manager statistics.
@@ -41,6 +42,7 @@ public final class OmSnapshotMetrics implements OmMetadataReaderMetrics {
     if (instance != null) {
       return instance;
     }
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     instance = ms.register(SOURCE_NAME,
         "Snapshot Manager Metrics",

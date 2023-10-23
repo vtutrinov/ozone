@@ -30,6 +30,7 @@ import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -147,6 +148,7 @@ public final class NodeDecommissionMetrics implements MetricsSource {
    * @return NodeDecommissionMetrics
    */
   public static NodeDecommissionMetrics create() {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     return DefaultMetricsSystem.instance().register(METRICS_SOURCE_NAME,
         "Metrics tracking the progress of nodes in the "
             + "Decommissioning and Maintenance workflows.  "

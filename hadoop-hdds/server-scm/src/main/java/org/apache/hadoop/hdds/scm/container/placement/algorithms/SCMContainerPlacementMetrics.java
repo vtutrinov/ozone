@@ -29,6 +29,7 @@ import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 
 /**
  * This class is for maintaining Topology aware container placement statistics.
@@ -60,6 +61,7 @@ public class SCMContainerPlacementMetrics implements MetricsSource {
    * @return A new or existing SCMContainerPlacementMetrics object
    */
   public static SCMContainerPlacementMetrics create() {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     MetricsSource existingSource = ms.getSource(SOURCE_NAME);
     if (existingSource != null) {

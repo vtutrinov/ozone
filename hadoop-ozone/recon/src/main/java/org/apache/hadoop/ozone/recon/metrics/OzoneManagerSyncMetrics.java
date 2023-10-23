@@ -26,6 +26,7 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableGaugeFloat;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 import org.apache.hadoop.ozone.metrics.MutableRate;
 import org.apache.hadoop.ozone.OzoneConsts;
 
@@ -43,6 +44,7 @@ public final class OzoneManagerSyncMetrics {
   }
 
   public static OzoneManagerSyncMetrics create() {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     MetricsSystem ms = DefaultMetricsSystem.instance();
     return ms.register(SOURCE_NAME,
         "Recon Ozone Manager Sync Metrics",

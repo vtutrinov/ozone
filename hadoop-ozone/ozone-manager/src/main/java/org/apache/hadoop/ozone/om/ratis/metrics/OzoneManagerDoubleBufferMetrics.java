@@ -25,6 +25,7 @@ import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableGaugeFloat;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 import org.apache.hadoop.ozone.metrics.MutableRate;
 import org.apache.hadoop.metrics2.lib.MutableStat;
 
@@ -66,6 +67,7 @@ public class OzoneManagerDoubleBufferMetrics {
     if (instance != null) {
       return instance;
     } else {
+      OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
       MetricsSystem ms = DefaultMetricsSystem.instance();
       OzoneManagerDoubleBufferMetrics omDoubleBufferMetrics =
           ms.register(SOURCE_NAME,

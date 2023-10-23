@@ -29,6 +29,7 @@ import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.MetricsTag;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.Interns;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 import org.apache.ratis.util.UncheckedAutoCloseable;
 
 /**
@@ -79,6 +80,7 @@ public class ProtocolMessageMetrics<KEY> implements MetricsSource {
   }
 
   public void register() {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     DefaultMetricsSystem.instance()
         .register(name, description, this);
   }

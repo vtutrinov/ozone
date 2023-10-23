@@ -35,6 +35,7 @@ import org.apache.hadoop.ozone.grpc.metrics.GrpcMetricsServerResponseInterceptor
 import org.apache.hadoop.ozone.grpc.metrics.GrpcMetricsServerTransportFilter;
 import org.apache.hadoop.ozone.ha.ConfUtils;
 import org.apache.hadoop.ozone.grpc.metrics.GrpcMetrics;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsFactory;
 import org.apache.hadoop.ozone.protocolPB.OzoneManagerProtocolServerSideTranslatorPB;
 import org.apache.hadoop.ozone.om.protocolPB.GrpcOmTransport;
 import org.apache.hadoop.ozone.security.OzoneDelegationTokenSecretManager;
@@ -86,6 +87,7 @@ public class GrpcOzoneManagerServer {
                                     delegationTokenMgr,
                                 CertificateClient caClient,
                                 String threadPrefix) {
+    OzoneMetricsFactory.registerAsDefaultMutableMetricsFactory();
     maxSize = config.getInt(OZONE_OM_GRPC_MAXIMUM_RESPONSE_LENGTH,
         OZONE_OM_GRPC_MAXIMUM_RESPONSE_LENGTH_DEFAULT);
     OptionalInt haPort = HddsUtils.getNumberFromConfigKeys(config,
