@@ -25,7 +25,7 @@ import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
-import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.ozone.metrics.MutableRate;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.ratis.protocol.RaftGroupId;
 
@@ -70,9 +70,9 @@ public class CSMMetrics {
     this.opsLatencyMs = new MutableRate[numCmdTypes];
     this.registry = new MetricsRegistry(CSMMetrics.class.getSimpleName());
     for (int i = 0; i < numCmdTypes; i++) {
-      opsLatencyMs[i] = registry.newRate(
+      opsLatencyMs[i] = new MutableRate(
           ContainerProtos.Type.forNumber(i + 1).toString() + "Ms",
-          ContainerProtos.Type.forNumber(i + 1) + " op");
+          ContainerProtos.Type.forNumber(i + 1) + " op", false);
     }
   }
 

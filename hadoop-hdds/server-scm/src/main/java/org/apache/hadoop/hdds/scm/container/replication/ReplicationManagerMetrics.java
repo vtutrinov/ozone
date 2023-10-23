@@ -26,11 +26,13 @@ import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsFactory;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
-import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.ozone.metrics.MutableMetricsFactory;
+import org.apache.hadoop.ozone.metrics.MutableRate;
 import org.apache.hadoop.ozone.OzoneConsts;
 
 import java.util.Collections;
@@ -235,6 +237,7 @@ public final class ReplicationManagerMetrics implements MetricsSource {
   }
 
   public static ReplicationManagerMetrics create(ReplicationManager manager) {
+    DefaultMetricsFactory.INSTANCE.setInstance(new MutableMetricsFactory());
     return DefaultMetricsSystem.instance().register(METRICS_SOURCE_NAME,
         "SCM Replication manager (closed container replication) related "
             + "metrics",

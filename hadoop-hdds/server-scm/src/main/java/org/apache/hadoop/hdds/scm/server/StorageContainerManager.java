@@ -146,6 +146,7 @@ import org.apache.hadoop.hdds.utils.IOUtils;
 import org.apache.hadoop.hdds.utils.LegacyHadoopConfigurationSource;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.metrics2.MetricsSystem;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsFactory;
 import org.apache.hadoop.metrics2.util.MBeans;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
@@ -153,6 +154,7 @@ import org.apache.hadoop.ozone.OzoneSecurityUtil;
 import org.apache.hadoop.ozone.common.Storage.StorageState;
 import org.apache.hadoop.ozone.lease.LeaseManager;
 import org.apache.hadoop.ozone.lease.LeaseManagerNotRunningException;
+import org.apache.hadoop.ozone.metrics.MutableMetricsFactory;
 import org.apache.hadoop.ozone.upgrade.DefaultUpgradeFinalizationExecutor;
 import org.apache.hadoop.ozone.upgrade.UpgradeFinalizationExecutor;
 import org.apache.hadoop.security.AccessControlException;
@@ -348,7 +350,7 @@ public final class StorageContainerManager extends ServiceRuntimeInfoImpl
                                   SCMConfigurator configurator)
       throws IOException, AuthenticationException  {
     super(HddsVersionInfo.HDDS_VERSION_INFO);
-
+    DefaultMetricsFactory.INSTANCE.setInstance(new MutableMetricsFactory());
     Objects.requireNonNull(configurator, "configurator cannot not be null");
     Objects.requireNonNull(conf, "configuration cannot not be null");
     // It is assumed the scm --init command creates the SCM Storage Config.

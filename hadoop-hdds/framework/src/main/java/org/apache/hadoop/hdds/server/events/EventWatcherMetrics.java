@@ -19,7 +19,7 @@ package org.apache.hadoop.hdds.server.events;
 
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
-import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.ozone.metrics.MutableRate;
 
 import com.google.common.annotations.VisibleForTesting;
 

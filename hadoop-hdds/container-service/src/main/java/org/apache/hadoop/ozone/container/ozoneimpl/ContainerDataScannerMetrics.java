@@ -21,8 +21,10 @@ import org.apache.hadoop.hdds.annotation.InterfaceAudience;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsFactory;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
-import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.ozone.metrics.MutableMetricsFactory;
+import org.apache.hadoop.ozone.metrics.MutableRate;
 
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -59,6 +61,7 @@ public final class ContainerDataScannerMetrics
 
   @SuppressWarnings("java:S2245") // no need for secure random
   public static ContainerDataScannerMetrics create(final String volumeName) {
+    DefaultMetricsFactory.INSTANCE.setInstance(new MutableMetricsFactory());
     MetricsSystem ms = DefaultMetricsSystem.instance();
     String name = "ContainerDataScannerMetrics-" + (volumeName.isEmpty()
         ? "UndefinedDataNodeVolume" + ThreadLocalRandom.current().nextInt()

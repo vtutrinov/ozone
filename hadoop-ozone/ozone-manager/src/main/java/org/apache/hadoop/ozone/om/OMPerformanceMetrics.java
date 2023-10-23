@@ -19,7 +19,12 @@ package org.apache.hadoop.ozone.om;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+<<<<<<< Updated upstream
 import org.apache.hadoop.metrics2.lib.MutableRate;
+=======
+import org.apache.hadoop.ozone.metrics.MutableRate;
+import org.apache.hadoop.util.MetricUtil;
+>>>>>>> Stashed changes
 
 /**
  * Including OM performance related metrics.

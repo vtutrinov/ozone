@@ -26,7 +26,7 @@ import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
-import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.ozone.metrics.MutableRate;
 
 /**
  * The client metrics for the Storage Container protocol.
@@ -67,10 +67,10 @@ public class XceiverClientMetrics {
               "number of" + ContainerProtos.Type.forNumber(i + 1) + " ops",
               (long) 0);
 
-      containerOpsLatency[i] = registry.newRate(
+      containerOpsLatency[i] = new MutableRate(
           ContainerProtos.Type.forNumber(i + 1) + "Latency",
           "latency of " + ContainerProtos.Type.forNumber(i + 1)
-          + " ops");
+          + " ops", false);
     }
   }
 

@@ -29,7 +29,7 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableQuantiles;
-import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.ozone.metrics.MutableRate;
 
 /**
  *
@@ -76,9 +76,9 @@ public class ContainerMetrics {
           "bytes" + ContainerProtos.Type.forNumber(i + 1),
           "bytes used by " + ContainerProtos.Type.forNumber(i + 1) + "op",
           (long) 0);
-      opsLatency[i] = registry.newRate(
+      opsLatency[i] = new MutableRate(
           "latency" + ContainerProtos.Type.forNumber(i + 1),
-          ContainerProtos.Type.forNumber(i + 1) + " op");
+          ContainerProtos.Type.forNumber(i + 1) + " op", false);
 
       for (int j = 0; j < len; j++) {
         int interval = intervals[j];
