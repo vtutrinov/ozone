@@ -75,7 +75,8 @@ public class PrometheusMetricsSink implements MetricsSink {
         String metricKey = "# TYPE "
             + key
             + " "
-            + metric.type().toString().toLowerCase();
+            + metric.type().toString().toLowerCase()
+            + "\n# HELP " + key;
 
         synchronized (this) {
           nextMetricLines.computeIfAbsent(metricKey,
