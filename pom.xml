@@ -25,6 +25,7 @@
     <module>dev-support</module>
     <module>hadoop-hdds</module>
     <module>hadoop-ozone</module>
+    <module>ozone-custom-module</module>
   </modules>
 
   <properties>
