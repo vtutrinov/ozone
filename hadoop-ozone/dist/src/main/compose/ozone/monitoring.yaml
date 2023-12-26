@@ -44,7 +44,25 @@ services:
     command: ["-config","/etc/grafana/grafana.ini"]
     ports:
       - 3000:3000
-  datanode:
+  datanode1:
+    <<: *monitoring-config
+  datanode2:
+    <<: *monitoring-config
+  datanode3:
+    <<: *monitoring-config
+  datanode4:
+    <<: *monitoring-config
+  datanode5:
+    <<: *monitoring-config
+  datanode6:
+    <<: *monitoring-config
+  datanode7:
+    <<: *monitoring-config
+  datanode8:
+    <<: *monitoring-config
+  datanode9:
+    <<: *monitoring-config
+  datanode10:
     <<: *monitoring-config
   om:
     <<: *monitoring-config

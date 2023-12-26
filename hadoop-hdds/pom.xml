@@ -50,6 +50,7 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <module>test-utils</module>
     <module>erasurecode</module>
     <module>rocks-native</module>
+    <module>datanode-inspector</module>
   </modules>
 
   <repositories>

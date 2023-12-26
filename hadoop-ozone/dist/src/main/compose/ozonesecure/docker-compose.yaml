@@ -36,6 +36,11 @@ services:
       - ../../libexec/transformation.py:/opt/transformation.py
     command: ["hadoop", "kms"]
   datanode:
+    build:
+      context: .
+      args:
+        - OZONE_RUNNER_IMAGE
+        - OZONE_RUNNER_VERSION
     image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
     hostname: dn
     volumes:
@@ -66,6 +71,11 @@ services:
       - docker-config
     command: ["/opt/hadoop/bin/ozone","om"]
   httpfs:
+    build:
+      context: .
+      args:
+        - OZONE_RUNNER_IMAGE
+        - OZONE_RUNNER_VERSION
     image: apache/ozone-runner:${OZONE_RUNNER_VERSION}
     hostname: httpfs
     volumes:

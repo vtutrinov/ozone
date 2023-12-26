@@ -17,7 +17,7 @@
 # limitations under the License.
 ##
 set -e
-
+sudo /usr/sbin/sshd -D &
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 if [ -n "$SLEEP_SECONDS" ]; then

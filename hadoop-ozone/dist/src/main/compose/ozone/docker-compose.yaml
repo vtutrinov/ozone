@@ -19,6 +19,11 @@ version: "3.8"
 # reusable fragments (see https://docs.docker.com/compose/compose-file/#extension-fields)
 x-common-config:
   &common-config
+  build:
+    context: .
+    args:
+      - OZONE_RUNNER_IMAGE
+      - OZONE_RUNNER_VERSION
   image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
   volumes:
     - ../..:/opt/hadoop
@@ -30,15 +35,136 @@ x-replication:
   OZONE-SITE.XML_ozone.server.default.replication: ${OZONE_REPLICATION_FACTOR:-1}
 
 services:
-  datanode:
+  datanode1:
     <<: *common-config
     ports:
       - 19864
       - 9882
+#      - 9001:5005
     environment:
       <<: *replication
-      OZONE_OPTS:
-    command: ["ozone","datanode"]
+      OZONE_OPTS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    command: [ "ozone","datanode" ]
+    volumes:
+      - tmpfs1:/data
+      - ../..:/opt/hadoop
+  datanode2:
+    <<: *common-config
+    ports:
+      - 19864
+      - 9882
+#      - 9002:5005
+    environment:
+      <<: *replication
+      OZONE_OPTS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    command: [ "ozone","datanode" ]
+    volumes:
+      - tmpfs2:/data
+      - ../..:/opt/hadoop
+  datanode3:
+    <<: *common-config
+    ports:
+      - 19864
+      - 9882
+#      - 9003:5005
+    environment:
+      <<: *replication
+      OZONE_OPTS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    command: [ "ozone","datanode" ]
+    volumes:
+      - tmpfs3:/data
+      - ../..:/opt/hadoop
+  datanode4:
+    <<: *common-config
+    ports:
+      - 19864
+      - 9882
+#      - 9004:5005
+    environment:
+      <<: *replication
+      OZONE_OPTS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    command: [ "ozone","datanode" ]
+    volumes:
+      - tmpfs4:/data
+      - ../..:/opt/hadoop
+  datanode5:
+    <<: *common-config
+    ports:
+      - 19864
+      - 9882
+#      - 9005:5005
+    environment:
+      <<: *replication
+      OZONE_OPTS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    command: [ "ozone","datanode" ]
+    volumes:
+      - tmpfs5:/data
+      - ../..:/opt/hadoop
+  datanode6:
+    <<: *common-config
+    ports:
+      - 19864
+      - 9882
+#      - 9006:5005
+    environment:
+      <<: *replication
+      OZONE_OPTS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    command: [ "ozone","datanode" ]
+    volumes:
+      - tmpfs6:/data
+      - ../..:/opt/hadoop
+  datanode7:
+    <<: *common-config
+    ports:
+      - 19864
+      - 9882
+#      - 9007:5005
+    environment:
+      <<: *replication
+      OZONE_OPTS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    command: [ "ozone","datanode" ]
+    volumes:
+      - tmpfs7:/data
+      - ../..:/opt/hadoop
+  datanode8:
+    <<: *common-config
+    ports:
+      - 19864
+      - 9882
+#      - 9008:5005
+    environment:
+      <<: *replication
+      OZONE_OPTS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    command: [ "ozone","datanode" ]
+    volumes:
+      - tmpfs8:/data
+      - ../..:/opt/hadoop
+  datanode9:
+    <<: *common-config
+    ports:
+      - 19864
+      - 9882
+#      - 9009:5005
+    environment:
+      <<: *replication
+      OZONE_OPTS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    command: [ "ozone","datanode" ]
+    volumes:
+      - tmpfs9:/data
+      - ../..:/opt/hadoop
+  datanode10:
+    <<: *common-config
+    ports:
+      - 19864
+      - 9882
+#      - 9010:5005
+    environment:
+      <<: *replication
+      OZONE_OPTS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    command: [ "ozone","datanode" ]
+    volumes:
+      - tmpfs10:/data
+      - ../..:/opt/hadoop
   om:
     <<: *common-config
     environment:
@@ -54,10 +180,11 @@ services:
     ports:
       - 9876:9876
       - 9860:9860
+      - 9011:5005
     environment:
       ENSURE_SCM_INITIALIZED: /data/metadata/scm/current/VERSION
       OZONE-SITE.XML_hdds.scm.safemode.min.datanode: ${OZONE_SAFEMODE_MIN_DATANODES:-1}
-      OZONE_OPTS:
+      OZONE_OPTS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
       <<: *replication
     command: ["ozone","scm"]
   httpfs:
@@ -80,7 +207,69 @@ services:
     <<: *common-config
     ports:
       - 9888:9888
+      - 9111:5005
     environment:
-      OZONE_OPTS:
+      OZONE_OPTS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
       <<: *replication
     command: ["ozone","recon"]
+volumes:
+  tmpfs1:
+    driver: local
+    driver_opts:
+      o: "size=2g,uid=1000"
+      device: tmpfs
+      type: tmpfs
+  tmpfs2:
+    driver: local
+    driver_opts:
+      o: "size=2g,uid=2000"
+      device: tmpfs
+      type: tmpfs
+  tmpfs3:
+    driver: local
+    driver_opts:
+      o: "size=2g,uid=3000"
+      device: tmpfs
+      type: tmpfs
+  tmpfs4:
+    driver: local
+    driver_opts:
+      o: "size=2g,uid=4000"
+      device: tmpfs
+      type: tmpfs
+  tmpfs5:
+    driver: local
+    driver_opts:
+      o: "size=2g,uid=5000"
+      device: tmpfs
+      type: tmpfs
+  tmpfs6:
+    driver: local
+    driver_opts:
+      o: "size=2g,uid=6000"
+      device: tmpfs
+      type: tmpfs
+  tmpfs7:
+    driver: local
+    driver_opts:
+      o: "size=2g,uid=7000"
+      device: tmpfs
+      type: tmpfs
+  tmpfs8:
+    driver: local
+    driver_opts:
+      o: "size=2g,uid=8000"
+      device: tmpfs
+      type: tmpfs
+  tmpfs9:
+    driver: local
+    driver_opts:
+      o: "size=2g,uid=9000"
+      device: tmpfs
+      type: tmpfs
+  tmpfs10:
+    driver: local
+    driver_opts:
+      o: "size=2g,uid=10000"
+      device: tmpfs
+      type: tmpfs
