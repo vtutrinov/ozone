@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# The name of the script being executed.
+OZONE_SHELL_EXECNAME="ozone-report"
+MYNAME="${BASH_SOURCE-$0}"
+bin=$(cd -P -- "$(dirname -- "${MYNAME}")" >/dev/null && pwd -P)
+JVM_PID="$$"
+
+## @description  build up the ozone command's usage text.
+## @audience     public
+## @stability    stable
+## @replaceable  no
+function ozone_usage
+{
+  ozone_add_option "--buildpaths" "attempt to add class files from build tree"
+  ozone_add_option "--loglevel level" "set the log4j level for this command"
+  ozone_add_option "--jvmargs arguments" "append JVM options to any existing options defined in the OZONE_OPTS environment variable. Any defined in OZONE_CLIENT_OPTS will be append after these jvmargs"
+
+  ozone_add_subcommand "report" client "Utils to run Ozone report system"
+
+  ozone_generate_usage "${OZONE_SHELL_EXECNAME}" false
+}
+
+## @description  Default command handler for ozone command
+## @audience     public
+## @stability    stable
+## @replaceable  no
+## @param        CLI arguments
+function ozonecmd_case
+{
+  subcmd=$1
+  shift
+
+  # Add JVM parameter (org.apache.ratis.thirdparty.io.netty.allocator.useCacheForAllThreads=false)
+  # for disabling netty PooledByteBufAllocator thread caches for non-netty threads.
+  # This parameter significantly reduces GC pressure for Datanode.
+  # Corresponding Ratis issue https://issues.apache.org/jira/browse/RATIS-534.
+  RATIS_OPTS="-Dorg.apache.ratis.thirdparty.io.netty.allocator.useCacheForAllThreads=false ${RATIS_OPTS}"
+  # Add JVM parameter for Java 17
+  OZONE_MODULE_ACCESS_ARGS=""
+
+  # Get the version string
+  JAVA_VERSION_STRING=$(java -version 2>&1 | head -n 1)
+
+  # Extract the major version number
+  JAVA_MAJOR_VERSION=$(echo "$JAVA_VERSION_STRING" | sed -E -n 's/.* version "([^.-]*).*"/\1/p' | cut -d' ' -f1)
+
+  # populate JVM args based on java version
+  if [[ "${JAVA_MAJOR_VERSION}" == "17" ]]; then
+      OZONE_MODULE_ACCESS_ARGS="--add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.management/com.sun.jmx.mbeanserver=ALL-UNNAMED --add-exports java.management/com.sun.jmx.mbeanserver=ALL-UNNAMED"
+  fi
+  if [[ "${JAVA_MAJOR_VERSION}" -ge 9 ]]; then
+    OZONE_MODULE_ACCESS_ARGS="${OZONE_MODULE_ACCESS_ARGS} --add-opens java.base/java.nio=ALL-UNNAMED"
+  fi
+
+  case ${subcmd} in
+    report)
+        OZONE_CLASSNAME=org.apache.hadoop.hdds.scm.cli.container.report.ReportShell
+        OZONE_RUN_ARTIFACT_NAME="ozone-custom-module"
+    ;;
+    *)
+      OZONE_CLASSNAME="${subcmd}"
+      if ! ozone_validate_classname "${OZONE_CLASSNAME}"; then
+        ozone_exit_with_usage 1
+      fi
+    ;;
+  esac
+}
+
+## @description  turn off logging for CLI by default
+## @audience     private
+function ozone_suppress_shell_log
+{
+  if [[ "${OZONE_RUN_ARTIFACT_NAME}" == "ozone-tools" ]] \
+      && [[ "${OZONE_CLASSNAME}" != "org.apache.hadoop.ozone.freon.Freon" ]] \
+      && [[ -z "${OZONE_ORIGINAL_LOGLEVEL}" ]] \
+      && [[ -z "${OZONE_ORIGINAL_ROOT_LOGGER}" ]]; then
+    OZONE_LOGLEVEL=OFF
+    OZONE_ROOT_LOGGER="${OZONE_LOGLEVEL},console"
+  fi
+}
+
+# load functions
+for dir in "${OZONE_LIBEXEC_DIR}" "${OZONE_HOME}/libexec" "${HADOOP_LIBEXEC_DIR}" "${HADOOP_HOME}/libexec" "${bin}/../libexec"; do
+  if [[ -e "${dir}/ozone-functions.sh" ]]; then
+    . "${dir}/ozone-functions.sh"
+    if declare -F ozone_bootstrap >& /dev/null; then
+      break
+    fi
+  fi
+done
+
+if ! declare -F ozone_bootstrap >& /dev/null; then
+  echo "ERROR: Cannot find ozone-functions.sh." 2>&1
+  exit 1
+fi
+
+ozone_bootstrap
+. "${OZONE_LIBEXEC_DIR}/ozone-config.sh"
+
+# now that we have support code, let's abs MYNAME so we can use it later
+MYNAME=$(ozone_abs "${MYNAME}")
+
+if [[ $# = 0 ]]; then
+  ozone_exit_with_usage 1
+fi
+
+OZONE_SUBCMD=$1
+shift
+
+
+if ozone_need_reexec ozone "${OZONE_SUBCMD}"; then
+  ozone_uservar_su ozone "${OZONE_SUBCMD}" \
+    "${MYNAME}" \
+    "--reexec" \
+    "${OZONE_USER_PARAMS[@]}"
+  exit $?
+fi
+
+ozone_verify_user_perm "${OZONE_SHELL_EXECNAME}" "${OZONE_SUBCMD}"
+
+OZONE_SUBCMD_ARGS=("$@")
+
+if declare -f ozone_subcommand_"${OZONE_SUBCMD}" >/dev/null 2>&1; then
+  ozone_debug "Calling dynamically: ozone_subcommand_${OZONE_SUBCMD} ${OZONE_SUBCMD_ARGS[*]}"
+  "ozone_subcommand_${OZONE_SUBCMD}" "${OZONE_SUBCMD_ARGS[@]}"
+else
+  ozonecmd_case "${OZONE_SUBCMD}" "${OZONE_SUBCMD_ARGS[@]}"
+fi
+
+ozone_validate_classpath
+
+ozone_suppress_shell_log
+ozone_assemble_classpath
+
+ozone_add_client_opts
+
+if [[ ${OZONE_WORKER_MODE} = true ]]; then
+  ozone_worker_mode_execute "${OZONE_HOME}/bin/ozone" "${OZONE_USER_PARAMS[@]}"
+  exit $?
+fi
+
+ozone_subcommand_opts "${OZONE_SHELL_EXECNAME}" "${OZONE_SUBCMD}"
+
+ozone_add_default_gc_opts
+
+# everything is in globals at this point, so call the generic handler
+ozone_generic_java_subcmd_handler
