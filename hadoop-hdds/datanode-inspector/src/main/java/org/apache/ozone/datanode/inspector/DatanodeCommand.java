@@ -33,6 +33,9 @@ public class DatanodeCommand {
     @Option(names = {"--address", "-dn"},
         description = "Datanode address")
     List<String> datanodes;
+    
+    @Option(names = {"--datanodeUUID", "-dnUUID"})
+    List<String> datanodeUUIDs;
 
     @Option(names = {"--dnSshUser", "-user"},
         description = "Datanode SSH user")
