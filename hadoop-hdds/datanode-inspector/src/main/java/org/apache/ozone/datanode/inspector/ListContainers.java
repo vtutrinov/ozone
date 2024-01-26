@@ -4,66 +4,62 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.core.JsonEncoding;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.ImmutableList;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.google.common.base.Preconditions;
 import com.jcraft.jsch.JSchException;
-import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.hdds.cli.GenericParentCommand;
+import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.protocol.DatanodeDetails;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos;
-import org.apache.hadoop.hdds.scm.XceiverClientSpi;
-import org.apache.hadoop.hdds.scm.cli.ContainerOperationClient;
 import org.apache.hadoop.hdds.scm.cli.ScmSubcommand;
 import org.apache.hadoop.hdds.scm.client.ScmClient;
-import org.apache.hadoop.hdds.scm.container.ContainerID;
-import org.apache.hadoop.hdds.scm.pipeline.Pipeline;
-import org.apache.hadoop.hdds.scm.storage.ContainerProtocolCalls;
-import org.apache.hadoop.hdds.security.symmetric.DefaultSecretKeyClient;
-import org.apache.hadoop.hdds.security.symmetric.SecretKeyClient;
-import org.apache.hadoop.hdds.security.token.ContainerTokenGenerator;
-import org.apache.hadoop.hdds.security.token.ContainerTokenIdentifier;
-import org.apache.hadoop.hdds.security.token.ContainerTokenSecretManager;
 import org.apache.hadoop.hdds.utils.HddsServerUtil;
-import org.apache.hadoop.ozone.shell.common.VolumeBucketUri;
-import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.hdds.utils.db.Table;
+import org.apache.hadoop.hdfs.server.datanode.StorageLocation;
+import org.apache.hadoop.ozone.container.common.helpers.BlockData;
+import org.apache.hadoop.ozone.container.common.helpers.ContainerMetrics;
+import org.apache.hadoop.ozone.container.common.impl.ContainerSet;
+import org.apache.hadoop.ozone.container.common.interfaces.Container;
+import org.apache.hadoop.ozone.container.common.interfaces.DBHandle;
+import org.apache.hadoop.ozone.container.common.interfaces.Handler;
+import org.apache.hadoop.ozone.container.common.utils.HddsVolumeUtil;
+import org.apache.hadoop.ozone.container.common.utils.StorageVolumeUtil;
+import org.apache.hadoop.ozone.container.common.volume.HddsVolume;
+import org.apache.hadoop.ozone.container.common.volume.MutableVolumeSet;
+import org.apache.hadoop.ozone.container.common.volume.StorageVolume;
+import org.apache.hadoop.ozone.container.keyvalue.KeyValueContainerData;
+import org.apache.hadoop.ozone.container.keyvalue.helpers.BlockUtils;
+import org.apache.hadoop.ozone.container.ozoneimpl.ContainerController;
+import org.apache.hadoop.ozone.container.ozoneimpl.ContainerReader;
+import org.apache.hadoop.ozone.container.upgrade.VersionedDatanodeFeatures;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.net.InetAddress;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @CommandLine.Command(name = "list-containers", mixinStandardHelpOptions = true)
 public class ListContainers extends ScmSubcommand {
 
+  private static final Logger LOG = LoggerFactory.getLogger(ListContainers.class);
+
   @CommandLine.ParentCommand
   DatanodeCommand parentCommand;
-
-  @CommandLine.Mixin
-  private VolumeBucketUri address;
-
-  Pattern patternToMatchContainerListObjects = Pattern.compile("\\{\\r\\n((?:.*?|\\r\\n)*?)\\r\\n\\}",
-      Pattern.DOTALL|Pattern.MULTILINE);
-
-  Pattern patternToMatchChunkObjects = Pattern.compile("^.*?\\{(.*)\\}[^}]+$", Pattern.DOTALL|Pattern.MULTILINE);
-
-  Pattern patternToMatchFileNonExistence = Pattern.compile("ls: cannot access.*No such file or directory");
 
   @CommandLine.Option(
       names = {"-o", "--outputDir"},
@@ -79,21 +75,13 @@ public class ListContainers extends ScmSubcommand {
   )
   Integer blockPageSize;
 
-  @CommandLine.Option(
-      names = {"--current-host"},
-      description = "Generate the container report for the current node",
-      type= Boolean.class,
-      defaultValue = "false"
-  )
-  Boolean currentHost;
-
   private OzoneConfiguration conf;
 
   private String outputDir;
 
   private ScmClient scmClient;
 
-  private ContainerTokenGenerator containerTokenGenerator;
+//  private ContainerTokenGenerator containerTokenGenerator;
 
   @Override
   protected void execute(ScmClient client) throws IOException {
@@ -106,12 +94,6 @@ public class ListContainers extends ScmSubcommand {
       GenericParentCommand parent = (GenericParentCommand)
           ((CommandLine.Model.CommandSpec)(spec1.get(scmOption1.get(this)))).root().userObject();
       conf = parent.createOzoneConfiguration();
-      long tokenLifetime = TimeUnit.DAYS.toMillis(1);
-      SecretKeyClient secretKeyClient = DefaultSecretKeyClient.create(conf,
-          HddsServerUtil.getSecretKeyClientForDatanode(conf), "secret-client-");
-      containerTokenGenerator = new ContainerTokenSecretManager(
-          tokenLifetime, secretKeyClient);
-      secretKeyClient.start(conf);
 
 
       List<DatanodeCommand.DatanodeWithAttributes> datanodes = parentCommand.getAllNodes(client);
@@ -128,30 +110,9 @@ public class ListContainers extends ScmSubcommand {
       }
 
       try {
-        if (currentHost) {
-          String hostAddress = InetAddress.getLocalHost().getHostAddress();
-          datanodeContainerInfo(datanodes.stream().filter(dnAttributes -> dnAttributes.getDatanodeDetails()
-              .getIpAddress().equals(hostAddress)).findFirst().get().getDatanodeDetails());
-        } else {
-          if (parentCommand.datanodes != null && !parentCommand.datanodes.isEmpty()) {
-            for (String datanode : parentCommand.datanodes) {
-              Optional<DatanodeCommand.DatanodeWithAttributes> datanodeInfo =
-                  datanodes.stream().filter(dn -> dn.getDatanodeDetails().getIpAddress().equals(datanode) ||
-                          dn.getDatanodeDetails().getHostName().equals(datanode) ||
-                          dn.getDatanodeDetails().getUuidString().equals(datanode))
-                      .findFirst();
-              if (!datanodeInfo.isPresent()) {
-                throw new IllegalArgumentException("Requested datanode='" + datanode + "' not found");
-              }
-              DatanodeDetails datanodeDetails = datanodeInfo.get().getDatanodeDetails();
-              datanodeContainerInfo(datanodeDetails);
-            }
-          } else {
-            for (DatanodeCommand.DatanodeWithAttributes datanodeWithAttributes : parentCommand.getAllNodes(client)) {
-              datanodeContainerInfo(datanodeWithAttributes.getDatanodeDetails());
-            }
-          }
-        }
+        String hostAddress = InetAddress.getLocalHost().getHostAddress();
+        datanodeContainerInfo(datanodes.stream().filter(dnAttributes -> dnAttributes.getDatanodeDetails()
+            .getIpAddress().equals(hostAddress)).findFirst().get().getDatanodeDetails());
       } catch (Exception ex) {
         throw new RuntimeException(ex);
       }
@@ -161,46 +122,77 @@ public class ListContainers extends ScmSubcommand {
   }
 
   private void datanodeContainerInfo(DatanodeDetails datanodeDetails) throws JSchException, IOException {
-    String containerListCommandResult = null;
-    if (currentHost) {
-      // in case of currentHost=true
-      Process exec = Runtime.getRuntime().exec(new String[]{"ozone", "debug", "container", "list"});
-      BufferedReader stdInput = new BufferedReader(new
-          InputStreamReader(exec.getInputStream()));
-      List<String> strings = IOUtils.readLines(stdInput);
-      containerListCommandResult = String.join("\r\n", strings);
-    } else {
-      StringBuilder cmd = parentCommand.buildDebugCommand();
-      cmd.append("container list");
-      containerListCommandResult = parentCommand.executeCommands(datanodeDetails.getIpAddress(),
-          Collections.singletonList(cmd.toString()));
+    ContainerSet containerSet = new ContainerSet(1000);
 
+    ContainerMetrics metrics = ContainerMetrics.create(conf);
+
+    String firstStorageDir = getFirstStorageDir(conf);
+
+    String datanodeUuid = datanodeDetails.getUuidString();
+
+    String clusterId = getClusterId(firstStorageDir);
+
+    MutableVolumeSet volumeSet = new MutableVolumeSet(datanodeUuid, conf, null,
+        StorageVolume.VolumeType.DATA_VOLUME, null);
+
+    if (VersionedDatanodeFeatures.SchemaV3.isFinalizedAndEnabled(conf)) {
+      MutableVolumeSet dbVolumeSet =
+          HddsServerUtil.getDatanodeDbDirs(conf).isEmpty() ? null :
+              new MutableVolumeSet(datanodeUuid, conf, null,
+                  StorageVolume.VolumeType.DB_VOLUME, null);
+      // load rocksDB with readOnly mode, otherwise it will fail.
+      HddsVolumeUtil.loadAllHddsVolumeDbStore(
+          volumeSet, dbVolumeSet, true, LOG);
     }
-    Matcher matcher = patternToMatchContainerListObjects.matcher(containerListCommandResult);
-    while (matcher.find()) {
-      String containerInfoJson = "{" + matcher.group(1) + "}";
-      JsonObject containerJsonObject = JsonParser.parseString(containerInfoJson).getAsJsonObject();
-      String containerId = containerJsonObject.get("containerID").getAsString();
-      containerJsonObject.add("blocks", new JsonArray());
-      String containerReportDir = outputDir + "datanode_" + datanodeDetails.getIpAddress() + "/container_" + containerId;
+
+    Map<ContainerProtos.ContainerType, Handler> handlers = new HashMap<>();
+
+    for (ContainerProtos.ContainerType containerType
+        : ContainerProtos.ContainerType.values()) {
+      final Handler handler =
+          Handler.getHandlerForContainerType(
+              containerType,
+              conf,
+              datanodeUuid,
+              containerSet,
+              volumeSet,
+              metrics,
+              containerReplicaProto -> {
+              });
+      handler.setClusterID(clusterId);
+      handlers.put(containerType, handler);
+    }
+
+    ContainerController controller = new ContainerController(containerSet, handlers);
+
+    List<HddsVolume> volumes = StorageVolumeUtil.getHddsVolumesList(
+        volumeSet.getVolumesList());
+    Iterator<HddsVolume> volumeSetIterator = volumes.iterator();
+
+    LOG.info("Starting the read all the container metadata");
+
+    while (volumeSetIterator.hasNext()) {
+      HddsVolume volume = volumeSetIterator.next();
+      LOG.info("Loading container metadata from volume " + volume.toString());
+      final ContainerReader reader =
+          new ContainerReader(volumeSet, volume, containerSet, conf, false);
+      reader.run();
+    }
+
+    LOG.info("All the container metadata is loaded.");
+
+    for (Container<?> container: controller.getContainers()) {
+      String containerReportDir = outputDir + "datanode_" + datanodeDetails.getIpAddress() + "/container_"
+          + container.getContainerData().getContainerID();
       Path containerReportPath = Paths.get(containerReportDir);
       if (!Files.exists(containerReportPath)) {
         Files.createDirectories(containerReportPath);
       }
-      try (OutputStream containerReportFile = Files.newOutputStream(Paths.get(containerReportDir + "/container.json"),
+      Stream<Path> contanerBlockFilesStream = Files.list(Paths.get(container.getContainerData().getChunksPath()))
+          .filter(filename -> !Files.isDirectory(filename))
+          .filter(filename -> filename.toString().endsWith(".block"));
+      try (OutputStream blocksDataOutputStream = Files.newOutputStream(Paths.get(containerReportDir + "/report.json"),
           StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-        IOUtils.write(containerJsonObject.toString(), containerReportFile, StandardCharsets.UTF_8);
-      }
-
-
-      Pipeline pipeline = scmClient.getContainerWithPipeline(Long.parseLong(containerId)).getPipeline();
-      Token<ContainerTokenIdentifier> containerToken =
-          containerTokenGenerator.generateToken(
-              "any", new ContainerID(Long.parseLong(containerId)));
-
-      try (OutputStream blocksDataOutputStream = Files.newOutputStream(Paths.get(containerReportDir + "/blocks.json"),
-          StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-
         ObjectMapper blockDataObjectMapper = new ObjectMapper();
         blockDataObjectMapper.setVisibility(blockDataObjectMapper.getSerializationConfig().getDefaultVisibilityChecker()
             .withFieldVisibility(JsonAutoDetect.Visibility.ANY)
@@ -211,68 +203,71 @@ public class ListContainers extends ScmSubcommand {
         JsonGenerator blocksDataJsonGenerator = blockDataObjectMapper.createGenerator(blocksDataOutputStream,
             JsonEncoding.UTF8);
         blocksDataJsonGenerator.writeStartObject();
+        blocksDataJsonGenerator.writePOJOField("containerInfo", container.getContainerData());
         blocksDataJsonGenerator.writeFieldName("blocks");
         blocksDataJsonGenerator.writeStartArray();
-
-        try (XceiverClientSpi xceiverClientSpi = ((ContainerOperationClient) scmClient).getXceiverClientManager()
-            .acquireClient(createSingleNodePipeline(pipeline, datanodeDetails))) {
-          ContainerProtos.ListBlockResponseProto containerBlocks = ContainerProtocolCalls.listBlock(
-              xceiverClientSpi, Long.parseLong(containerId), null, blockPageSize, containerToken);
-          ContainerProtos.BlockData blockData = null;
-          while (containerBlocks.getBlockDataCount() > 0) {
-            boolean nextContainer = false;
-            for (int i = 0; i < containerBlocks.getBlockDataCount(); i++) {
-              if (blockData != null && blockData.equals(containerBlocks.getBlockData(i))) {
-                nextContainer = true;
-                break;
-              }
-              blockData = containerBlocks.getBlockData(i);
-              blocksDataJsonGenerator.writeStartObject();
-              blocksDataJsonGenerator.writeFieldName("blockId");
-              blocksDataJsonGenerator.writeStartObject();
-              blocksDataJsonGenerator.writeNumberField("containerId", blockData.getBlockID().getContainerID());
-              blocksDataJsonGenerator.writeNumberField("localId", blockData.getBlockID().getLocalID());
-              blocksDataJsonGenerator.writeNumberField("blockCommitSequenceId", blockData.getBlockID().getBlockCommitSequenceId());
-              blocksDataJsonGenerator.writeEndObject();
-
-              blocksDataJsonGenerator.writeFieldName("metadata");
-              blocksDataJsonGenerator.writeStartObject();
-
-              for (ContainerProtos.KeyValue blockMetadataEntry: blockData.getMetadataList()) {
-                blocksDataJsonGenerator.writeStringField(blockMetadataEntry.getKey(), blockMetadataEntry.getValue());
-              }
-              blocksDataJsonGenerator.writeEndObject();
-
-              blocksDataJsonGenerator.writeFieldName("chunks");
-              blocksDataJsonGenerator.writeStartArray();
-
-              for (ContainerProtos.ChunkInfo chunkInfo: blockData.getChunksList()) {
-                blocksDataJsonGenerator.writeStartObject();
-
-                blocksDataJsonGenerator.writeStringField("chunkName", chunkInfo.getChunkName());
-                blocksDataJsonGenerator.writeNumberField("offset", chunkInfo.getOffset());
-                blocksDataJsonGenerator.writeNumberField("len", chunkInfo.getLen());
-                blocksDataJsonGenerator.writeFieldName("checksumData");
-                blocksDataJsonGenerator.writeStartObject();
-                blocksDataJsonGenerator.writeStringField("type", chunkInfo.getChecksumData().getType().name());
-                blocksDataJsonGenerator.writeNumberField("bytesPerChecksum", chunkInfo.getChecksumData().getBytesPerChecksum());
-                blocksDataJsonGenerator.writeEndObject();
-
-                blocksDataJsonGenerator.writeEndObject();
-              }
-              blocksDataJsonGenerator.writeEndArray();
-              blocksDataJsonGenerator.writeNumberField("size", blockData.getSize());
-              blocksDataJsonGenerator.writeEndObject();
-            }
-            if (nextContainer) {
+        List<BlockData> containerBlocks = listBlocks(container, -1L, blockPageSize);
+        BlockData blockData = null;
+        while (true) {
+          assert containerBlocks != null;
+          if (containerBlocks.isEmpty()) break;
+          boolean nextContainer = false;
+          for (BlockData containerBlock : containerBlocks) {
+            if (blockData != null && blockData.getBlockID().equals(containerBlock.getBlockID())) {
+              nextContainer = true;
               break;
             }
-            containerBlocks = ContainerProtocolCalls.listBlock(
-                xceiverClientSpi, Long.parseLong(containerId), blockData.getBlockID().getLocalID(), blockPageSize,
-                containerToken);
+            blockData = containerBlock;
+            BlockData finalBlockData = blockData;
+            contanerBlockFilesStream = contanerBlockFilesStream.filter(filename ->
+                !filename.toString().endsWith(finalBlockData.getBlockID().getLocalID() + ".block"));
+            blocksDataJsonGenerator.writeStartObject();
+            blocksDataJsonGenerator.writeFieldName("blockId");
+            blocksDataJsonGenerator.writeStartObject();
+            blocksDataJsonGenerator.writeNumberField("containerId", blockData.getBlockID().getContainerID());
+            blocksDataJsonGenerator.writeNumberField("localId", blockData.getBlockID().getLocalID());
+            blocksDataJsonGenerator.writeNumberField("blockCommitSequenceId", blockData.getBlockID().getBlockCommitSequenceId());
+            blocksDataJsonGenerator.writeEndObject();
+
+            blocksDataJsonGenerator.writeFieldName("metadata");
+            blocksDataJsonGenerator.writeStartObject();
+
+            for (Map.Entry<String, String> blockMetadataEntry : blockData.getMetadata().entrySet()) {
+              blocksDataJsonGenerator.writeStringField(blockMetadataEntry.getKey(), blockMetadataEntry.getValue());
+            }
+            blocksDataJsonGenerator.writeEndObject();
+
+            blocksDataJsonGenerator.writeFieldName("chunks");
+            blocksDataJsonGenerator.writeStartArray();
+
+            for (ContainerProtos.ChunkInfo chunkInfo : blockData.getChunks()) {
+              blocksDataJsonGenerator.writeStartObject();
+
+              blocksDataJsonGenerator.writeStringField("chunkName", chunkInfo.getChunkName());
+              blocksDataJsonGenerator.writeNumberField("offset", chunkInfo.getOffset());
+              blocksDataJsonGenerator.writeNumberField("len", chunkInfo.getLen());
+              blocksDataJsonGenerator.writeFieldName("checksumData");
+              blocksDataJsonGenerator.writeStartObject();
+              blocksDataJsonGenerator.writeStringField("type", chunkInfo.getChecksumData().getType().name());
+              blocksDataJsonGenerator.writeNumberField("bytesPerChecksum", chunkInfo.getChecksumData().getBytesPerChecksum());
+              blocksDataJsonGenerator.writeEndObject();
+
+              blocksDataJsonGenerator.writeEndObject();
+            }
+            blocksDataJsonGenerator.writeEndArray();
+            blocksDataJsonGenerator.writeNumberField("size", blockData.getSize());
+            blocksDataJsonGenerator.writeEndObject();
           }
+          if (nextContainer || containerBlocks.size() < blockPageSize) {
+            break;
+          }
+          containerBlocks = listBlocks(container, blockData.getBlockID().getLocalID(), blockPageSize);
         }
         blocksDataJsonGenerator.writeEndArray();
+        blocksDataJsonGenerator.writeFieldName("orphanedBlockFiles");
+        String[] orphanedBlockFiles = contanerBlockFilesStream.map(blockFilePath ->
+            blockFilePath.toAbsolutePath().toString()).toArray(String[]::new);
+        blocksDataJsonGenerator.writeArray(orphanedBlockFiles, 0, orphanedBlockFiles.length);
         blocksDataJsonGenerator.writeEndObject();
         blocksDataJsonGenerator.close();
 
@@ -280,12 +275,47 @@ public class ListContainers extends ScmSubcommand {
     }
   }
 
-  private Pipeline createSingleNodePipeline(Pipeline pipeline,
-                                            DatanodeDetails node) {
-    return Pipeline.newBuilder().setId(pipeline.getId())
-        .setReplicationConfig(pipeline.getReplicationConfig())
-        .setState(pipeline.getPipelineState())
-        .setNodes(ImmutableList.of(node)).build();
+  private String getFirstStorageDir(ConfigurationSource config)
+      throws IOException {
+    final Collection<String> storageDirs =
+        HddsServerUtil.getDatanodeStorageDirs(config);
+
+    return
+        StorageLocation.parse(storageDirs.iterator().next())
+            .getUri().getPath();
+  }
+
+  private String getClusterId(String storageDir) throws IOException {
+    Preconditions.checkNotNull(storageDir);
+    try (Stream<Path> stream = Files.list(Paths.get(storageDir, "hdds"))) {
+      final Path firstStorageDirPath = stream.filter(Files::isDirectory)
+          .findFirst().get().getFileName();
+      if (firstStorageDirPath == null) {
+        throw new IllegalArgumentException(
+            "HDDS storage dir couldn't be identified!");
+      }
+      return firstStorageDirPath.toString();
+    }
+  }
+
+  private List<BlockData> listBlocks(Container container, Long startLocalID,
+                                                     int count) throws IOException {
+    List<BlockData> result = null;
+    KeyValueContainerData cData =
+        (KeyValueContainerData) container.getContainerData();
+    try (DBHandle db = BlockUtils.getDB(cData, conf)) {
+      result = new ArrayList<>();
+      String startKey = (startLocalID == -1) ? cData.startKeyEmpty()
+          : cData.getBlockKey(startLocalID);
+      List<? extends Table.KeyValue<String, BlockData>> range =
+          db.getStore().getBlockDataTable()
+              .getSequentialRangeKVs(startKey, count,
+                  cData.containerPrefix(), cData.getUnprefixedKeyFilter());
+      for (Table.KeyValue<String, BlockData> entry : range) {
+        result.add(entry.getValue());
+      }
+    }
+    return result;
   }
 
 }
