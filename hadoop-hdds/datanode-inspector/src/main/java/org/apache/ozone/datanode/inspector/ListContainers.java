@@ -46,10 +46,13 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -208,24 +211,26 @@ public class ListContainers extends ScmSubcommand {
         blocksDataJsonGenerator.writeStartArray();
         List<BlockData> containerBlocks = listBlocks(container, -1L, blockPageSize);
         BlockData blockData = null;
+        Set<Long> handledBlocks = new HashSet<>(containerBlocks.size());
         while (true) {
           assert containerBlocks != null;
           if (containerBlocks.isEmpty()) break;
-          boolean nextContainer = false;
+          int skippedBlocksCount = 0;
           for (BlockData containerBlock : containerBlocks) {
-            if (blockData != null && blockData.getBlockID().equals(containerBlock.getBlockID())) {
-              nextContainer = true;
-              break;
+            if (handledBlocks.contains(containerBlock.getLocalID())) {
+              skippedBlocksCount++;
+              continue;
             }
+            handledBlocks.add(containerBlock.getLocalID());
             blockData = containerBlock;
             BlockData finalBlockData = blockData;
             contanerBlockFilesStream = contanerBlockFilesStream.filter(filename ->
-                !filename.toString().endsWith(finalBlockData.getBlockID().getLocalID() + ".block"));
+                !filename.toString().endsWith(finalBlockData.getLocalID() + ".block"));
             blocksDataJsonGenerator.writeStartObject();
             blocksDataJsonGenerator.writeFieldName("blockId");
             blocksDataJsonGenerator.writeStartObject();
             blocksDataJsonGenerator.writeNumberField("containerId", blockData.getBlockID().getContainerID());
-            blocksDataJsonGenerator.writeNumberField("localId", blockData.getBlockID().getLocalID());
+            blocksDataJsonGenerator.writeStringField("localId", String.valueOf(blockData.getBlockID().getLocalID()));
             blocksDataJsonGenerator.writeNumberField("blockCommitSequenceId", blockData.getBlockID().getBlockCommitSequenceId());
             blocksDataJsonGenerator.writeEndObject();
 
@@ -258,10 +263,11 @@ public class ListContainers extends ScmSubcommand {
             blocksDataJsonGenerator.writeNumberField("size", blockData.getSize());
             blocksDataJsonGenerator.writeEndObject();
           }
-          if (nextContainer || containerBlocks.size() < blockPageSize) {
-            break;
+          if (skippedBlocksCount == containerBlocks.size()) {
+            containerBlocks = Collections.emptyList();
+          } else {
+            containerBlocks = listBlocks(container, blockData.getBlockID().getLocalID(), blockPageSize);
           }
-          containerBlocks = listBlocks(container, blockData.getBlockID().getLocalID(), blockPageSize);
         }
         blocksDataJsonGenerator.writeEndArray();
         blocksDataJsonGenerator.writeFieldName("orphanedBlockFiles");
