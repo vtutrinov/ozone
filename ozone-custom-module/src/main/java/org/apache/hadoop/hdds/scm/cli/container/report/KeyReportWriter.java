@@ -85,17 +85,21 @@ public class KeyReportWriter implements AutoCloseable {
   /**
    * Writes root information about volumes to the output stream using the provided JSON generator.
    *
-   * @throws IOException if there is an error writing to the output stream
+   * @throws IOException          if there is an error writing to the output stream
    * @throws InterruptedException if the thread is interrupted while writing
    */
   void writeRootInfo() throws IOException, InterruptedException {
     generator.writeStartObject();
 
-    Iterator<? extends OzoneVolume> volumes = client.getObjectStore()
-        .listVolumes(keyReportOptions.getVolumePrefix(), null);
-    while (volumes.hasNext()) {
-      OzoneVolume volume = volumes.next();
-      writeVolumeInfo(volume);
+    try {
+      Iterator<? extends OzoneVolume> volumes = client.getObjectStore()
+          .listVolumes(keyReportOptions.getVolumePrefix(), null);
+      while (volumes.hasNext()) {
+        OzoneVolume volume = volumes.next();
+        writeVolumeInfo(volume);
+      }
+    } catch (Exception e) {
+      generator.writeStringField("Error", e.getMessage());
     }
 
     generator.writeEndObject();
@@ -105,18 +109,22 @@ public class KeyReportWriter implements AutoCloseable {
    * Writes volume information to the output stream using the provided JSON generator.
    *
    * @param volume the OzoneVolume object representing the volume to write the information for
-   * @throws IOException if there is an error writing to the output stream
+   * @throws IOException          if there is an error writing to the output stream
    * @throws InterruptedException if the thread is interrupted while writing
    */
   void writeVolumeInfo(OzoneVolume volume) throws IOException, InterruptedException {
     generator.writeFieldName(volume.getName());
     generator.writeStartObject();
 
-    Iterator<? extends OzoneBucket> buckets = volume.listBuckets(keyReportOptions.getBucketPrefix());
+    try {
+      Iterator<? extends OzoneBucket> buckets = volume.listBuckets(keyReportOptions.getBucketPrefix());
 
-    while (buckets.hasNext()) {
-      OzoneBucket bucket = buckets.next();
-      writeBucketInfo(volume, bucket);
+      while (buckets.hasNext()) {
+        OzoneBucket bucket = buckets.next();
+        writeBucketInfo(volume, bucket);
+      }
+    } catch (Exception e) {
+      generator.writeStringField("Error", e.getMessage());
     }
 
     generator.writeEndObject();
@@ -127,18 +135,22 @@ public class KeyReportWriter implements AutoCloseable {
    *
    * @param volume the OzoneVolume object representing the volume of the bucket
    * @param bucket the OzoneBucket object representing the bucket to write the information for
-   * @throws IOException if there is an error writing to the output stream
+   * @throws IOException          if there is an error writing to the output stream
    * @throws InterruptedException if the thread is interrupted while writing
    */
   void writeBucketInfo(OzoneVolume volume, OzoneBucket bucket) throws IOException, InterruptedException {
     generator.writeFieldName(bucket.getName());
     generator.writeStartObject();
 
-    Iterator<? extends OzoneKey> keys = bucket.listKeys(keyReportOptions.getKeyPrefix());
+    try {
+      Iterator<? extends OzoneKey> keys = bucket.listKeys(keyReportOptions.getKeyPrefix());
 
-    while (keys.hasNext()) {
-      OzoneKey key = keys.next();
-      writeKeyInfo(volume, bucket, key);
+      while (keys.hasNext()) {
+        OzoneKey key = keys.next();
+        writeKeyInfo(volume, bucket, key);
+      }
+    } catch (Exception e) {
+      generator.writeStringField("Error", e.getMessage());
     }
 
     generator.writeEndObject();
@@ -149,8 +161,8 @@ public class KeyReportWriter implements AutoCloseable {
    *
    * @param volume the OzoneVolume object representing the volume of the key
    * @param bucket the OzoneBucket object representing the bucket of the key
-   * @param key the OzoneKey object representing the key to write the information for
-   * @throws IOException if there is an error writing to the output stream
+   * @param key    the OzoneKey object representing the key to write the information for
+   * @throws IOException          if there is an error writing to the output stream
    * @throws InterruptedException if the thread is interrupted while writing
    */
   void writeKeyInfo(OzoneVolume volume, OzoneBucket bucket, OzoneKey key) throws IOException, InterruptedException {
@@ -166,19 +178,23 @@ public class KeyReportWriter implements AutoCloseable {
    *
    * @param volumeName the name of the volume
    * @param bucketName the name of the bucket
-   * @param keyName the name of the key
+   * @param keyName    the name of the key
    * @throws IOException if there is an error writing to the output stream
-   * @throws InterruptedException if the thread is interrupted while writing
    */
-  private void writeKeyLocations(String volumeName, String bucketName, String keyName) throws IOException,
-      InterruptedException {
-    List<OmKeyLocationInfo> locationInfos = getLocationInfos(volumeName, bucketName, keyName);
-    for (OmKeyLocationInfo keyLocation : locationInfos) {
+  private void writeKeyLocations(String volumeName, String bucketName, String keyName) throws IOException {
+    try {
+      List<OmKeyLocationInfo> locationInfos = getLocationInfos(volumeName, bucketName, keyName);
+      for (OmKeyLocationInfo keyLocation : locationInfos) {
+        generator.writeStartObject();
+        generator.writeFieldName(String.valueOf(keyLocation.getLocalID()));
+        generator.writeStartArray();
+        writeKeyLocationInfo(keyLocation);
+        generator.writeEndArray();
+        generator.writeEndObject();
+      }
+    } catch (Exception e) {
       generator.writeStartObject();
-      generator.writeFieldName(String.valueOf(keyLocation.getLocalID()));
-      generator.writeStartArray();
-      writeKeyLocationInfo(keyLocation);
-      generator.writeEndArray();
+      generator.writeStringField("Error", e.getMessage());
       generator.writeEndObject();
     }
   }
@@ -187,27 +203,33 @@ public class KeyReportWriter implements AutoCloseable {
    * Writes the key location information to the output stream using the provided OmKeyLocationInfo object.
    *
    * @param keyLocation the OmKeyLocationInfo object containing the key location information
-   * @throws IOException            if there is an error writing to the output stream
-   * @throws InterruptedException if the thread is interrupted while writing
+   * @throws IOException if there is an error writing to the output stream
    */
-  private void writeKeyLocationInfo(OmKeyLocationInfo keyLocation) throws IOException, InterruptedException {
+  private void writeKeyLocationInfo(OmKeyLocationInfo keyLocation) throws IOException {
 
-    ContainerLayoutVersion containerLayoutVersion = ContainerLayoutVersion.getConfiguredVersion(conf);
-    Pipeline keyPipeline = getKeyPipeline(keyLocation.getPipeline());
-    Map<DatanodeDetails, ContainerProtos.GetBlockResponseProto> locationBlocks = getLocationBlocks(keyLocation);
-    Map<DatanodeDetails, ContainerProtos.ReadContainerResponseProto> readContainerResponses =
-        getLocationContainerInfo(keyLocation);
-    for (Map.Entry<DatanodeDetails, ContainerProtos.GetBlockResponseProto>
-        entry : locationBlocks.entrySet()) {
+    try {
+      ContainerLayoutVersion containerLayoutVersion = ContainerLayoutVersion.getConfiguredVersion(conf);
+      Pipeline keyPipeline = getKeyPipeline(keyLocation.getPipeline());
+      Map<DatanodeDetails, ContainerProtos.GetBlockResponseProto> locationBlocks = getLocationBlocks(keyLocation);
+      Map<DatanodeDetails, ContainerProtos.ReadContainerResponseProto> readContainerResponses =
+          getLocationContainerInfo(keyLocation);
+      for (Map.Entry<DatanodeDetails, ContainerProtos.GetBlockResponseProto>
+          entry : locationBlocks.entrySet()) {
+        ContainerChunkInfo chunkInfo = getChunkInfo(entry.getValue(), readContainerResponses,
+            entry.getKey(), containerLayoutVersion, keyLocation, keyPipeline);
+        generator.writeStartObject();
+        generator.writeStringField("Datanode-HostName", entry.getKey()
+            .getHostName());
+        generator.writeStringField("Datanode-IP", entry.getKey()
+            .getIpAddress());
+        generator.writeNumberField("Container-ID", keyLocation.getContainerID());
+        generator.writeNumberField("Block-ID", keyLocation.getLocalID());
+        generator.writeObjectField("Locations", chunkInfo);
+        generator.writeEndObject();
+      }
+    } catch (Exception e) {
       generator.writeStartObject();
-      generator.writeStringField("Datanode-HostName", entry.getKey()
-          .getHostName());
-      generator.writeStringField("Datanode-IP", entry.getKey()
-          .getIpAddress());
-      generator.writeNumberField("Container-ID", keyLocation.getContainerID());
-      generator.writeNumberField("Block-ID", keyLocation.getLocalID());
-      generator.writeObjectField("Locations", getChunkInfo(entry.getValue(), readContainerResponses,
-          entry.getKey(), containerLayoutVersion, keyLocation, keyPipeline));
+      generator.writeStringField("Error", e.getMessage());
       generator.writeEndObject();
     }
   }
@@ -215,25 +237,27 @@ public class KeyReportWriter implements AutoCloseable {
   /**
    * Retrieves the location information for the given key in the specified volume and bucket.
    *
-   * @param volumeName  the name of the volume
-   * @param bucketName  the name of the bucket
-   * @param keyName     the name of the key
+   * @param volumeName the name of the volume
+   * @param bucketName the name of the bucket
+   * @param keyName    the name of the key
    * @return a list of OmKeyLocationInfo objects representing the location information of the key
-   * @throws IOException if there is an error retrieving the location information
    */
-  private List<OmKeyLocationInfo> getLocationInfos(String volumeName, String bucketName,
-                                                   String keyName) throws IOException {
-    OzoneManagerProtocol ozoneManagerClient =
-        client.getObjectStore().getClientProxy().getOzoneManagerClient();
+  private List<OmKeyLocationInfo> getLocationInfos(String volumeName, String bucketName, String keyName) {
+    try {
+      OzoneManagerProtocol ozoneManagerClient =
+          client.getObjectStore().getClientProxy().getOzoneManagerClient();
 
-    OmKeyArgs keyArgs = new OmKeyArgs.Builder().setVolumeName(volumeName)
-        .setBucketName(bucketName).setKeyName(keyName).build();
-    OmKeyInfo keyInfo = ozoneManagerClient.getKeyInfo(keyArgs, false).getKeyInfo();
-    OmKeyLocationInfoGroup locationInfos = keyInfo.getLatestVersionLocations();
-    if (locationInfos == null) {
+      OmKeyArgs keyArgs = new OmKeyArgs.Builder().setVolumeName(volumeName)
+          .setBucketName(bucketName).setKeyName(keyName).build();
+      OmKeyInfo keyInfo = ozoneManagerClient.getKeyInfo(keyArgs, false).getKeyInfo();
+      OmKeyLocationInfoGroup locationInfos = keyInfo.getLatestVersionLocations();
+      if (locationInfos == null) {
+        return Collections.emptyList();
+      } else {
+        return locationInfos.getBlocksLatestVersionOnly();
+      }
+    } catch (Exception e) {
       return Collections.emptyList();
-    } else {
-      return locationInfos.getBlocksLatestVersionOnly();
     }
   }
 
@@ -242,7 +266,7 @@ public class KeyReportWriter implements AutoCloseable {
    *
    * @param keyLocation the OmKeyLocationInfo object containing the key location information
    * @return a map of DatanodeDetails to ContainerProtos.GetBlockResponseProto representing the location blocks
-   * @throws IOException            if there is an error retrieving the location blocks
+   * @throws IOException          if there is an error retrieving the location blocks
    * @throws InterruptedException if the thread is interrupted while retrieving the location blocks
    */
   private Map<DatanodeDetails, ContainerProtos.GetBlockResponseProto> getLocationBlocks(OmKeyLocationInfo keyLocation)
@@ -275,7 +299,7 @@ public class KeyReportWriter implements AutoCloseable {
    *
    * @param keyLocation the OmKeyLocationInfo object containing the key location information
    * @return a map of DatanodeDetails to ReadContainerResponseProto representing the location container information
-   * @throws IOException if there is an error retrieving the location container information
+   * @throws IOException          if there is an error retrieving the location container information
    * @throws InterruptedException if the thread is interrupted while retrieving the location container information
    */
   private Map<DatanodeDetails, ReadContainerResponseProto> getLocationContainerInfo(OmKeyLocationInfo keyLocation)
@@ -302,13 +326,13 @@ public class KeyReportWriter implements AutoCloseable {
   /**
    * Retrieves the chunk information for a given block response.
    *
-   * @param blockResponse The GetBlockResponseProto object containing the block data.
+   * @param blockResponse          The GetBlockResponseProto object containing the block data.
    * @param readContainerResponses The map of DatanodeDetails to ReadContainerResponseProto objects,
-   *        containing the container data.
-   * @param datanodeDetails The DatanodeDetails object representing the datanode.
+   *                               containing the container data.
+   * @param datanodeDetails        The DatanodeDetails object representing the datanode.
    * @param containerLayoutVersion The ContainerLayoutVersion object representing the container layout version.
-   * @param keyLocation The OmKeyLocationInfo object representing the key location.
-   * @param keyPipeline The Pipeline object representing the key pipeline.
+   * @param keyLocation            The OmKeyLocationInfo object representing the key location.
+   * @param keyPipeline            The Pipeline object representing the key pipeline.
    * @return The ContainerChunkInfo object containing the chunk information.
    * @throws IOException If an I/O error occurs.
    */
@@ -391,11 +415,11 @@ public class KeyReportWriter implements AutoCloseable {
   /**
    * Creates a ContainerChunkInfo object with verbose information.
    *
-   * @param containerData the container data
+   * @param containerData    the container data
    * @param chunkDetailsList the list of chunk details
-   * @param keyPipeline the key pipeline
-   * @param isECKey flag indicating if it is an EC key
-   * @param datanodeDetails the datanode details
+   * @param keyPipeline      the key pipeline
+   * @param isECKey          flag indicating if it is an EC key
+   * @param datanodeDetails  the datanode details
    * @return the ContainerChunkInfo object
    */
   private ContainerChunkInfo createContainerChunkInfoVerbose(ContainerProtos.ContainerDataProto containerData,
