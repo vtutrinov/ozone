@@ -1,10 +1,11 @@
-package org.apache.hadoop.hdds.scm.cli.container.report;
+package org.apache.ozone.datanode.inspector;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.core.JsonEncoding;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Nullable;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdds.client.ECReplicationConfig;
 import org.apache.hadoop.hdds.client.StandaloneReplicationConfig;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
@@ -39,6 +40,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
@@ -47,36 +49,45 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.apache.hadoop.hdds.protocol.proto.HddsProtos.ReplicationFactor.ONE;
 
 /**
  * This class is responsible for writing key report information in JSON format.
  */
-public class KeyReportWriter implements AutoCloseable {
+public class KeyReportWriter {
   private static final Logger LOG = LoggerFactory.getLogger(KeyReportWriter.class);
   private final OzoneClient client;
-  private final JsonGenerator generator;
-  private final OutputStream stream;
+  private JsonGenerator generator;
   private final KeyReportOptions keyReportOptions;
 
   private final OzoneConfiguration conf;
 
   private final boolean isVerbose;
 
+  private final File reportDirectory;
+
+  private final ObjectMapper mapper;
+
+  private int keysReportIterations = 0;
+
   public KeyReportWriter(OzoneClient client, KeyReportOptions keyReportOptions, OzoneConfiguration conf,
                          boolean isVerbose) throws IOException {
     this.client = client;
-    ObjectMapper mapper = new ObjectMapper();
+    mapper = new ObjectMapper();
     mapper.setVisibility(mapper.getSerializationConfig().getDefaultVisibilityChecker()
         .withFieldVisibility(JsonAutoDetect.Visibility.ANY)
         .withGetterVisibility(JsonAutoDetect.Visibility.NONE)
         .withSetterVisibility(JsonAutoDetect.Visibility.NONE)
         .withCreatorVisibility(JsonAutoDetect.Visibility.NONE));
     mapper.findAndRegisterModules();
-    this.stream = Files.newOutputStream(Paths.get(keyReportOptions.getOutput()),
-        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-    this.generator = mapper.createGenerator(stream, JsonEncoding.UTF8);
+    this.reportDirectory = new File(keyReportOptions.getOutput());
+    if (!this.reportDirectory.exists()) {
+      if (!this.reportDirectory.mkdirs()) {
+        throw new IOException("Unable to create report directory: " + this.reportDirectory);
+      }
+    }
     this.keyReportOptions = keyReportOptions;
     this.conf = conf;
     this.isVerbose = isVerbose;
@@ -88,21 +99,13 @@ public class KeyReportWriter implements AutoCloseable {
    * @throws IOException          if there is an error writing to the output stream
    * @throws InterruptedException if the thread is interrupted while writing
    */
-  void writeRootInfo() throws IOException, InterruptedException {
-    generator.writeStartObject();
-
-    try {
-      Iterator<? extends OzoneVolume> volumes = client.getObjectStore()
-          .listVolumes(keyReportOptions.getVolumePrefix(), null);
-      while (volumes.hasNext()) {
-        OzoneVolume volume = volumes.next();
-        writeVolumeInfo(volume);
-      }
-    } catch (Exception e) {
-      generator.writeStringField("Error", e.getMessage());
+  void writeRootInfo() throws IOException {
+    Iterator<? extends OzoneVolume> volumes = client.getObjectStore()
+        .listVolumes(keyReportOptions.getVolumePrefix(), null);
+    while (volumes.hasNext()) {
+      OzoneVolume volume = volumes.next();
+      writeVolumeInfo(volume);
     }
-
-    generator.writeEndObject();
   }
 
   /**
@@ -112,22 +115,85 @@ public class KeyReportWriter implements AutoCloseable {
    * @throws IOException          if there is an error writing to the output stream
    * @throws InterruptedException if the thread is interrupted while writing
    */
-  void writeVolumeInfo(OzoneVolume volume) throws IOException, InterruptedException {
-    generator.writeFieldName(volume.getName());
-    generator.writeStartObject();
-
+  void writeVolumeInfo(OzoneVolume volume) throws IOException {
     try {
       Iterator<? extends OzoneBucket> buckets = volume.listBuckets(keyReportOptions.getBucketPrefix());
 
-      while (buckets.hasNext()) {
-        OzoneBucket bucket = buckets.next();
-        writeBucketInfo(volume, bucket);
+      OzoneBucket bucket = buckets.hasNext() ? buckets.next() : null;
+
+      String prevKey = null;
+
+      OutputStream keyReportOutputStream = Files.newOutputStream(Paths.get(
+              reportDirectory.getAbsolutePath() + File.separator + volume.getName() + "_" + bucket.getName()
+                  + "_" + keysReportIterations + ".json"),
+          StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+      generator = mapper.createGenerator(keyReportOutputStream);
+
+      if (bucket != null) {
+        // open a root object
+        generator.writeStartObject();
+
+        // open a volume object
+        generator.writeFieldName(volume.getName());
+        generator.writeStartObject();
+      }
+
+      while (bucket != null) {
+
+        Pair<String, Boolean> bucketKeysWriteInfo = writeBucketInfo(volume, bucket, prevKey == null ?
+            Optional.empty() : Optional.of(prevKey));
+        keysReportIterations++;
+        if (bucketKeysWriteInfo.getRight()) {
+          prevKey = bucketKeysWriteInfo.getLeft();
+          // close the volume object
+          generator.writeEndObject();
+          // close the root object
+          generator.writeEndObject();
+          generator.close();
+          keyReportOutputStream.close();
+
+          keyReportOutputStream = Files.newOutputStream(Paths.get(
+              reportDirectory.getAbsolutePath() + File.separator + volume.getName()  + "_" + bucket.getName()
+                  + "_" + keysReportIterations + ".json"),
+              StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+          generator = mapper.createGenerator(keyReportOutputStream);
+
+          // open a root object
+          generator.writeStartObject();
+
+          // open a volume object
+          generator.writeFieldName(volume.getName());
+          generator.writeStartObject();
+        } else {
+          // close the volume object
+          generator.writeEndObject();
+          // close the root object
+          generator.writeEndObject();
+          generator.close();
+          keyReportOutputStream.close();
+
+          bucket = buckets.hasNext() ? buckets.next() : null;
+          prevKey = null;
+          if (bucket != null) {
+            keyReportOutputStream = Files.newOutputStream(Paths.get(
+                reportDirectory.getAbsolutePath() + File.separator + volume.getName()  + "_" + bucket.getName()
+                    + "_" + keysReportIterations + ".json"),
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+
+            generator = mapper.createGenerator(keyReportOutputStream);
+
+            // open a root object
+            generator.writeStartObject();
+
+            // open a volume object
+            generator.writeFieldName(volume.getName());
+            generator.writeStartObject();
+          }
+        }
       }
     } catch (Exception e) {
       generator.writeStringField("Error", e.getMessage());
     }
-
-    generator.writeEndObject();
   }
 
   /**
@@ -135,25 +201,40 @@ public class KeyReportWriter implements AutoCloseable {
    *
    * @param volume the OzoneVolume object representing the volume of the bucket
    * @param bucket the OzoneBucket object representing the bucket to write the information for
+   * @return
    * @throws IOException          if there is an error writing to the output stream
    * @throws InterruptedException if the thread is interrupted while writing
    */
-  void writeBucketInfo(OzoneVolume volume, OzoneBucket bucket) throws IOException, InterruptedException {
+  Pair<String, Boolean> writeBucketInfo(OzoneVolume volume, OzoneBucket bucket, Optional<String> prevKey)
+      throws IOException, InterruptedException {
+    // open a bucket object
     generator.writeFieldName(bucket.getName());
     generator.writeStartObject();
 
+    OzoneKey key = null;
+    int handledKeys = 0;
     try {
-      Iterator<? extends OzoneKey> keys = bucket.listKeys(keyReportOptions.getKeyPrefix());
+      bucket.setListCacheSize(keyReportOptions.getKeysPerReportFile());
+      Iterator<? extends OzoneKey> keys = prevKey.isPresent() ?
+          bucket.listKeys(keyReportOptions.getKeyPrefix(), prevKey.get()) :
+          bucket.listKeys(keyReportOptions.getKeyPrefix());
+
 
       while (keys.hasNext()) {
-        OzoneKey key = keys.next();
+        if (handledKeys >= keyReportOptions.getKeysPerReportFile()) {
+          break;
+        }
+        key = keys.next();
         writeKeyInfo(volume, bucket, key);
+        handledKeys++;
       }
     } catch (Exception e) {
       generator.writeStringField("Error", e.getMessage());
     }
-
+    // close the bucket object
     generator.writeEndObject();
+
+    return Pair.of(key != null ? key.getName() : null, handledKeys == keyReportOptions.getKeysPerReportFile());
   }
 
   /**
@@ -211,7 +292,7 @@ public class KeyReportWriter implements AutoCloseable {
       ContainerLayoutVersion containerLayoutVersion = ContainerLayoutVersion.getConfiguredVersion(conf);
       Pipeline keyPipeline = getKeyPipeline(keyLocation.getPipeline());
       Map<DatanodeDetails, ContainerProtos.GetBlockResponseProto> locationBlocks = getLocationBlocks(keyLocation);
-      Map<DatanodeDetails, ContainerProtos.ReadContainerResponseProto> readContainerResponses =
+      Map<DatanodeDetails, ReadContainerResponseProto> readContainerResponses =
           getLocationContainerInfo(keyLocation);
       for (Map.Entry<DatanodeDetails, ContainerProtos.GetBlockResponseProto>
           entry : locationBlocks.entrySet()) {
@@ -466,9 +547,4 @@ public class KeyReportWriter implements AutoCloseable {
         ((ECReplicationConfig) pipeline.getReplicationConfig()).getData();
   }
 
-  @Override
-  public void close() throws IOException {
-    generator.close();
-    stream.close();
-  }
 }

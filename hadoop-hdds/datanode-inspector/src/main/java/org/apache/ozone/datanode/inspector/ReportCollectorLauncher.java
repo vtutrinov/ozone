@@ -4,7 +4,7 @@ import org.apache.hadoop.hdds.cli.GenericCli;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
-@Command(subcommands = {DatanodeCommand.class})
+@Command(subcommands = {DatanodeCommand.class, KeyReport.class})
 public class ReportCollectorLauncher extends GenericCli {
 
   public static void main(String[] args) {
