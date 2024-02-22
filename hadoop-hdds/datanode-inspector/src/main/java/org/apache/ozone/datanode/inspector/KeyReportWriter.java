@@ -121,7 +121,7 @@ public class KeyReportWriter {
 
       OzoneBucket bucket = buckets.hasNext() ? buckets.next() : null;
 
-      String prevKey = null;
+      String prevKey = keyReportOptions.getFromKey();
 
       OutputStream keyReportOutputStream = Files.newOutputStream(Paths.get(
               reportDirectory.getAbsolutePath() + File.separator + volume.getName() + "_" + bucket.getName()

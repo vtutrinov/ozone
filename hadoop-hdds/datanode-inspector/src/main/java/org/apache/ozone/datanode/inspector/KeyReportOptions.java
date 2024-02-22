@@ -23,6 +23,10 @@ public class KeyReportOptions {
       description = "Prefix to filter keys.")
   private String keyPrefix;
 
+  @CommandLine.Option(names = {"--from-key"},
+      description = "Start key for the report.")
+  private String fromKey;
+
   @CommandLine.Option(names = {"--keys-per-report-file", "-kprf"},
       description = "Number of keys per report file.",
       defaultValue = "10000")
@@ -48,4 +52,7 @@ public class KeyReportOptions {
     return keysPerReportFile;
   }
 
+  public String getFromKey() {
+    return fromKey;
+  }
 }
