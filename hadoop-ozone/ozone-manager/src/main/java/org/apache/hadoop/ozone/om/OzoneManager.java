@@ -61,9 +61,7 @@ import org.apache.hadoop.hdds.scm.client.HddsClientUtils;
 import org.apache.hadoop.hdds.scm.client.ScmTopologyClient;
 import org.apache.hadoop.hdds.scm.ha.SCMHAUtils;
 import org.apache.hadoop.hdds.scm.ha.SCMNodeInfo;
-import org.apache.hadoop.hdds.scm.net.InnerNode;
 import org.apache.hadoop.hdds.scm.net.NetworkTopology;
-import org.apache.hadoop.hdds.scm.net.NetworkTopologyImpl;
 import org.apache.hadoop.hdds.scm.protocol.ScmBlockLocationProtocol;
 import org.apache.hadoop.hdds.scm.protocol.StorageContainerLocationProtocol;
 import org.apache.hadoop.hdds.security.SecurityConfig;
@@ -405,7 +403,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private final ScmBlockLocationProtocol scmBlockClient;
   private final StorageContainerLocationProtocol scmContainerClient;
   private ObjectName omInfoBeanName;
-  private NetworkTopology clusterMap;
   private Timer metricsTimer;
   private ScheduleOMMetricsWriteTask scheduleOMMetricsWriteTask;
   private static final ObjectWriter WRITER =
@@ -1274,11 +1271,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   }
 
   public NetworkTopology getClusterMap() {
-    InnerNode currentTree = scmTopologyClient.getClusterTree();
-    return new NetworkTopologyImpl(configuration.get(
-        ScmConfigKeys.OZONE_SCM_NETWORK_TOPOLOGY_SCHEMA_FILE,
-        ScmConfigKeys.OZONE_SCM_NETWORK_TOPOLOGY_SCHEMA_FILE_DEFAULT),
-        currentTree);
+    return scmTopologyClient.getClusterMap();
   }
 
   /**
@@ -1798,11 +1791,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       LOG.error("Unable to initialize network topology schema file. ", ex);
       throw new UncheckedIOException(ex);
     }
-
-    clusterMap = new NetworkTopologyImpl(configuration.get(
-        ScmConfigKeys.OZONE_SCM_NETWORK_TOPOLOGY_SCHEMA_FILE,
-        ScmConfigKeys.OZONE_SCM_NETWORK_TOPOLOGY_SCHEMA_FILE_DEFAULT),
-        scmTopologyClient.getClusterTree());
 
     try {
       httpServer = new OzoneManagerHttpServer(configuration, this);
