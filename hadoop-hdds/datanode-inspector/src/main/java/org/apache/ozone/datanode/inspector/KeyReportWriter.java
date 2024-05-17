@@ -436,7 +436,7 @@ public class KeyReportWriter {
       String fileName = containerLayoutVersion.getChunkFile(new File(
               getChunkLocationPath(containerData.getContainerPath())),
           keyLocation.getBlockID(),
-          ChunkInfo.getFromProtoBuf(chunkInfo)).toString();
+          ChunkInfo.getFromProtoBuf(chunkInfo).toString()).toString();
       chunkPaths.add(fileName);
       ChunkDetails chunkDetails = new ChunkDetails();
       chunkDetails.setChunkName(fileName);
