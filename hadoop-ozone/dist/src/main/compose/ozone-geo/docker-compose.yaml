@@ -41,6 +41,9 @@ services:
     tty: true
     stdin_open: true
     command: [ "/usr/bin/bash" ]
+    networks:
+      net:
+        ipv4_address: 10.5.0.3
   datanode_1:
     <<: *common-config
     ports:
@@ -199,32 +202,9 @@ services:
     networks:
       net:
         ipv4_address: 10.5.0.75
-  httpfs:
-    <<: *common-config
-    environment:
-      OZONE-SITE.XML_hdds.scm.safemode.min.datanode: "${OZONE_SAFEMODE_MIN_DATANODES:-6}"
-      <<: *replication
-    ports:
-      - 14000:14000
-    command: [ "ozone","httpfs" ]
-    networks:
-      net:
-        ipv4_address: 10.5.0.76
-  recon:
-    <<: *common-config
-    ports:
-      - 9888:9888
-    environment:
-      OZONE_OPTS:
-      <<: *replication
-    command: [ "/opt/hadoop/bin/ozone","recon" ]
-    networks:
-      net:
-        ipv4_address: 10.5.0.77
 networks:
   net:
     driver: bridge
     ipam:
       config:
         - subnet: 10.5.0.0/16
-        - gateway: 10.5.0.1
