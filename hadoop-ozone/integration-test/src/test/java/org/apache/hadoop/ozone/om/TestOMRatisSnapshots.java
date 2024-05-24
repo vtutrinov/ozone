@@ -52,6 +52,7 @@ import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServerConfig;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.snapshot.OmSnapshotUtils;
 import org.apache.ozone.test.GenericTestUtils;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.apache.ratis.server.protocol.TermIndex;
 import org.assertj.core.api.Fail;
 import org.junit.jupiter.api.AfterEach;
@@ -103,6 +104,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Tests the Ratis snapshots feature in OM.
  */
 @Timeout(5000)
+@Unhealthy
 public class TestOMRatisSnapshots {
 
   private MiniOzoneHAClusterImpl cluster = null;

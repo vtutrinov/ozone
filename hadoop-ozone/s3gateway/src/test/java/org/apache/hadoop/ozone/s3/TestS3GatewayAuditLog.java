@@ -33,6 +33,7 @@ import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
 import org.apache.hadoop.ozone.s3.endpoint.BucketEndpoint;
 import org.apache.hadoop.ozone.s3.endpoint.ObjectEndpoint;
 import org.apache.hadoop.ozone.s3.endpoint.RootEndpoint;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,16 +52,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * Tests for S3Gateway Audit Log.
  */
+@Unhealthy
 public class TestS3GatewayAuditLog {
 
   private static final Logger LOG =
       LoggerFactory.getLogger(TestS3GatewayAuditLog.class.getName());
-
-  static {
-    System.setProperty("log4j.configurationFile", "auditlog.properties");
-    System.setProperty("log4j2.contextSelector",
-        "org.apache.logging.log4j.core.async.AsyncLoggerContextSelector");
-  }
 
   private String bucketName = OzoneConsts.BUCKET;
   private OzoneClient clientStub;

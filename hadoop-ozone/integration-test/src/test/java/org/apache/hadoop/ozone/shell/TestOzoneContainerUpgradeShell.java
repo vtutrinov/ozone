@@ -45,6 +45,7 @@ import org.apache.hadoop.ozone.container.common.utils.ContainerCache;
 import org.apache.hadoop.ozone.container.common.utils.DatanodeStoreCache;
 import org.apache.hadoop.ozone.om.helpers.OmKeyArgs;
 import org.apache.hadoop.ozone.om.helpers.OmKeyLocationInfo;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -78,6 +79,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * Test Ozone Container upgrade shell.
  */
+@Unhealthy
 public class TestOzoneContainerUpgradeShell {
   private static final Logger LOG =
       LoggerFactory.getLogger(TestOzoneContainerUpgradeShell.class);

@@ -143,7 +143,7 @@ public class TestCommitInRatis {
     conf.setFromObject(ratisClientConfig);
     startCluster(conf);
     GenericTestUtils.LogCapturer logCapturer =
-        GenericTestUtils.LogCapturer.captureLogs(XceiverClientRatis.LOG);
+        GenericTestUtils.LogCapturer.captureLogs(XceiverClientRatis.class);
     XceiverClientManager clientManager = new XceiverClientManager(conf);
 
     ContainerWithPipeline container1 = storageContainerLocationClient

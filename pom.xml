@@ -172,9 +172,8 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
 
     <!-- SLF4J/LOG4J version -->
     <slf4j.version>2.0.13</slf4j.version>
-    <log4j2.version>2.17.1</log4j2.version>
+    <log4j2.version>2.23.1</log4j2.version>
     <disruptor.version>3.4.4</disruptor.version>
-    <reload4j.version>1.2.25</reload4j.version>
 
     <kerby.version>1.0.1</kerby.version>
     <kotlin.version>1.9.24</kotlin.version>
@@ -765,33 +764,6 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
         <version>${commons-logging-api.version}</version>
       </dependency>
       <dependency>
-        <groupId>ch.qos.reload4j</groupId>
-        <artifactId>reload4j</artifactId>
-        <version>${reload4j.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>com.sun.jdmk</groupId>
-            <artifactId>jmxtools</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jmx</groupId>
-            <artifactId>jmxri</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>javax.mail</groupId>
-            <artifactId>mail</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>javax.jms</groupId>
-            <artifactId>jmx</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>javax.jms</groupId>
-            <artifactId>jms</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-api</artifactId>
         <version>${log4j2.version}</version>
@@ -799,6 +771,11 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
       <dependency>
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-core</artifactId>
+        <version>${log4j2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-slf4j2-impl</artifactId>
         <version>${log4j2.version}</version>
       </dependency>
       <dependency>
@@ -914,11 +891,6 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
       <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-api</artifactId>
-        <version>${slf4j.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-reload4j</artifactId>
         <version>${slf4j.version}</version>
       </dependency>
       <dependency>

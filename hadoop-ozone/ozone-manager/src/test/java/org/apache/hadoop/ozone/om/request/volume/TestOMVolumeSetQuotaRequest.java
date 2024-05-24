@@ -188,7 +188,7 @@ public class TestOMVolumeSetQuotaRequest extends TestOMVolumeRequest {
 
     GenericTestUtils.LogCapturer logs =
             GenericTestUtils.LogCapturer.captureLogs(
-                    LoggerFactory.getLogger(OMVolumeSetQuotaRequest.class)
+                    LoggerFactory.getLogger(OMVolumeSetQuotaRequest.class).getName()
             );
 
     OMClientResponse omClientResponse = omVolumeSetQuotaRequest

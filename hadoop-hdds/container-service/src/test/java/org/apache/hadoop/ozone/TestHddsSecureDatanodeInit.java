@@ -128,7 +128,7 @@ public class TestHddsSecureDatanodeInit {
       return null;
     });
     dnLogs = GenericTestUtils.LogCapturer.captureLogs(
-        ((DNCertificateClient)service.getCertificateClient()).getLogger());
+        ((DNCertificateClient)service.getCertificateClient()).getLogger().getName());
     certCodec = new CertificateCodec(securityConfig, DN_COMPONENT);
     keyCodec = new KeyCodec(securityConfig, DN_COMPONENT);
     dnLogs.clearOutput();

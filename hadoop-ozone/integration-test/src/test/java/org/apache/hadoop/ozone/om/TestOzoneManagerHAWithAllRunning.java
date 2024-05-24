@@ -472,7 +472,7 @@ class TestOzoneManagerHAWithAllRunning extends TestOzoneManagerHA {
 
 
     GenericTestUtils.LogCapturer logCapturer = GenericTestUtils.LogCapturer
-        .captureLogs(OMVolumeCreateRequest.getLogger());
+        .captureLogs(OMVolumeCreateRequest.getLogger().getName());
 
     OzoneManagerProtocolProtos.UserInfo userInfo =
         OzoneManagerProtocolProtos.UserInfo.newBuilder()

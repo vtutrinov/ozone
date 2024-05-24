@@ -17,18 +17,29 @@
  */
 package org.apache.hadoop.hdds.server.http;
 
-import org.apache.log4j.spi.LoggingEvent;
-import org.apache.log4j.AppenderSkeleton;
+
+import org.apache.logging.log4j.core.Filter;
+import org.apache.logging.log4j.core.Layout;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.config.Property;
+
+import java.io.Serializable;
 
 /**
  * Log4j Appender adapter for HttpRequestLog.
  */
-public class HttpRequestLogAppender extends AppenderSkeleton {
+public class HttpRequestLogAppender extends AbstractAppender {
 
   private String filename;
   private int retainDays;
 
-  public HttpRequestLogAppender() {
+  protected HttpRequestLogAppender(String name,
+                                   Filter filter,
+                                   Layout<? extends Serializable> layout,
+                                   boolean ignoreExceptions,
+                                   Property[] properties) {
+    super(name, filter, layout, ignoreExceptions, properties);
   }
 
   public void setRetainDays(int retainDays) {
@@ -48,15 +59,6 @@ public class HttpRequestLogAppender extends AppenderSkeleton {
   }
 
   @Override
-  public void append(LoggingEvent event) {
-  }
-
-  @Override
-  public void close() {
-  }
-
-  @Override
-  public boolean requiresLayout() {
-    return false;
+  public void append(LogEvent event) {
   }
 }

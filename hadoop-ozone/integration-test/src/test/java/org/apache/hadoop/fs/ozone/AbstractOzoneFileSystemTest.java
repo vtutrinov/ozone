@@ -70,8 +70,8 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Time;
 import org.apache.ozone.test.GenericTestUtils;
 import org.apache.ozone.test.TestClock;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -1884,7 +1884,7 @@ abstract class AbstractOzoneFileSystemTest {
         "org.apache.hadoop.ipc.ProcessingDetails");
     GenericTestUtils.setLogLevel(log, Level.DEBUG);
     GenericTestUtils.LogCapturer logCapturer =
-        GenericTestUtils.LogCapturer.captureLogs(log);
+        GenericTestUtils.LogCapturer.captureLogs(log.getName());
     int keySize = 1024;
     TestDataUtil.createKey(ozoneBucket, "key1", new String(new byte[keySize],
         UTF_8));

@@ -86,7 +86,7 @@ public class TestOmAcls {
     cluster.waitForClusterToBeReady();
     client = cluster.newClient();
     logCapturer =
-        GenericTestUtils.LogCapturer.captureLogs(OzoneManager.getLogger());
+        GenericTestUtils.LogCapturer.captureLogs(OzoneManager.getLogger().getName());
   }
 
   @AfterAll

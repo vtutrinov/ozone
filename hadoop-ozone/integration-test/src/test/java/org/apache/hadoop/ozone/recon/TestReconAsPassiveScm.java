@@ -135,7 +135,7 @@ public class TestReconAsPassiveScm {
         reconContainerManager.getContainers());
 
     GenericTestUtils.LogCapturer logCapturer =
-        GenericTestUtils.LogCapturer.captureLogs(ReconNodeManager.LOG);
+        GenericTestUtils.LogCapturer.captureLogs(ReconNodeManager.LOG.getName());
     GenericTestUtils.setLogLevel(ReconNodeManager.LOG, Level.DEBUG);
     reconScm.getEventQueue().fireEvent(CLOSE_CONTAINER,
         containerInfo.containerID());

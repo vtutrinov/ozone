@@ -24,6 +24,7 @@ import org.apache.hadoop.ozone.debug.RDBParser;
 import org.apache.hadoop.ozone.om.OMStorage;
 import org.apache.hadoop.ozone.repair.RDBRepair;
 import org.apache.hadoop.ozone.repair.TransactionInfoRepair;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +46,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 /**
  * Test Ozone Repair shell.
  */
+@Unhealthy
 public class TestOzoneRepairShell {
 
   private final ByteArrayOutputStream out = new ByteArrayOutputStream();

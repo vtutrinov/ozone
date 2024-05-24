@@ -18,12 +18,13 @@
 package org.apache.hadoop.hdds.server.http;
 
 import java.util.HashMap;
+import java.util.Map;
 
-import org.apache.commons.logging.impl.Log4JLogger;
-import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogConfigurationException;
-import org.apache.commons.logging.LogFactory;
-import org.apache.log4j.Appender;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.Appender;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.slf4j.Log4jLogger;
 import org.eclipse.jetty.server.AsyncRequestLogWriter;
 import org.eclipse.jetty.server.CustomRequestLog;
 import org.eclipse.jetty.server.RequestLog;
@@ -37,13 +38,13 @@ public final class HttpRequestLog {
 
   public static final Logger LOG =
       LoggerFactory.getLogger(HttpRequestLog.class);
-  private static final HashMap<String, String> SERVER_TO_COMPONENT;
+  private static final Map<String, String> SERVER_TO_COMPONENT;
 
   private HttpRequestLog() {
   }
 
   static {
-    SERVER_TO_COMPONENT = new HashMap<String, String>();
+    SERVER_TO_COMPONENT = new HashMap<>();
     SERVER_TO_COMPONENT.put("cluster", "resourcemanager");
     SERVER_TO_COMPONENT.put("hdfs", "namenode");
     SERVER_TO_COMPONENT.put("node", "nodemanager");
@@ -57,12 +58,12 @@ public final class HttpRequestLog {
     }
     String loggerName = "http.requests." + name;
     String appenderName = name + "requestlog";
-    Log logger = LogFactory.getLog(loggerName);
+    Logger logger = LoggerFactory.getLogger(loggerName);
 
     boolean isLog4JLogger;
 
     try {
-      isLog4JLogger = logger instanceof Log4JLogger;
+      isLog4JLogger = logger instanceof Log4jLogger;
     } catch (NoClassDefFoundError err) {
       // In some dependent projects, log4j may not even be on the classpath at
       // runtime, in which case the above instanceof check will throw
@@ -70,13 +71,15 @@ public final class HttpRequestLog {
       LOG.debug("Could not load Log4JLogger class", err);
       isLog4JLogger = false;
     }
+
     if (isLog4JLogger) {
-      Log4JLogger httpLog4JLog = (Log4JLogger) logger;
-      org.apache.log4j.Logger httpLogger = httpLog4JLog.getLogger();
-      Appender appender = null;
+
+      LoggerContext lc = (LoggerContext) LogManager.getContext(false);
+
+      Appender appender;
 
       try {
-        appender = httpLogger.getAppender(appenderName);
+        appender = lc.getConfiguration().getAppender(appenderName);
       } catch (LogConfigurationException e) {
         LOG.warn("Http request log for {} could not be created", loggerName);
         throw e;

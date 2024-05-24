@@ -22,7 +22,6 @@ import org.apache.hadoop.hdds.client.ReplicationFactor;
 import org.apache.hadoop.hdds.client.ReplicationType;
 import org.apache.hadoop.hdds.utils.db.Table;
 import org.apache.hadoop.hdds.utils.db.TableIterator;
-import org.apache.hadoop.hdfs.LogVerificationAppender;
 import org.apache.hadoop.ozone.MiniOzoneHAClusterImpl;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.OzoneConsts;
@@ -40,7 +39,6 @@ import org.apache.hadoop.ozone.om.helpers.OmMultipartUploadCompleteInfo;
 import org.apache.hadoop.ozone.om.helpers.RepeatedOmKeyInfo;
 import org.apache.hadoop.ozone.om.service.KeyDeletingService;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.log4j.Logger;
 import org.apache.ozone.test.GenericTestUtils;
 import org.apache.ratis.conf.RaftProperties;
 import org.apache.ratis.server.RaftServerConfigKeys;
@@ -546,18 +544,16 @@ public class TestOzoneManagerHAWithStoppedNodes extends TestOzoneManagerHA {
       getCluster().stopOzoneManager(i);
     }
 
-    final LogVerificationAppender appender = new LogVerificationAppender();
-    final Logger logger = Logger.getRootLogger();
-    logger.addAppender(appender);
+    GenericTestUtils.LogCapturer rootLogCapturer = GenericTestUtils.LogCapturer.captureRootLogs();
 
     // After making N (set maxRetries value) connection attempts to OMs,
     // the RpcClient should give up.
     assertThrows(ConnectException.class, () -> createVolumeTest(true));
     assertEquals(1,
-        appender.countLinesWithMessage("Failed to connect to OMs:"));
+        rootLogCapturer.countLinesWithMessage("Failed to connect to OMs:"));
     assertEquals(maxFailoverAttempts,
-        appender.countLinesWithMessage("Trying to failover"));
-    assertEquals(1, appender.countLinesWithMessage("Attempted " +
+        rootLogCapturer.countLinesWithMessage("Trying to failover"));
+    assertEquals(1, rootLogCapturer.countLinesWithMessage("Attempted " +
         maxFailoverAttempts + " failovers."));
   }
 

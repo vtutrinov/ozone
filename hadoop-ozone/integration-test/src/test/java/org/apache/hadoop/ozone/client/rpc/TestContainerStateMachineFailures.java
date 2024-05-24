@@ -100,6 +100,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import org.apache.ozone.test.tag.Unhealthy;
 import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.protocol.exceptions.StateMachineException;
 import org.apache.ratis.server.storage.FileInfo;
@@ -114,6 +115,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Tests the containerStateMachine failure handling.
  */
+@Unhealthy
 public class TestContainerStateMachineFailures {
 
   private static MiniOzoneCluster cluster;

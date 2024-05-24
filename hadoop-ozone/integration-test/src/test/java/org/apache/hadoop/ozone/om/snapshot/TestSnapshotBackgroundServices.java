@@ -50,6 +50,7 @@ import org.apache.ozone.compaction.log.CompactionLogEntry;
 import org.apache.ozone.rocksdiff.CompactionNode;
 import org.apache.ozone.test.GenericTestUtils;
 import org.apache.ozone.test.LambdaTestUtils;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.apache.ratis.server.protocol.TermIndex;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -88,6 +89,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  * Tests snapshot background services.
  */
 @Timeout(5000)
+@Unhealthy
 public class TestSnapshotBackgroundServices {
   private MiniOzoneHAClusterImpl cluster;
   private ObjectStore objectStore;

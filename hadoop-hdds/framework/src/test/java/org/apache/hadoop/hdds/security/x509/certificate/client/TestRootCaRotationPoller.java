@@ -67,7 +67,7 @@ public class TestRootCaRotationPoller {
     conf.set(HDDS_X509_ROOTCA_CERTIFICATE_POLLING_INTERVAL, "PT1s");
     secConf = new SecurityConfig(conf);
     logCapturer = GenericTestUtils.LogCapturer.captureLogs(
-        org.slf4j.LoggerFactory.getLogger(RootCaRotationPoller.class));
+        org.slf4j.LoggerFactory.getLogger(RootCaRotationPoller.class).getName());
   }
 
   @Test

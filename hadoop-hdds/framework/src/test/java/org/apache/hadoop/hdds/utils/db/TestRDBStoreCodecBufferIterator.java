@@ -20,8 +20,8 @@ package org.apache.hadoop.hdds.utils.db;
 import org.apache.hadoop.hdds.StringUtils;
 import org.apache.hadoop.hdds.utils.db.managed.ManagedRocksIterator;
 import org.apache.hadoop.hdds.utils.db.managed.ManagedRocksObjectUtils;
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Level;
+import org.apache.ozone.test.GenericTestUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -66,7 +66,7 @@ public class TestRDBStoreCodecBufferIterator {
     rocksIteratorMock = mock(RocksIterator.class);
     managedRocksIterator = newManagedRocksIterator();
     rdbTableMock = mock(RDBTable.class);
-    Logger.getLogger(ManagedRocksObjectUtils.class).setLevel(Level.DEBUG);
+    GenericTestUtils.setLogLevel(ManagedRocksObjectUtils.class, Level.DEBUG);
   }
 
   ManagedRocksIterator newManagedRocksIterator() {

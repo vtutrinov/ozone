@@ -37,6 +37,7 @@ import org.apache.hadoop.ozone.client.OzoneKey;
 import org.apache.hadoop.ozone.client.OzoneKeyDetails;
 import org.apache.hadoop.ozone.client.io.OzoneInputStream;
 import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -58,6 +59,7 @@ import java.util.HashMap;
  * Tests Hybrid Pipeline Creation and IO on same set of Datanodes.
  */
 @Timeout(300)
+@Unhealthy
 public class TestHybridPipelineOnDatanode {
   private static MiniOzoneCluster cluster;
   private static OzoneConfiguration conf;

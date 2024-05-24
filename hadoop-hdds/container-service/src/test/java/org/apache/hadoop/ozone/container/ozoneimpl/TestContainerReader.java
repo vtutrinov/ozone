@@ -352,7 +352,7 @@ public class TestContainerReader {
     }
 
     GenericTestUtils.LogCapturer dnLogs = GenericTestUtils.LogCapturer.captureLogs(
-        LoggerFactory.getLogger(ContainerReader.class));
+        LoggerFactory.getLogger(ContainerReader.class).getName());
     dnLogs.clearOutput();
     ContainerReader containerReader = new ContainerReader(volumeSet1,
         hddsVolume1, containerSet1, conf, true);

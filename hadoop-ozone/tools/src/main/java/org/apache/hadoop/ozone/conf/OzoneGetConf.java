@@ -23,11 +23,13 @@ import org.apache.hadoop.hdds.cli.GenericCli;
 import org.apache.hadoop.hdds.cli.HddsVersionProvider;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.util.NativeCodeLoader;
-import org.apache.log4j.ConsoleAppender;
-import org.apache.log4j.Level;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
-import org.apache.log4j.PatternLayout;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.Appender;
+import org.apache.logging.log4j.core.Layout;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.appender.ConsoleAppender;
+import org.apache.logging.log4j.core.layout.PatternLayout;
 import picocli.CommandLine;
 
 /**
@@ -73,11 +75,19 @@ public class OzoneGetConf extends GenericCli {
   }
 
   public static void main(String[] argv) {
-    LogManager.resetConfiguration();
-    Logger.getRootLogger().setLevel(Level.INFO);
-    Logger.getRootLogger()
-        .addAppender(new ConsoleAppender(new PatternLayout("%m%n")));
-    Logger.getLogger(NativeCodeLoader.class).setLevel(Level.ERROR);
+    LoggerContext lc = (LoggerContext) LogManager.getContext(false);
+
+    Layout<String> layout = PatternLayout.newBuilder().withPattern("%m%n").build();
+    Appender consoleAppender = ConsoleAppender.createDefaultAppenderForLayout(layout);
+
+    lc.getConfiguration().addAppender(consoleAppender);
+
+    lc.getConfiguration().getLoggerConfig(NativeCodeLoader.class.getName()).setLevel(Level.ERROR);
+
+    lc.getRootLogger().addAppender(lc.getConfiguration().getAppender(consoleAppender.getName()));
+    lc.getRootLogger().setLevel(Level.INFO);
+
+    lc.updateLoggers();
 
     OzoneConfiguration conf = new OzoneConfiguration();
     conf.addResource(new OzoneConfiguration());

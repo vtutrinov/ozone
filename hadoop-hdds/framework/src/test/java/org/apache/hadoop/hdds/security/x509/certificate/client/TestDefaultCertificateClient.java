@@ -376,7 +376,7 @@ public class TestDefaultCertificateClient {
   @Test
   public void testInitCertAndKeypairValidationFailures() throws Exception {
     GenericTestUtils.LogCapturer dnClientLog = GenericTestUtils.LogCapturer
-        .captureLogs(dnCertClient.getLogger());
+        .captureLogs(dnCertClient.getLogger().getName());
     KeyPair keyPair = keyGenerator.generateKey();
     KeyPair keyPair1 = keyGenerator.generateKey();
     dnClientLog.clearOutput();

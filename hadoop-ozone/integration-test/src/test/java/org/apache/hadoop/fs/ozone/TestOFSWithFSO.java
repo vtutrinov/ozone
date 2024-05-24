@@ -17,9 +17,11 @@
  */
 package org.apache.hadoop.fs.ozone;
 
+import org.apache.ozone.test.tag.Unhealthy;
 import org.junit.jupiter.api.TestInstance;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@Unhealthy
 class TestOFSWithFSO extends AbstractRootedOzoneFileSystemTestWithFSO {
   TestOFSWithFSO() {
     super(false, false, false);

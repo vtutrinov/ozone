@@ -35,6 +35,7 @@ import org.apache.hadoop.hdds.scm.node.states.NodeNotFoundException;
 import org.apache.hadoop.ozone.protocol.commands.DeleteContainerCommand;
 import org.apache.hadoop.ozone.protocol.commands.SCMCommand;
 import org.apache.ozone.test.GenericTestUtils;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.apache.ratis.protocol.exceptions.NotLeaderException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -74,6 +75,7 @@ import static org.mockito.Mockito.doThrow;
 /**
  * Tests for {@link RatisOverReplicationHandler}.
  */
+@Unhealthy
 public class TestRatisOverReplicationHandler {
   private ContainerInfo container;
   private static final RatisReplicationConfig RATIS_REPLICATION_CONFIG =

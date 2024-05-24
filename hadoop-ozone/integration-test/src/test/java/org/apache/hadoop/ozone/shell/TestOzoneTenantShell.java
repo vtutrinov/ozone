@@ -37,6 +37,9 @@ import org.apache.hadoop.ozone.om.request.s3.tenant.OMTenantAssignUserAccessIdRe
 import org.apache.hadoop.ozone.om.request.s3.tenant.OMTenantCreateRequest;
 import org.apache.hadoop.ozone.shell.tenant.TenantShell;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.appender.ConsoleAppender;
+import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.apache.ozone.test.GenericTestUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -82,7 +85,7 @@ public class TestOzoneTenantShell {
       LoggerFactory.getLogger(TestOzoneTenantShell.class);
 
   static {
-    System.setProperty("log4j.configurationFile", "auditlog.properties");
+    System.setProperty("log4j2.configurationFile", "log4j2-noop.xml");
   }
 
   private static final String DEFAULT_ENCODING = UTF_8.name();
@@ -118,10 +121,17 @@ public class TestOzoneTenantShell {
    */
   @BeforeAll
   public static void init() throws Exception {
-    // Remove audit log output if it exists
-    if (AUDIT_LOG_FILE.exists()) {
-      AUDIT_LOG_FILE.delete();
+    LoggerContext context = LoggerContext.getContext(false);
+    LoggerConfig rootLogger = context.getConfiguration().getRootLogger();
+    for (String appenderName : rootLogger.getAppenders().keySet()) {
+      if (rootLogger.getAppenders().get(appenderName) instanceof ConsoleAppender) {
+        rootLogger.removeAppender(appenderName);
+      }
     }
+    // Remove audit log output if it exists
+//    if (AUDIT_LOG_FILE.exists()) {
+//      AUDIT_LOG_FILE.delete();
+//    }
 
     conf = new OzoneConfiguration();
     conf.setBoolean(OZONE_OM_TENANT_DEV_SKIP_RANGER, true);
@@ -416,6 +426,9 @@ public class TestOzoneTenantShell {
 
     List<String> lines = FileUtils.readLines(AUDIT_LOG_FILE, (String)null);
     assertEquals(0, lines.size());
+
+    out.reset();
+    err.reset();
 
     executeHA(tenantShell, new String[] {"list"});
     checkOutput(out, "", true);

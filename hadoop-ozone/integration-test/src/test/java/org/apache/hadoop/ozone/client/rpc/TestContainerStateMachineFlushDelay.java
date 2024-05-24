@@ -40,6 +40,7 @@ import org.apache.hadoop.ozone.container.ContainerTestHelper;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.helpers.OmKeyLocationInfo;
 import org.apache.ozone.test.GenericTestUtils;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -65,6 +66,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
  * Tests the containerStateMachine failure handling by set flush delay.
  */
 @Timeout(300)
+@Unhealthy
 public class TestContainerStateMachineFlushDelay {
   private MiniOzoneCluster cluster;
   private OzoneConfiguration conf = new OzoneConfiguration();

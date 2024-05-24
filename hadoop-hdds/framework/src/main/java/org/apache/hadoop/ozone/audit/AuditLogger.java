@@ -22,6 +22,7 @@ import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Marker;
+import org.apache.logging.log4j.ThreadContext;
 import org.apache.logging.log4j.spi.ExtendedLogger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,6 +73,7 @@ public class AuditLogger {
   private void initializeLogger(AuditLoggerType loggerType) {
     this.logger = LogManager.getContext(false).getLogger(loggerType.getType());
     this.type = loggerType;
+    ThreadContext.put("loggerType", type.getType().toLowerCase());
     refreshDebugCmdSet();
   }
 

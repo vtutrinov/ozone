@@ -601,7 +601,7 @@ class TestOmSnapshotManager {
   public void testCreateSnapshotIdempotent() throws Exception {
     // set up db tables
     GenericTestUtils.LogCapturer logCapturer = GenericTestUtils.LogCapturer
-        .captureLogs(OmSnapshotManager.LOG);
+        .captureLogs(OmSnapshotManager.LOG.getName());
     Table<String, OmVolumeArgs> volumeTable = mock(Table.class);
     Table<String, OmBucketInfo> bucketTable = mock(Table.class);
     Table<String, SnapshotInfo> snapshotInfoTable = mock(Table.class);

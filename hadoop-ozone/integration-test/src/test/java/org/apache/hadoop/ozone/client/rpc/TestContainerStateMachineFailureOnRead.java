@@ -46,6 +46,7 @@ import org.apache.hadoop.ozone.client.io.KeyOutputStream;
 import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
 import org.apache.hadoop.ozone.container.ozoneimpl.TestOzoneContainer;
 import org.apache.hadoop.ozone.om.helpers.OmKeyLocationInfo;
+import org.apache.logging.log4j.Level;
 import org.apache.ozone.test.GenericTestUtils;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -58,8 +59,7 @@ import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_PIPELINE_DESTRO
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_STALENODE_INTERVAL;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
+
 import org.apache.ratis.grpc.server.GrpcLogAppender;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -129,7 +129,7 @@ public class TestContainerStateMachineFailureOnRead {
     bucketName = volumeName;
     objectStore.createVolume(volumeName);
     objectStore.getVolume(volumeName).createBucket(bucketName);
-    Logger.getLogger(GrpcLogAppender.class).setLevel(Level.WARN);
+    GenericTestUtils.setLogLevel(GrpcLogAppender.class, Level.WARN);
   }
 
   @AfterEach

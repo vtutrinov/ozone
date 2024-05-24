@@ -939,7 +939,7 @@ public class KeyValueContainer implements Container<KeyValueContainerData> {
     if (!shouldScan && LOG.isDebugEnabled()) {
       LOG.debug("Container {} in state {} should not have its metadata " +
               "scanned.",
-          containerData.getContainerID(), containerData.getState());
+          getContainerData().getContainerID(), getContainerData().getState());
     }
     return shouldScan;
   }
@@ -960,7 +960,7 @@ public class KeyValueContainer implements Container<KeyValueContainerData> {
         || getContainerState() == ContainerDataProto.State.QUASI_CLOSED;
     if (!shouldScan && LOG.isDebugEnabled()) {
       LOG.debug("Container {} in state {} should not have its data scanned.",
-          containerData.getContainerID(), containerData.getState());
+          getContainerData().getContainerID(), getContainerData().getState());
     }
 
     return shouldScan;

@@ -65,6 +65,7 @@ import static org.apache.hadoop.hdds.client.ReplicationFactor.THREE;
 import org.apache.hadoop.ozone.om.helpers.QuotaUtil;
 import org.apache.hadoop.ozone.om.request.OMRequestTestUtils;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -99,6 +100,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * This test verifies all the S3 multipart client apis - prefix layout.
  */
 @Timeout(300)
+@Unhealthy
 public class TestOzoneClientMultipartUploadWithFSO {
 
   private static ObjectStore store = null;

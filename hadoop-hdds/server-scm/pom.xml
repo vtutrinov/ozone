@@ -72,6 +72,12 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <dependency>
       <groupId>io.dropwizard.metrics</groupId>
       <artifactId>metrics-core</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-api</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
     <dependency>
@@ -116,6 +122,12 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <dependency>
       <groupId>org.apache.ozone</groupId>
       <artifactId>hdds-test-utils</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>jul-to-slf4j</artifactId>
+      <version>2.0.13</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

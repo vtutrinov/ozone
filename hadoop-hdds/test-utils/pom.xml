@@ -34,6 +34,17 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
 
   <dependencies>
     <dependency>
+      <groupId>io.github.hakky54</groupId>
+      <artifactId>logcaptor</artifactId>
+      <version>2.9.3</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.logging.log4j</groupId>
+          <artifactId>log4j-to-slf4j</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
       <groupId>org.assertj</groupId>
       <artifactId>assertj-core</artifactId>
     </dependency>
@@ -57,10 +68,6 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
       <groupId>org.junit.platform</groupId>
       <artifactId>junit-platform-launcher</artifactId>
       <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>ch.qos.reload4j</groupId>
-      <artifactId>reload4j</artifactId>
     </dependency>
     <dependency>
       <groupId>jakarta.annotation</groupId>
@@ -103,6 +110,17 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.github.hakky54</groupId>
+      <artifactId>logcaptor</artifactId>
+      <version>2.9.3</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.logging.log4j</groupId>
+          <artifactId>log4j-to-slf4j</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
   </dependencies>
 

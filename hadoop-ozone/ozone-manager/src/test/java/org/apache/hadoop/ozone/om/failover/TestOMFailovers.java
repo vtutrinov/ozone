@@ -60,7 +60,7 @@ public class TestOMFailovers {
 
     GenericTestUtils.setLogLevel(OMFailoverProxyProviderBase.LOG, Level.DEBUG);
     GenericTestUtils.LogCapturer logCapturer = GenericTestUtils.LogCapturer
-        .captureLogs(OMFailoverProxyProviderBase.LOG);
+        .captureLogs(OMFailoverProxyProviderBase.LOG.getName());
 
     MockFailoverProxyProvider failoverProxyProvider =
         new MockFailoverProxyProvider(conf);

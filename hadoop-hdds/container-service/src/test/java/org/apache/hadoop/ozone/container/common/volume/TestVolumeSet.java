@@ -171,7 +171,7 @@ public class TestVolumeSet {
     // Attempting to remove a volume which does not exist in VolumeSet should
     // log a warning.
     LogCapturer logs = LogCapturer.captureLogs(
-        LoggerFactory.getLogger(MutableVolumeSet.class));
+        LoggerFactory.getLogger(MutableVolumeSet.class).getName());
     volumeSet.removeVolume(HddsVolumeUtil.getHddsRoot(volume1));
     assertEquals(1, volumeSet.getVolumesList().size());
     String expectedLogMessage = "Volume : " +

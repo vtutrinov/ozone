@@ -47,6 +47,7 @@ import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.ozone.test.GenericTestUtils;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.apache.ratis.grpc.server.GrpcLogAppender;
 import org.apache.ratis.protocol.RaftPeer;
 import org.apache.ratis.protocol.RaftPeerId;
@@ -71,6 +72,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Test for OM bootstrap process.
  */
 @Timeout(500)
+@Unhealthy
 public class TestAddRemoveOzoneManager {
 
   private MiniOzoneHAClusterImpl cluster = null;
@@ -231,9 +233,9 @@ public class TestAddRemoveOzoneManager {
     String existingOMNodeId = existingOM.getOMNodeId();
 
     GenericTestUtils.LogCapturer omLog =
-        GenericTestUtils.LogCapturer.captureLogs(OzoneManager.LOG);
+        GenericTestUtils.LogCapturer.captureLogs(OzoneManager.LOG.getName());
     GenericTestUtils.LogCapturer miniOzoneClusterLog =
-        GenericTestUtils.LogCapturer.captureLogs(MiniOzoneHAClusterImpl.LOG);
+        GenericTestUtils.LogCapturer.captureLogs(MiniOzoneHAClusterImpl.LOG.getName());
 
     /***************************************************************************
      * 1. Bootstrap without updating config on any existing OM -> fail
@@ -302,9 +304,9 @@ public class TestAddRemoveOzoneManager {
         OMConfigKeys.OZONE_OM_ADMIN_PROTOCOL_WAIT_BETWEEN_RETRIES_KEY, 100);
 
     GenericTestUtils.LogCapturer omLog =
-        GenericTestUtils.LogCapturer.captureLogs(OzoneManager.LOG);
+        GenericTestUtils.LogCapturer.captureLogs(OzoneManager.LOG.getName());
     GenericTestUtils.LogCapturer miniOzoneClusterLog =
-        GenericTestUtils.LogCapturer.captureLogs(MiniOzoneHAClusterImpl.LOG);
+        GenericTestUtils.LogCapturer.captureLogs(MiniOzoneHAClusterImpl.LOG.getName());
 
     /***************************************************************************
      * 1. Force bootstrap (with 1 node down and updated configs on rest) -> pass

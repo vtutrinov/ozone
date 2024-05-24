@@ -431,7 +431,7 @@ public class TestHddsDispatcher {
           .createContainer(writeChunkRequest);
 
       GenericTestUtils.LogCapturer logCapturer = GenericTestUtils.LogCapturer
-          .captureLogs(HddsDispatcher.LOG);
+          .captureLogs(HddsDispatcher.LOG.getName());
       // send write chunk request without sending create container
       mockDispatcher.dispatch(writeChunkRequest, null);
       // verify the error log

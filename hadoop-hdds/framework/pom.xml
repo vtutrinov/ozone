@@ -35,6 +35,11 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <dependencies>
     <dependency>
       <groupId>org.apache.ozone</groupId>
+      <artifactId>hdds-test-utils</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.ozone</groupId>
       <artifactId>hdds-interface-server</artifactId>
     </dependency>
     <dependency>
@@ -54,12 +59,16 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
       <artifactId>hdds-hadoop-dependency-server</artifactId>
     </dependency>
     <dependency>
-      <groupId>ch.qos.reload4j</groupId>
-      <artifactId>reload4j</artifactId>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-reload4j</artifactId>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-slf4j2-impl</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
@@ -108,10 +117,6 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
       <artifactId>ratis-server</artifactId>
       <groupId>org.apache.ratis</groupId>
       <exclusions>
-        <exclusion>
-          <groupId>org.slf4j</groupId>
-          <artifactId>slf4j-reload4j</artifactId>
-        </exclusion>
         <exclusion>
           <groupId>org.bouncycastle</groupId>
           <artifactId>bcprov-jdk18on</artifactId>
@@ -167,11 +172,6 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <dependency>
       <groupId>org.apache.ozone</groupId>
       <artifactId>hdds-hadoop-dependency-test</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.ozone</groupId>
-      <artifactId>hdds-test-utils</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

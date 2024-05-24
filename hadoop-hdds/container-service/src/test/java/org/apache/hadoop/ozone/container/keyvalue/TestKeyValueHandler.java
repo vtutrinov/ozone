@@ -420,7 +420,7 @@ public class TestKeyValueHandler {
       // Case 3:  Delete Container on a failed volume
       hddsVolume.failVolume();
       GenericTestUtils.LogCapturer kvHandlerLogs =
-          GenericTestUtils.LogCapturer.captureLogs(KeyValueHandler.getLogger());
+          GenericTestUtils.LogCapturer.captureLogs(KeyValueHandler.getLogger().getName());
       // add the container back to containerSet as removed in previous delete
       containerSet.addContainer(container);
       kvHandler.deleteContainer(container, true);

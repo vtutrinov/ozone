@@ -313,7 +313,7 @@ public class TestReplicationSupervisor {
     replicatorRef.set(replicator);
 
     GenericTestUtils.LogCapturer logCapturer = GenericTestUtils.LogCapturer
-        .captureLogs(DownloadAndImportReplicator.LOG);
+        .captureLogs(DownloadAndImportReplicator.LOG.getName());
 
     supervisor.addTask(createTask(1L));
     assertEquals(1, supervisor.getReplicationFailureCount());

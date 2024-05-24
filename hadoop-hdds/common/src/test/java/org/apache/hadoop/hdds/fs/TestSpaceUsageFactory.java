@@ -62,7 +62,8 @@ public class TestSpaceUsageFactory {
   @BeforeEach
   public void setUp() {
     capturer = LogCapturer.captureLogs(
-        LoggerFactory.getLogger(SpaceUsageCheckFactory.class));
+        LoggerFactory.getLogger(SpaceUsageCheckFactory.class).getName());
+    capturer.clearOutput();
   }
 
   @Test

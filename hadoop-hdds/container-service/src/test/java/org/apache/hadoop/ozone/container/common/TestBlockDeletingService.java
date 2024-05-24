@@ -76,7 +76,6 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -820,7 +819,7 @@ public class TestBlockDeletingService {
         10, conf);
     svc.start();
 
-    LogCapturer log = LogCapturer.captureLogs(BackgroundService.LOG);
+    LogCapturer log = LogCapturer.captureLogs(BackgroundService.class);
     GenericTestUtils.waitFor(() -> {
       if (log.getOutput().contains("Background task execution took")) {
         log.stopCapturing();
@@ -847,7 +846,7 @@ public class TestBlockDeletingService {
         (KeyValueContainer) containerSet.iterator().next();
     KeyValueContainerData data = container.getContainerData();
     try (DBHandle meta = BlockUtils.getDB(data, conf)) {
-      LogCapturer newLog = LogCapturer.captureLogs(BackgroundService.LOG);
+      LogCapturer newLog = LogCapturer.captureLogs(BackgroundService.class);
       GenericTestUtils.waitFor(() -> {
         try {
           return getUnderDeletionBlocksCount(meta, data) == 0;
@@ -957,8 +956,7 @@ public class TestBlockDeletingService {
       ContainerTestVersionInfo versionInfo) throws Exception {
     setLayoutAndSchemaForTest(versionInfo);
     GenericTestUtils.LogCapturer log =
-        GenericTestUtils.LogCapturer.captureLogs(
-            LoggerFactory.getLogger(BlockDeletingTask.class));
+        GenericTestUtils.LogCapturer.captureLogs(BlockDeletingTask.class);
     DatanodeConfiguration dnConf = conf.getObject(DatanodeConfiguration.class);
 
     // Ensure that the lock holding timeout occurs every time a deletion

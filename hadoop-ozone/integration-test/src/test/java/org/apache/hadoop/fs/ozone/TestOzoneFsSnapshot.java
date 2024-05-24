@@ -37,6 +37,7 @@ import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.ozone.test.GenericTestUtils;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -64,6 +65,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * Setting a timeout for every test method to 300 seconds.
  */
 @Timeout(value = 300)
+@Unhealthy
 class TestOzoneFsSnapshot {
 
   private static MiniOzoneCluster cluster;

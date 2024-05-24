@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  */
 public class TestReloadingX509KeyManager {
   private final LogCapturer reloaderLog =
-      LogCapturer.captureLogs(ReloadingX509KeyManager.LOG);
+      LogCapturer.captureLogs(ReloadingX509KeyManager.LOG.getName());
   private static OzoneConfiguration conf;
   private static CertificateClientTestImpl caClient;
 

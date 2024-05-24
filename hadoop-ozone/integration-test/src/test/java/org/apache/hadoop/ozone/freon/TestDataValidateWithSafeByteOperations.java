@@ -20,6 +20,7 @@ package org.apache.hadoop.ozone.freon;
 
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Timeout;
@@ -31,6 +32,7 @@ import java.util.concurrent.TimeUnit;
  */
 
 @Timeout(value = 300, unit = TimeUnit.SECONDS)
+@Unhealthy
 public class TestDataValidateWithSafeByteOperations extends TestDataValidate {
 
   /**
