@@ -1,0 +1,193 @@
+---
+- name: Create Ozone Cluster Infrastructure
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - vars.yaml
+  tasks:
+  - name: Create sh file with commands to destroy the cluster
+    shell: |
+      echo "#!/bin/bash" > {{ cluster_destroy_script }}
+  - name: "Create {{item.name}} instance"
+    include_tasks: create_instance.yaml
+    loop: "{{ instances }}"
+  - name: Pause before deploying Ozone (created VMs can be in the process of starting up)
+    pause:
+      seconds: 30
+- name: Prepare Ozone Cluster (binaries, configuration files, directories)
+  vars:
+    om1_ip: "{{ hostvars.localhost.om1_ip | default('om1') }}"
+    om2_ip: "{{ hostvars.localhost.om2_ip | default('om2') }}"
+    om3_ip: "{{ hostvars.localhost.om3_ip | default('om3') }}"
+    scm1_ip: "{{ hostvars.localhost.scm1_ip | default('scm1') }}"
+    scm2_ip: "{{ hostvars.localhost.scm2_ip | default('scm2') }}"
+    scm3_ip: "{{ hostvars.localhost.scm3_ip | default('scm3') }}"
+  vars_files:
+    - vars.yaml
+  hosts: ozone
+  tasks:
+  - name: Copy ozone dist to all nodes
+    get_url:
+      url: "{{ ozone_dist }}"
+      dest: /tmp/ozone.tar.gz
+      mode: 0755
+      checksum: "{{ ozone_dist_checksum }}"
+  - name: Create hadoop group
+    become: true
+    become_user: root
+    group:
+      name: hadoop
+  - name: Create ozone user
+    become: true
+    become_user: root
+    user:
+      name: ozone
+      shell: /bin/bash
+      home: /opt/ozone
+      groups:
+      - hadoop
+  - name: Create ozone directory
+    become: yes
+    become_user: root
+    file:
+      path: /opt/ozone
+      state: directory
+      mode: 0755
+      owner: ozone
+      group: hadoop
+  - name: Extract ozone dist
+    become: true
+    become_user: ozone
+    unarchive:
+      src: /tmp/ozone.tar.gz
+      dest: /opt/ozone
+      remote_src: yes
+  - name: Create config directory
+    become: true
+    become_user: ozone
+    file:
+      path: /opt/ozone/conf
+      state: directory
+      owner: ozone
+      group: hadoop
+  - name: Create ozone metadata directory
+    become: true
+    become_user: root
+    file:
+      path: /data/metadata
+      state: directory
+      owner: ozone
+      group: hadoop
+      mode: 0755
+  - name: Create ozone datanode directory
+    become: true
+    become_user: root
+    file:
+      path: /data/hdds
+      state: directory
+      owner: ozone
+      group: hadoop
+      mode: 0755
+  - name: Copy ozone-site.xml conf
+    become: true
+    become_user: root
+    template:
+      src: ozone-site.xml.j2
+      dest: /opt/ozone/conf/ozone-site.xml
+      mode: 0755
+      owner: ozone
+      group: hadoop
+  - name: Copy log4j.properties conf
+    become: true
+    become_user: root
+    copy:
+      src: /home/slava/JavaProjects/ozone-community/hadoop-ozone/dist/src/cloud-deploy/yandex/ansible/conf/log4j.properties
+      dest: /opt/ozone/conf/log4j.properties
+      mode: 0755
+      owner: ozone
+      group: hadoop
+  - name: Find java home
+    become: true
+    become_user: root
+    shell: |
+      JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
+      echo "JAVA_HOME=$JAVA_HOME" >> /etc/environment
+  - name: Set OZONE_HOME env var
+    become: true
+    become_user: root
+    lineinfile:
+      path: /etc/environment
+      line: "OZONE_HOME={{ ozone_dist_installation_dir }}"
+  - name: Set OZONE_CONF_DIR env var
+    become: true
+    become_user: root
+    lineinfile:
+      path: /etc/environment
+      line: "OZONE_CONF_DIR=/opt/ozone/conf"
+- name: Start Ozone Cluster (SCM1, primordial node)
+  hosts: scm1
+  become: true
+  become_user: ozone
+  vars_files:
+    - vars.yaml
+  tasks:
+  - name: Init SCM1
+    shell: "${OZONE_HOME}/bin/ozone scm --init"
+  - name: Start SCM1
+    shell: "${OZONE_HOME}/bin/ozone --daemon start scm"
+    async: true
+    poll: 10
+- name: Start Ozone Cluster (SCM2 + SCM3)
+  hosts:
+  - scm2
+  - scm3
+  become: true
+  become_user: ozone
+  vars_files:
+  - vars.yaml
+  tasks:
+  - name: Bootstrap SCM
+    shell: "${OZONE_HOME}/bin/ozone scm --bootstrap"
+  - name: Start SCM
+    shell: "${OZONE_HOME}/bin/ozone --daemon start scm"
+    async: true
+    poll: 10
+- name: Start Ozone Cluster (OM)
+  hosts: om
+  become: true
+  become_user: ozone
+  vars_files:
+  - vars.yaml
+  tasks:
+  - name: Init OM
+    shell: "${OZONE_HOME}/bin/ozone om --init"
+  - name: Start OM
+    shell: "${OZONE_HOME}/bin/ozone --daemon start om"
+    async: true
+    poll: 10
+- name: Start Ozone Cluster (Datanode)
+  hosts: datanode
+  become: true
+  become_user: ozone
+  vars_files:
+  - vars.yaml
+  tasks:
+  - name: Start datanode
+    shell: "${OZONE_HOME}/bin/ozone --daemon start datanode"
+    async: true
+    poll: 10
+
+- name: Cluster Info
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - vars.yaml
+  tasks:
+  - name: Save cluster info to file
+    copy:
+      dest: "{{cluster_info_report}}"
+      force: true
+      content: |
+        {% for instance in instances %}
+        {{ instance.name }}: {{ instance.hostname }} {{lookup('vars', instance.hostname ~ '_ip')}}
+        {% endfor %}

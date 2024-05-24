@@ -1,0 +1,130 @@
+ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+ansible_command_timeout: 300
+cluster_destroy_script: ./destroy_cluster.sh
+cluster_info_report: ./cluster_info.txt
+folder_id: b1g4ifkq4l5ub6iblhmg
+subnet_zone: ru-central1-d
+instance_memory: 4
+openvpn_instance_memory: 2
+instance_cores: 2
+openvpn_instance_cores: 2
+instance_disk_size: 10
+openvpn_instance_disk_size: 10
+image_folder_id: standard-images
+image_family: bellsoft-axiom-jdk11-for-centos
+openvpn_image_family: openvpn
+ozone_dist: https://dlcdn.apache.org/ozone/1.4.0/ozone-1.4.0.tar.gz
+ozone_dist_checksum: sha512:https://downloads.apache.org/ozone/1.4.0/ozone-1.4.0.tar.gz.sha512
+ozone_dist_installation_dir: /opt/ozone/ozone-1.4.0
+vpc_subnet:
+  subnet:
+    id: fl8ql1l40m0i00rrtiah
+    name: default-ru-central1-d
+    nat_ip_version: ipv4
+ozone_vm_users_metadata_file: ./users_metadata.yaml
+ssh_key: ~/.ssh/id_rsa.pub
+ssh_key_private: ~/.ssh/id_rsa_yc_admin
+vm_check_retry: 100
+security_group_id: enpg9ud8b6ahgrb764ij
+instances:
+  - name: ozone-manager-1
+    description: Ozone - Ozone Manager 1
+    hostname: om1
+    labels: service=ozone,role=om
+    role: om
+    groups:
+      - om
+      - master
+      - ozone
+      - om1
+  - name: ozone-manager-2
+    description: Ozone - Ozone Manager 2
+    hostname: om2
+    labels: service=ozone,role=om
+    role: om
+    groups:
+      - om
+      - master
+      - ozone
+      - om2
+  - name: ozone-manager-3
+    description: Ozone - Ozone Manager 3
+    hostname: om3
+    labels: service=ozone,role=om
+    role: om
+    groups:
+      - om
+      - master
+      - ozone
+      - om3
+  - name: ozone-scm-1
+    description: Ozone - Storage Container Manager 1
+    hostname: scm1
+    labels: service=ozone,role=scm
+    role: scm
+    groups:
+      - scm
+      - master
+      - ozone
+      - scm1
+  - name: ozone-scm-2
+    description: Ozone - Storage Container Manager 2
+    hostname: scm2
+    labels: service=ozone,role=scm
+    role: scm
+    groups:
+      - scm
+      - master
+      - ozone
+      - scm2
+  - name: ozone-scm-3
+    description: Ozone - Storage Container Manager 3
+    hostname: scm3
+    labels: service=ozone,role=scm
+    role: scm
+    groups:
+      - scm
+      - master
+      - ozone
+      - scm3
+  - name: ozone-dn-1
+    description: Ozone - DataNode 1
+    hostname: dn1
+    labels: service=ozone,role=dn
+    role: datanode
+    groups:
+      - datanode
+      - ozone
+  - name: ozone-dn-2
+    description: Ozone - DataNode 2
+    hostname: dn2
+    labels: service=ozone,role=dn
+    role: datanode
+    groups:
+      - datanode
+      - ozone
+  - name: ozone-dn-3
+    description: Ozone - DataNode 3
+    hostname: dn3
+    labels: service=ozone,role=dn
+    role: datanode
+    groups:
+      - datanode
+      - ozone
+  - name: ozone-dn-4
+    description: Ozone - DataNode 4
+    hostname: dn4
+    labels: service=ozone,role=dn
+    role: datanode
+    groups:
+      - datanode
+      - ozone
+  - name: ozone-dn-5
+    description: Ozone - DataNode 5
+    hostname: dn5
+    labels: service=ozone,role=dn
+    role: datanode
+    groups:
+      - datanode
+      - ozone
+ozone_env:

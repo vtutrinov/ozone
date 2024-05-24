@@ -1,0 +1,53 @@
+---
+- name: "Create {{ item.name }} VM"
+  shell: |
+    yc compute instance create \
+      --name {{ item.name }} \
+      --folder-id {{ folder_id }} \
+      --zone {{ subnet_zone }} \
+      --cores {{ instance_cores }} \
+      --memory {{ instance_memory }} \
+      --create-boot-disk image-folder-id={{ image_folder_id }},size={{ instance_disk_size }},image-family={{image_family}} \
+      --labels {{ item.labels }} \
+      --hostname={{ item.hostname }} \
+      --metadata-from-file user-data={{ ozone_vm_users_metadata_file }} \
+      --metadata serial-port-enable=1 \
+      --format json \
+      --async
+  register: instance
+- name: "Detect created Instance ID"
+  set_fact:
+    instance_id: "{{ instance.stdout | from_json | json_query('metadata.instance_id') }}"
+  when: instance.stdout is defined
+- name: Define host-instance id variable
+  set_fact:
+    "{{ item.hostname ~ '_id'}}": "{{ instance_id }}"
+  when: instance.stdout is defined
+- name: Provide a command to destroy {{ item.name }} VM
+  lineinfile:
+    path: "{{ cluster_destroy_script }}"
+    line: "yc compute instance delete --id {{ instance_id }} --async"
+  when: instance.stdout is defined
+- name: "Wait for instance {{item.name}} to be ready"
+  shell: |
+    yc compute instance get --id {{ instance_id }} --format json
+  register: instance_info
+  retries: '{{ vm_check_retry }}'
+  until: instance_info.stdout | from_json | json_query('status') == 'RUNNING'
+- name: Save VM instance IP address
+  set_fact:
+    "{{item.hostname ~ '_ip'}}": "{{ instance_info.stdout | from_json | json_query('network_interfaces[0].primary_v4_address.address') }}"
+  run_once: true
+- name: Check saved VM instance IP address
+  debug:
+    var: "{{ item.hostname ~ '_ip' }}"
+- name: Add VM host to playbook inventory
+  add_host:
+    name: "{{ lookup('vars', item.hostname ~ '_ip') }}"
+    groups: "{{ item.groups }}"
+    ansible_user: yc-user
+    ansible_ssh_private_key_file: "{{ ssh_key_private }}"
+  when: instance.stdout is defined
+- name: Check inventory hosts
+  debug:
+    var: groups

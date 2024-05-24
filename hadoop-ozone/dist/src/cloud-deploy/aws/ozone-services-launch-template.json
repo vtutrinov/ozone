@@ -1,0 +1,13 @@
+{
+  "NetworkInterfaces": [
+    {
+      "DeviceIndex": 0,
+      "Groups": [
+        "sg-984b73e0"
+      ],
+      "SubnetId": "subnet-9bc2a1fe"
+    }
+  ],
+  "ImageId": "ami-02978b79564e08f2f",
+  "KeyName": "aws-ec2-admin-keypair"
+}

@@ -1,0 +1,46 @@
+---
+- name: Create VPN infrastructure
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+      - vars.yaml
+  tasks:
+#    - name: Get Security Group Info
+#      shell: |
+#        yc vpc security-group get --id {{ security_group_id }} --format json
+#      register: security_group_info
+#    - name: Define Security Group Rules
+#      set_fact:
+#        security_group_rules: |
+#          {{ security_group_info.stdout | from_json | json_query('rules') | json_query('[?direction==`INGRESS` && protocol_name==`TCP` && contains(ports.from_port, `443`)]')}}
+#    - debug:
+#        var: security_group_rules
+#    - debug:
+#        var: rule_exists
+#    - name: Upgrade Security Group
+#      shell: |
+#        yc vpc security-group update-rules --id {{ security_group_id }} --add-rule "direction=ingress,port=443,protocol=tcp,v4-cidrs=[10.0.0.0/24,10.10.0.0/24]"
+    - name: Create VPN Server Instance
+      shell: |
+        yc compute instance create \
+          --name vpn-server \
+          --folder-id {{ folder_id }} \
+          --zone {{ subnet_zone }} \
+          --cores {{ openvpn_instance_cores }} \
+          --memory {{ openvpn_instance_memory }} \
+          --create-boot-disk image-folder-id={{ image_folder_id }},size={{ openvpn_instance_disk_size }},image-family={{openvpn_image_family}} \
+          --network-interface subnet-name={{ vpc_subnet.subnet.name }},nat-ip-version={{ vpc_subnet.subnet.nat_ip_version }} \
+          --labels service=vpn,role=server \
+          --hostname=openvpn \
+          --ssh-key {{ ssh_key }} \
+          --format json
+      register: vpn_server_instance
+    - name : Create Nat Gateway
+      shell: |
+        yc vpc gateway create \
+          --name nat-gateway \
+          --folder-id {{ folder_id }} \
+          --subnet-id {{ vpc_subnet.subnet.id }} \
+          --zone {{ subnet_zone }} \
+          --format json
+      register: nat_gateway

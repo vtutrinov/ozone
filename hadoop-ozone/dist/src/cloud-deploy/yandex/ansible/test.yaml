@@ -1,0 +1,41 @@
+- name : Set variables
+  hosts: localhost
+  gather_facts: false
+  tasks:
+  - name: Set variables
+    set_fact:
+      "{{item ~ '_ip'}}": "{{item}}"
+    loop:
+      - om1
+      - om2
+      - om3
+      - scm1
+      - scm2
+      - scm3
+  - name: Add VPN host to inventory
+    add_host:
+      name: 10.131.0.32
+      groups:
+      - vpn
+      ansible_user: yc-user
+      ansible_ssh_private_key_file: "~/.ssh/id_rsa"
+- name: Render ozone-site.xml.j2 config file to VPN host
+  vars:
+    om1_ip: "{{ hostvars.localhost.om1_ip }}"
+    om2_ip: "{{ hostvars.localhost.om2_ip }}"
+    om3_ip: "{{ hostvars.localhost.om3_ip }}"
+    scm1_ip: "{{ hostvars.localhost.scm1_ip }}"
+    scm2_ip: "{{ hostvars.localhost.scm2_ip }}"
+    scm3_ip: "{{ hostvars.localhost.scm3_ip }}"
+  vars_files:
+    - vars.yaml
+  hosts: vpn
+  gather_facts: false
+  tasks:
+    - name: Print hostvars.localhost
+      debug:
+        var: hostvars.localhost
+    - name: Render ozone-site.xml.j2
+      template:
+        src: ozone-site.xml.j2
+        dest: /tmp/ozone-site.xml
