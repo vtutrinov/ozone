@@ -82,8 +82,7 @@ import org.apache.hadoop.ozone.snapshot.CancelSnapshotDiffResponse;
 import org.apache.hadoop.ozone.snapshot.SnapshotDiffReportOzone;
 import org.apache.hadoop.ozone.snapshot.SnapshotDiffResponse;
 import org.apache.hadoop.ozone.upgrade.UpgradeFinalizer;
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Level;
 import org.apache.ozone.rocksdiff.CompactionNode;
 import org.apache.ozone.test.GenericTestUtils;
 import org.apache.ozone.test.tag.Slow;
@@ -154,7 +153,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class TestOmSnapshot {
   static {
-    Logger.getLogger(ManagedRocksObjectUtils.class).setLevel(Level.DEBUG);
+    GenericTestUtils.setLogLevel(ManagedRocksObjectUtils.class, Level.DEBUG);
   }
 
   private static final String SNAPSHOT_DAY_PREFIX = "snap-day-";

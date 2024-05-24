@@ -34,10 +34,13 @@ import java.util.concurrent.TimeoutException;
 import com.google.common.base.Preconditions;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.log4j.Layout;
-import org.apache.log4j.Level;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.core.Layout;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.junit.jupiter.api.Assertions;
 import org.mockito.Mockito;
 import java.lang.reflect.Field;
@@ -205,12 +208,20 @@ public abstract class GenericTestUtils {
     }
   }
 
-  /**
-   * @deprecated use sl4fj based version
-   */
-  @Deprecated
+  public static void setLogLevel(Class<?> loggerClass, Level level) {
+    LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
+    Configuration config = ctx.getConfiguration();
+    LoggerConfig loggerConfig = config.getLoggerConfig(ctx.getLogger(loggerClass).getName());
+    loggerConfig.setLevel(level);
+    ctx.updateLoggers();
+  }
+
   public static void setLogLevel(Logger logger, Level level) {
-    logger.setLevel(level);
+    LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
+    Configuration config = ctx.getConfiguration();
+    LoggerConfig loggerConfig = config.getLoggerConfig(logger.getName());
+    loggerConfig.setLevel(level);
+    ctx.updateLoggers();
   }
 
   public static void setLogLevel(org.slf4j.Logger logger,
@@ -284,15 +295,15 @@ public abstract class GenericTestUtils {
     private final StringWriter sw = new StringWriter();
 
     public static LogCapturer captureLogs(Logger logger) {
-      return new Log4j1Capturer(logger);
+      return Log4j2Capturer.getInstance();
     }
 
     public static LogCapturer captureLogs(Logger logger, Layout layout) {
-      return new Log4j1Capturer(logger, layout);
+      return Log4j2Capturer.getInstance();
     }
 
     public static LogCapturer captureLogs(org.slf4j.Logger logger) {
-      return new Log4j1Capturer(toLog4j(logger));
+      return Log4j2Capturer.getInstance();
     }
 
     // TODO: let Log4j2Capturer capture only specific logger's logs

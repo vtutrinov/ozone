@@ -31,7 +31,7 @@ import org.apache.hadoop.ozone.container.keyvalue.helpers.KeyValueContainerUtil;
 import org.apache.hadoop.ozone.container.metadata.DatanodeStore;
 import org.apache.hadoop.ozone.container.metadata.DatanodeStoreSchemaThreeImpl;
 import org.apache.hadoop.ozone.container.metadata.DatanodeStoreSchemaTwoImpl;
-import org.apache.log4j.PatternLayout;
+import org.apache.logging.log4j.core.layout.PatternLayout;
 import org.apache.ozone.test.GenericTestUtils;
 
 import java.util.ArrayList;
@@ -507,7 +507,7 @@ public class TestKeyValueContainerMetadataInspector
     GenericTestUtils.LogCapturer capturer =
         GenericTestUtils.LogCapturer.captureLogs(
             toLog4j(KeyValueContainerMetadataInspector.REPORT_LOG),
-            new PatternLayout());
+            PatternLayout.createDefaultLayout());
     KeyValueContainerUtil.parseKVContainerData(containerData, getConf());
     capturer.stopCapturing();
     String output = capturer.getOutput();

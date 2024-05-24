@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="warn" name="ozone">
+    <Appenders>
+        <RollingFile name="RollingFile" fileName="${sys:ozone.log.dir:-.}/${sys:ozone.log.file:-ozone.log}"
+                     filePattern="${sys:ozone.log.dir:-.}/${sys:ozone.log.file:-ozone.log}-%d{dd-MM-yyyy}-%i.log.gz">
+            <PatternLayout>
+                <Pattern>%d{ISO8601} [%t] %p %c: %m%n</Pattern>
+            </PatternLayout>
+            <Policies>
+                <OnStartupTriggeringPolicy />
+                <TimeBasedTriggeringPolicy />
+                <SizeBasedTriggeringPolicy size="${sys:ozone.log.maxfilesize:-256 MB}"/>
+            </Policies>
+            <DefaultRolloverStrategy max="${sys:ozone.log.maxbackupindex:-20}"/>
+        </RollingFile>
+        <!-- TODO: We need correctly acquire username here for audit purposes -->
+        <RollingFile name="SecurityRollingFile" fileName="${sys:ozone.log.dir:-.}/${sys:service}-audit-${hostName}.log"
+                     filePattern="${sys:ozone.log.dir:-.}/${sys:service}-audit-${hostName}-%d{yyyy-MM-dd-HH-mm-ss}-%i.log.gz">
+            <PatternLayout>
+                <Pattern>%d{ISO8601} %p %c: %m%n</Pattern>
+            </PatternLayout>
+            <Policies>
+                <TimeBasedTriggeringPolicy />
+                <SizeBasedTriggeringPolicy size="${sys:ozone.security.log.maxfilesize:-256MB}"/>
+            </Policies>
+            <DefaultRolloverStrategy max="${sys:ozone.security.log.maxbackupindex:-20}"/>
+        </RollingFile>
+        <Async name="Async">
+            <AppenderRef ref="RollingFile"/>
+        </Async>
+        <Console name="STDOUT">
+            <PatternLayout>
+                <Pattern>%d{ISO8601} [%t] %p %c{2}: %m%n</Pattern>
+            </PatternLayout>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Logger name="com.amazonaws.http.AmazonHttpClient" level="ERROR"/>
+        <Logger name="org.apache.commons.beanutils" level="WARN"/>
+        <Logger name="org.apache.hadoop.util.NativeCodeLoader" level="ERROR"/>
+        <Logger name="org.apache.ratis.conf.ConfUtils" level="WARN"/>
+        <Logger name="org.apache.hadoop.security.ShellBasedUnixGroupsMapping" level="ERROR"/>
+        <Logger name="DNAudit" level="INFO">
+            <AppenderRef ref="SecurityRollingFile"/>
+        </Logger>
+        <Logger name="OMAudit" level="INFO">
+            <AppenderRef ref="SecurityRollingFile"/>
+        </Logger>
+        <Logger name="SCMAudit" level="INFO">
+            <AppenderRef ref="SecurityRollingFile"/>
+        </Logger>
+        <Logger name="S3GAudit" level="INFO">
+            <AppenderRef ref="SecurityRollingFile"/>
+        </Logger>
+        <Root level="${sys:ozone.root.logger:-INFO}">
+            <AppenderRef ref="STDOUT"/>
+            <AppenderRef ref="Async"/>
+        </Root>
+    </Loggers>
+</Configuration>

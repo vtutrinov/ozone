@@ -100,10 +100,6 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
       <groupId>org.apache.ratis</groupId>
       <exclusions>
         <exclusion>
-          <groupId>org.slf4j</groupId>
-          <artifactId>slf4j-reload4j</artifactId>
-        </exclusion>
-        <exclusion>
           <groupId>org.bouncycastle</groupId>
           <artifactId>bcprov-jdk18on</artifactId>
         </exclusion>

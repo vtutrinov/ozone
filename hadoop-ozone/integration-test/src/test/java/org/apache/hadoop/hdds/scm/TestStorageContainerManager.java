@@ -96,8 +96,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.client.AuthenticationException;
 import org.apache.hadoop.util.ExitUtil;
 import org.apache.hadoop.util.Time;
-import org.apache.log4j.Level;
-import org.apache.log4j.LogManager;
+import org.apache.logging.log4j.Level;
 import org.apache.ozone.test.GenericTestUtils;
 import org.apache.ratis.conf.RaftProperties;
 import org.apache.ratis.protocol.RaftGroupId;
@@ -404,7 +403,7 @@ public class TestStorageContainerManager {
       GenericTestUtils.LogCapturer scmDnHBDispatcherLog =
           GenericTestUtils.LogCapturer.captureLogs(
               SCMDatanodeHeartbeatDispatcher.LOG);
-      LogManager.getLogger(HeartbeatEndpointTask.class).setLevel(Level.DEBUG);
+      GenericTestUtils.setLogLevel(HeartbeatEndpointTask.class, Level.DEBUG);
       GenericTestUtils.LogCapturer heartbeatEndpointTaskLog =
           GenericTestUtils.LogCapturer.captureLogs(HeartbeatEndpointTask.LOG);
       GenericTestUtils.LogCapturer versionEndPointTaskLog =

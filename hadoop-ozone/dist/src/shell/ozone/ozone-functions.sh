@@ -1563,8 +1563,8 @@ function ozone_add_client_opts
 function ozone_finalize_opts
 {
   ozone_translate_cygwin_path OZONE_LOG_DIR
-  ozone_add_param OZONE_OPTS hadoop.log.dir "-Dhadoop.log.dir=${OZONE_LOG_DIR}"
-  ozone_add_param OZONE_OPTS hadoop.log.file "-Dhadoop.log.file=${OZONE_LOGFILE}"
+  ozone_add_param OZONE_OPTS ozone.log.dir "-Dozone.log.dir=${OZONE_LOG_DIR}"
+  ozone_add_param OZONE_OPTS ozone.log.file "-Dozone.log.file=${OZONE_LOGFILE}"
   ozone_translate_cygwin_path OZONE_HOME
   export OZONE_HOME
   ozone_add_param OZONE_OPTS hadoop.home.dir "-Dhadoop.home.dir=${OZONE_HOME}"
@@ -1769,7 +1769,7 @@ function ozone_java_exec
 
   export CLASSPATH
   #shellcheck disable=SC2086
-  exec "${JAVA}" "-Dproc_${command}" ${OZONE_OPTS} "${class}" "$@"
+  exec "${JAVA}" "-Dproc_${command}" -Dservice=${command} ${OZONE_OPTS} "${class}" "$@"
 }
 
 ## @description  Start a non-privileged daemon in the foreground.
@@ -1806,7 +1806,7 @@ function ozone_start_daemon
 
   export CLASSPATH
   #shellcheck disable=SC2086
-  exec "${JAVA}" "-Dproc_${command}" ${OZONE_OPTS} "${class}" "$@"
+  exec "${JAVA}" "-Dproc_${command}" -Dservice=${command} ${OZONE_OPTS} "${class}" "$@"
 }
 
 ## @description  Start a non-privileged daemon in the background.
@@ -1938,6 +1938,7 @@ function ozone_start_secure_daemon
   # shellcheck disable=SC2086
   exec "${jsvc}" \
     "-Dproc_${daemonname}" \
+    "-Dservice=${daemonname}" \
     ${OZONE_DAEMON_JSVC_EXTRA_OPTS} \
     -outfile "${daemonoutfile}" \
     -errfile "${daemonerrfile}" \

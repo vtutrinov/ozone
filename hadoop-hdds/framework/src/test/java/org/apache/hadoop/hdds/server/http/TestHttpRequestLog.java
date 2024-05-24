@@ -17,7 +17,10 @@
  */
 package org.apache.hadoop.hdds.server.http;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.config.Property;
+import org.apache.logging.log4j.core.layout.PatternLayout;
 import org.eclipse.jetty.server.CustomRequestLog;
 import org.eclipse.jetty.server.RequestLog;
 import org.junit.jupiter.api.Test;
@@ -39,11 +42,17 @@ public class TestHttpRequestLog {
 
   @Test
   public void testAppenderDefined() {
-    HttpRequestLogAppender requestLogAppender = new HttpRequestLogAppender();
-    requestLogAppender.setName("testrequestlog");
-    Logger.getLogger("http.requests.test").addAppender(requestLogAppender);
+    HttpRequestLogAppender requestLogAppender = new HttpRequestLogAppender(
+        "testrequestlog",
+        null,
+        PatternLayout.createDefaultLayout(),
+        true,
+        new Property[0]
+    );
+    LoggerContext lc = (LoggerContext) LogManager.getContext(false);
+    lc.getLogger("http.requests.test").addAppender(requestLogAppender);
     RequestLog requestLog = HttpRequestLog.getRequestLog("test");
-    Logger.getLogger("http.requests.test").removeAppender(requestLogAppender);
+    lc.getLogger("http.requests.test").removeAppender(requestLogAppender);
     assertNotNull(requestLog, "RequestLog should not be null");
     assertEquals(CustomRequestLog.class, requestLog.getClass(),
         "Class mismatch");

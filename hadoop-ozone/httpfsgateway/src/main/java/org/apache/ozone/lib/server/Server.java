@@ -21,11 +21,13 @@ package org.apache.ozone.lib.server;
 import org.apache.hadoop.conf.ConfigRedactor;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdds.annotation.InterfaceAudience;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.config.ConfigurationSource;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.apache.ozone.lib.util.Check;
 import org.apache.ozone.lib.util.ConfigurationUtils;
 import org.apache.hadoop.util.StringUtils;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.PropertyConfigurator;
+import org.apache.logging.log4j.LogManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,6 +35,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -448,20 +451,28 @@ public class Server {
    */
   protected void initLog() throws ServerException {
     verifyDir(logDir);
-    LogManager.resetConfiguration();
+
     File log4jFile = new File(configDir, name + "-log4j.properties");
+
     if (log4jFile.exists()) {
-      PropertyConfigurator
-          .configureAndWatch(log4jFile.toString(), 10 * 1000); //every 10 secs
-      log = LoggerFactory.getLogger(Server.class);
+      try (InputStream is = Files.newInputStream(Paths.get(log4jFile.getAbsoluteFile().getPath()))) {
+        ConfigurationSource cs = new ConfigurationSource(is);
+        try (LoggerContext ignore = Configurator.initialize(null, cs)) {
+          log = LoggerFactory.getLogger(Server.class);
+        }
+      } catch (IOException e) {
+        throw new ServerException(ServerException.ERROR.S03,
+            log4jFile.getAbsoluteFile().getPath(),
+            e.getMessage(),
+            e);
+      }
     } else {
-      Properties props = new Properties();
-      try {
-        InputStream is = getResource(DEFAULT_LOG4J_PROPERTIES);
-        try {
-          props.load(is);
-        } finally {
-          is.close();
+      try (InputStream is = getResource(DEFAULT_LOG4J_PROPERTIES)) {
+        ConfigurationSource cs = new ConfigurationSource(is);
+        try (LoggerContext ignore = Configurator.initialize(null, cs)) {
+          log = LoggerFactory.getLogger(Server.class);
+          log.warn("Log4j [{}] configuration file not found, using default " +
+              "configuration from classpath", log4jFile);
         }
       } catch (IOException ex) {
         throw new ServerException(ServerException.ERROR.S03,
@@ -469,10 +480,6 @@ public class Server {
             ex.getMessage(),
             ex);
       }
-      PropertyConfigurator.configure(props);
-      log = LoggerFactory.getLogger(Server.class);
-      log.warn("Log4j [{}] configuration file not found, using default " +
-          "configuration from classpath", log4jFile);
     }
   }
 

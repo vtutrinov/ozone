@@ -22,7 +22,6 @@ import org.apache.hadoop.hdds.client.ReplicationFactor;
 import org.apache.hadoop.hdds.client.ReplicationType;
 import org.apache.hadoop.hdds.utils.db.Table;
 import org.apache.hadoop.hdds.utils.db.TableIterator;
-import org.apache.hadoop.hdfs.LogVerificationAppender;
 import org.apache.hadoop.ozone.MiniOzoneHAClusterImpl;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.OzoneConsts;
@@ -33,6 +32,7 @@ import org.apache.hadoop.ozone.client.OzoneVolume;
 import org.apache.hadoop.ozone.client.VolumeArgs;
 import org.apache.hadoop.ozone.client.io.OzoneInputStream;
 import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
+import org.apache.hadoop.ozone.log.LogVerificationAppender;
 import org.apache.hadoop.ozone.om.ha.HadoopRpcOMFailoverProxyProvider;
 import org.apache.hadoop.ozone.om.ha.OMHAMetrics;
 import org.apache.hadoop.ozone.om.helpers.OmMultipartInfo;
@@ -40,7 +40,8 @@ import org.apache.hadoop.ozone.om.helpers.OmMultipartUploadCompleteInfo;
 import org.apache.hadoop.ozone.om.helpers.RepeatedOmKeyInfo;
 import org.apache.hadoop.ozone.om.service.KeyDeletingService;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.ozone.test.GenericTestUtils;
 import org.apache.ratis.conf.RaftProperties;
 import org.apache.ratis.server.RaftServerConfigKeys;
@@ -547,8 +548,11 @@ public class TestOzoneManagerHAWithStoppedNodes extends TestOzoneManagerHA {
     }
 
     final LogVerificationAppender appender = new LogVerificationAppender();
-    final Logger logger = Logger.getRootLogger();
-    logger.addAppender(appender);
+
+    LoggerContext lc = (LoggerContext) LogManager.getContext(false);
+    lc.getConfiguration().addAppender(appender);
+    lc.getRootLogger().addAppender(lc.getConfiguration().getAppender(appender.getName()));
+    lc.updateLoggers();
 
     // After making N (set maxRetries value) connection attempts to OMs,
     // the RpcClient should give up.

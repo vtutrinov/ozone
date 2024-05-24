@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hdds.server.http;
 
+import org.apache.logging.log4j.core.config.Property;
+import org.apache.logging.log4j.core.layout.PatternLayout;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,7 +31,13 @@ public class TestHttpRequestLogAppender {
   @Test
   public void testParameterPropagation() {
 
-    HttpRequestLogAppender requestLogAppender = new HttpRequestLogAppender();
+    HttpRequestLogAppender requestLogAppender = new HttpRequestLogAppender(
+        "jetty-namenode-yyyy_mm_dd.log",
+        null,
+        PatternLayout.createDefaultLayout(),
+        true,
+        new Property[0]
+    );
     requestLogAppender.setFilename("jetty-namenode-yyyy_mm_dd.log");
     requestLogAppender.setRetainDays(17);
     assertEquals("jetty-namenode-yyyy_mm_dd.log",
