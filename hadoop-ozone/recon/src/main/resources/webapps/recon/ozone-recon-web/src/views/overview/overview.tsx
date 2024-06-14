@@ -44,8 +44,6 @@ interface IClusterStateResponse {
   openContainers: number;
   deletedContainers: number;
   keysPendingDeletion: number;
-  scmServiceId: string;
-  omServiceId: string;
 }
 
 interface IOverviewState {
@@ -70,8 +68,6 @@ interface IOverviewState {
   deletePendingSummarytotalUnrepSize: number,
   deletePendingSummarytotalRepSize: number,
   deletePendingSummarytotalDeletedKeys: number,
-  scmServiceId: string;
-  omServiceId: string;
 }
 
 let cancelOverviewSignal: AbortController;
@@ -160,9 +156,7 @@ export class Overview extends React.Component<Record<string, object>, IOverviewS
         openSummarytotalOpenKeys: openResponse.data && openResponse.data.totalOpenKeys,
         deletePendingSummarytotalUnrepSize: deletePendingResponse.data && deletePendingResponse.data.totalUnreplicatedDataSize,
         deletePendingSummarytotalRepSize: deletePendingResponse.data && deletePendingResponse.data.totalReplicatedDataSize,
-        deletePendingSummarytotalDeletedKeys: deletePendingResponse.data && deletePendingResponse.data.totalDeletedKeys,
-        scmServiceId: clusterState.scmServiceId,
-        omServiceId: clusterState.omServiceId
+        deletePendingSummarytotalDeletedKeys: deletePendingResponse.data && deletePendingResponse.data.totalDeletedKeys
       });
     })).catch(error => {
       this.setState({
@@ -215,8 +209,7 @@ export class Overview extends React.Component<Record<string, object>, IOverviewS
   render() {
     const {loading, datanodes, pipelines, storageReport, containers, volumes, buckets, openSummarytotalUnrepSize, openSummarytotalRepSize, openSummarytotalOpenKeys,
       deletePendingSummarytotalUnrepSize,deletePendingSummarytotalRepSize,deletePendingSummarytotalDeletedKeys,
-      keys, missingContainersCount, lastRefreshed, lastUpdatedOMDBDelta, lastUpdatedOMDBFull,
-      omStatus, openContainers, deletedContainers, scmServiceId, omServiceId } = this.state;
+      keys, missingContainersCount, lastRefreshed, lastUpdatedOMDBDelta, lastUpdatedOMDBFull, omStatus, openContainers, deletedContainers } = this.state;
       
     const datanodesElement = (
       <span>
@@ -237,12 +230,6 @@ export class Overview extends React.Component<Record<string, object>, IOverviewS
         {deletePendingSummarytotalDeletedKeys !== undefined ? deletePendingSummarytotalDeletedKeys: '0'}  <span className='ant-card-meta-description meta'>Total Pending Delete Keys</span>
       </div>
   );
-    const scmAndOmServicesData = (
-        <div>
-          SCM Service Id: <span className="ant-card-meta-description meta">{scmServiceId}</span><br />
-          OM Service Id: <span className="ant-card-meta-description meta">{omServiceId}</span>
-        </div>
-    );
     const containersTooltip = missingContainersCount === 1 ? 'container is missing' : 'containers are missing';
     const containersLink = missingContainersCount > 0 ? '/MissingContainers' : '/Containers';
     const volumesLink = '/Volumes';
@@ -262,8 +249,6 @@ export class Overview extends React.Component<Record<string, object>, IOverviewS
         </Tooltip>
       </div>
     const clusterCapacity = `${size(storageReport.capacity - storageReport.remaining)}/${size(storageReport.capacity)}`;
-    const clusterIsInHaMode = scmServiceId !== null && scmServiceId !== undefined && scmServiceId !== '' && omServiceId !== null
-        && omServiceId !== undefined && omServiceId !== '';
     return (
       <div className='overview-content'>
         <div className='page-header'>
@@ -317,11 +302,6 @@ export class Overview extends React.Component<Record<string, object>, IOverviewS
           <Col xs={24} sm={18} md={12} lg={12} xl={6} className='summary-font'>
             <OverviewCard loading={loading} title='Pending Deleted Keys Summary' data={deletePendingSummaryData} icon='delete' linkToUrl='/Om'/>
           </Col>
-          {clusterIsInHaMode &&
-            <Col xs={24} sm={18} md={12} lg={12} xl={6}>
-              <OverviewCard loading={loading} data={scmAndOmServicesData}/>
-            </Col>
-          }
         </Row>
       </div>
     );

@@ -286,7 +286,7 @@ public class TestEndpoints extends AbstractReconSqlDBTest {
         reconTestInjector.getInstance(ContainerHealthSchemaManager.class);
     clusterStateEndpoint =
         new ClusterStateEndpoint(reconScm, globalStatsDao,
-            containerHealthSchemaManager, mock(OzoneConfiguration.class));
+            containerHealthSchemaManager);
     containerSizeCountTask = reconScm.getContainerSizeCountTask();
     MetricsServiceProviderFactory metricsServiceProviderFactory =
         reconTestInjector.getInstance(MetricsServiceProviderFactory.class);
