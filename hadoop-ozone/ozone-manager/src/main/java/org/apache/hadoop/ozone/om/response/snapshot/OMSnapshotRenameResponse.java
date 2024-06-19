@@ -19,7 +19,6 @@ package org.apache.hadoop.ozone.om.response.snapshot;
 
 import static org.apache.hadoop.ozone.om.OmMetadataManagerImpl.SNAPSHOT_INFO_TABLE;
 
-import jakarta.annotation.Nonnull;
 import java.io.IOException;
 import org.apache.hadoop.hdds.utils.db.BatchOperation;
 import org.apache.hadoop.ozone.om.OMMetadataManager;
@@ -40,7 +39,7 @@ public class OMSnapshotRenameResponse extends OMClientResponse {
 
   public OMSnapshotRenameResponse(OzoneManagerProtocolProtos.OMResponse omResponse,
                                   String snapshotOldName, String snapshotNewName,
-                                  @Nonnull SnapshotInfo renamedInfo) {
+                                  SnapshotInfo renamedInfo) {
     super(omResponse);
     this.snapshotOldName = snapshotOldName;
     this.snapshotNewName = snapshotNewName;
@@ -51,7 +50,7 @@ public class OMSnapshotRenameResponse extends OMClientResponse {
    * For when the request is not successful.
    * For a successful request, the other constructor should be used.
    */
-  public OMSnapshotRenameResponse(@Nonnull OzoneManagerProtocolProtos.OMResponse omResponse) {
+  public OMSnapshotRenameResponse(OzoneManagerProtocolProtos.OMResponse omResponse) {
     super(omResponse);
     checkStatusNotOK();
   }

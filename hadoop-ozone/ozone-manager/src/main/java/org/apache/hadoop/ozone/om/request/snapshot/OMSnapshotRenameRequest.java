@@ -49,7 +49,6 @@ import org.apache.hadoop.ozone.security.acl.IAccessAuthorizer;
 import org.apache.hadoop.ozone.security.acl.OzoneObj;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Time;
-import org.apache.ratis.server.protocol.TermIndex;
 
 /**
  * Changes snapshot name.
@@ -104,7 +103,7 @@ public class OMSnapshotRenameRequest extends OMClientRequest {
 
   @Override
   public OMClientResponse validateAndUpdateCache(OzoneManager ozoneManager,
-                                                 TermIndex termIndex) {
+                                                 long termIndex) {
     boolean acquiredBucketLock = false;
     boolean acquiredSnapshotOldLock = false;
     boolean acquiredSnapshotNewLock = false;
@@ -180,11 +179,11 @@ public class OMSnapshotRenameRequest extends OMClientRequest {
 
       omMetadataManager.getSnapshotInfoTable().addCacheEntry(
           new CacheKey<>(snapshotOldTableKey),
-          CacheValue.get(termIndex.getIndex()));
+          CacheValue.get(termIndex));
 
       omMetadataManager.getSnapshotInfoTable().addCacheEntry(
           new CacheKey<>(snapshotNewTableKey),
-          CacheValue.get(termIndex.getIndex(), snapshotOldInfo));
+          CacheValue.get(termIndex, snapshotOldInfo));
 
       omMetadataManager.getSnapshotChainManager().updateSnapshot(snapshotOldInfo);
 
