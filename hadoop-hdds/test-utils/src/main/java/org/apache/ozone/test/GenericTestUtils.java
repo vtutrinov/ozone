@@ -35,10 +35,10 @@ import java.util.concurrent.TimeoutException;
 import com.google.common.base.Preconditions;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.log4j.Layout;
 import org.apache.log4j.Level;
-import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import org.apache.logging.log4j.core.Layout;
+import org.apache.logging.log4j.core.LoggerContext;
 import org.junit.jupiter.api.Assertions;
 import org.mockito.Mockito;
 import java.lang.reflect.Field;
@@ -230,7 +230,7 @@ public abstract class GenericTestUtils {
 
   public static void setLogLevel(org.slf4j.Logger logger,
       org.slf4j.event.Level level) {
-    setLogLevel(toLog4j(logger), Level.toLevel(level.toString()));
+//    setLogLevel(toLog4j(logger), Level.toLevel(level.toString()));
   }
 
   public static <T> T mockFieldReflection(Object object, String fieldName)
@@ -296,20 +296,15 @@ public abstract class GenericTestUtils {
    * Class to capture logs for doing assertions.
    */
   public abstract static class LogCapturer {
-    private final StringWriter sw = new StringWriter();
-
-    public static LogCapturer captureLogs(Logger logger) {
-      return new Log4j1Capturer(logger);
-    }
-
-    public static LogCapturer captureLogs(Logger logger, Layout layout) {
-      return new Log4j1Capturer(logger, layout);
-    }
+    private StringWriter sw = new StringWriter();
 
     public static LogCapturer captureLogs(org.slf4j.Logger logger) {
-      return new Log4j1Capturer(toLog4j(logger));
+      return new Log4jCapturer(logger);
     }
 
+    public static LogCapturer captureLogs(org.slf4j.Logger logger, Layout layout) {
+      return new Log4jCapturer(logger, layout);
+    }
     // TODO: let Log4j2Capturer capture only specific logger's logs
     public static LogCapturer log4j2(String ignoredLoggerName) {
       return Log4j2Capturer.getInstance();
@@ -330,8 +325,8 @@ public abstract class GenericTestUtils {
     }
   }
   @Deprecated
-  public static Logger toLog4j(org.slf4j.Logger logger) {
-    return LogManager.getLogger(logger.getName());
+  public static org.apache.logging.log4j.core.Logger toLog4j(org.slf4j.Logger logger) {
+    return LoggerContext.getContext().getLogger(logger.getName());
   }
 
   private static long monotonicNow() {

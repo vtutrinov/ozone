@@ -20,8 +20,8 @@ package org.apache.hadoop.ozone.audit;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Marker;
+import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.spi.ExtendedLogger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +44,7 @@ public class AuditLogger {
 
   private static final Logger LOG = LoggerFactory.getLogger(AuditLogger.class);
 
-  private ExtendedLogger logger;
+  private org.apache.logging.log4j.core.Logger logger;
   private static final String FQCN = AuditLogger.class.getName();
   private static final Marker WRITE_MARKER = AuditMarker.WRITE.getMarker();
   private static final Marker READ_MARKER = AuditMarker.READ.getMarker();
@@ -70,7 +70,7 @@ public class AuditLogger {
    * @param loggerType specified one of the values from enum AuditLoggerType.
    */
   private void initializeLogger(AuditLoggerType loggerType) {
-    this.logger = LogManager.getContext(false).getLogger(loggerType.getType());
+    this.logger = LoggerContext.getContext().getLogger(loggerType.getType());
     this.type = loggerType;
     refreshDebugCmdSet();
   }

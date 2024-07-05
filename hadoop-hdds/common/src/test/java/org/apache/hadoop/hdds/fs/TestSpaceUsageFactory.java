@@ -23,6 +23,7 @@ import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.ozone.test.GenericTestUtils.LogCapturer;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
@@ -63,6 +64,11 @@ public class TestSpaceUsageFactory {
   public void setUp() {
     capturer = LogCapturer.captureLogs(
         LoggerFactory.getLogger(SpaceUsageCheckFactory.class));
+  }
+
+  @AfterEach
+  public void cleanUp() {
+    capturer.stopCapturing();
   }
 
   @Test

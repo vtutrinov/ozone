@@ -31,7 +31,7 @@ import org.apache.hadoop.ozone.container.keyvalue.helpers.KeyValueContainerUtil;
 import org.apache.hadoop.ozone.container.metadata.DatanodeStore;
 import org.apache.hadoop.ozone.container.metadata.DatanodeStoreSchemaThreeImpl;
 import org.apache.hadoop.ozone.container.metadata.DatanodeStoreSchemaTwoImpl;
-import org.apache.log4j.PatternLayout;
+import org.apache.logging.log4j.core.layout.PatternLayout;
 import org.apache.ozone.test.GenericTestUtils;
 
 import java.util.ArrayList;
@@ -39,7 +39,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import static org.apache.ozone.test.GenericTestUtils.toLog4j;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -505,9 +504,8 @@ public class TestKeyValueContainerMetadataInspector
     // Use an empty layout so the captured log has no prefix and can be
     // parsed as json.
     GenericTestUtils.LogCapturer capturer =
-        GenericTestUtils.LogCapturer.captureLogs(
-            toLog4j(KeyValueContainerMetadataInspector.REPORT_LOG),
-            new PatternLayout());
+        GenericTestUtils.LogCapturer.captureLogs(KeyValueContainerMetadataInspector.REPORT_LOG,
+            PatternLayout.createDefaultLayout());
     KeyValueContainerUtil.parseKVContainerData(containerData, getConf());
     capturer.stopCapturing();
     String output = capturer.getOutput();

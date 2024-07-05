@@ -280,3 +280,5 @@ share/ozone/lib/woodstox-core.jar
 share/ozone/lib/zookeeper.jar
 share/ozone/lib/zookeeper-jute.jar
 share/ozone/lib/zstd-jni.jar
+share/ozone/lib/log4j-slf4j-impl.jar
+share/ozone/lib/log4j-jcl.jar

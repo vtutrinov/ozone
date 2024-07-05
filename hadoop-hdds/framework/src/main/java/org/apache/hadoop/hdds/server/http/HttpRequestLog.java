@@ -17,18 +17,19 @@
  */
 package org.apache.hadoop.hdds.server.http;
 
-import java.util.HashMap;
-
-import org.apache.commons.logging.impl.Log4JLogger;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogConfigurationException;
 import org.apache.commons.logging.LogFactory;
-import org.apache.log4j.Appender;
+import org.apache.logging.log4j.core.Appender;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.jcl.Log4jLog;
 import org.eclipse.jetty.server.AsyncRequestLogWriter;
 import org.eclipse.jetty.server.CustomRequestLog;
 import org.eclipse.jetty.server.RequestLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.HashMap;
 
 /**
  * RequestLog object for use with Http.
@@ -62,21 +63,19 @@ public final class HttpRequestLog {
     boolean isLog4JLogger;
 
     try {
-      isLog4JLogger = logger instanceof Log4JLogger;
+      isLog4JLogger = logger instanceof Log4jLog;
     } catch (NoClassDefFoundError err) {
       // In some dependent projects, log4j may not even be on the classpath at
       // runtime, in which case the above instanceof check will throw
       // NoClassDefFoundError.
-      LOG.debug("Could not load Log4JLogger class", err);
+      LOG.debug("Could not load Log4J Logger class", err);
       isLog4JLogger = false;
     }
     if (isLog4JLogger) {
-      Log4JLogger httpLog4JLog = (Log4JLogger) logger;
-      org.apache.log4j.Logger httpLogger = httpLog4JLog.getLogger();
       Appender appender = null;
 
       try {
-        appender = httpLogger.getAppender(appenderName);
+        appender = LoggerContext.getContext().getLogger(loggerName).getAppenders().get(appenderName);
       } catch (LogConfigurationException e) {
         LOG.warn("Http request log for {} could not be created", loggerName);
         throw e;

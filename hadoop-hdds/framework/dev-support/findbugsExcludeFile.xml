@@ -29,4 +29,8 @@
     <Class name="org.apache.hadoop.hdds.utils.BufferedMetricsCollector$BufferedMetricsRecordBuilderImpl"></Class>
     <Bug pattern="URF_UNREAD_FIELD" />
   </Match>
+  <Match>
+    <Class name="org.apache.hadoop.ozone.audit.AuditMessage"></Class>
+    <Bug pattern="SE_TRANSIENT_FIELD_NOT_RESTORED"/>
+  </Match>
 </FindBugsFilter>
