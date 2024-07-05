@@ -888,8 +888,8 @@ function ozone_basic_init
   OZONE_NICENESS=${OZONE_NICENESS:-0}
   OZONE_STOP_TIMEOUT=${OZONE_STOP_TIMEOUT:-60}
   OZONE_PID_DIR=${OZONE_PID_DIR:-/tmp}
-  OZONE_ROOT_LOGGER=${OZONE_ROOT_LOGGER:-${OZONE_LOGLEVEL},console}
-  OZONE_DAEMON_ROOT_LOGGER=${OZONE_DAEMON_ROOT_LOGGER:-${OZONE_LOGLEVEL},RFA}
+  OZONE_ROOT_LOGGER=${OZONE_ROOT_LOGGER:-${OZONE_LOGLEVEL}}
+  OZONE_DAEMON_ROOT_LOGGER=${OZONE_DAEMON_ROOT_LOGGER:-${OZONE_LOGLEVEL}}
   OZONE_SECURITY_LOGGER=${OZONE_SECURITY_LOGGER:-INFO,NullAppender}
   OZONE_SSH_OPTS=${OZONE_SSH_OPTS-"-o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10s"}
   OZONE_SECURE_LOG_DIR=${OZONE_SECURE_LOG_DIR:-${OZONE_LOG_DIR}}
@@ -1580,6 +1580,8 @@ function ozone_finalize_opts
   ozone_add_param OZONE_OPTS hadoop.root.logger "-Dhadoop.root.logger=${OZONE_ROOT_LOGGER}"
   ozone_add_param OZONE_OPTS hadoop.policy.file "-Dhadoop.policy.file=${OZONE_POLICYFILE}"
   ozone_add_param OZONE_OPTS hadoop.security.logger "-Dhadoop.security.logger=${OZONE_SECURITY_LOGGER}"
+  ozone_add_param OZONE_OPTS slf4j.provider "-Dslf4j.provider=org.apache.hadoop.ozone.logging.log4j.Log4JSLF4JServiceProvider"
+  ozone_add_param OZONE_OPTS slf4j.internal.verbosity "-Dslf4j.internal.verbosity=WARN"
 }
 
 ## @description  Finish Java classpath prior to execution
