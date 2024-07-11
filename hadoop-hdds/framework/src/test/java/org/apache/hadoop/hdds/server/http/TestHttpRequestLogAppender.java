@@ -29,9 +29,8 @@ public class TestHttpRequestLogAppender {
   @Test
   public void testParameterPropagation() {
 
-    HttpRequestLogAppender requestLogAppender = new HttpRequestLogAppender();
-    requestLogAppender.setFilename("jetty-namenode-yyyy_mm_dd.log");
-    requestLogAppender.setRetainDays(17);
+    HttpRequestLogAppender requestLogAppender = new HttpRequestLogAppender("jetty", null, null,
+        "jetty-namenode-yyyy_mm_dd.log", 17);
     assertEquals("jetty-namenode-yyyy_mm_dd.log",
         requestLogAppender.getFilename(), "Filename mismatch");
     assertEquals(17, requestLogAppender.getRetainDays(),

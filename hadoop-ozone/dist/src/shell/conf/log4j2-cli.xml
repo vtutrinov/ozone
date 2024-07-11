@@ -22,29 +22,12 @@
     <Properties>
         <Property name="hadoop.root.logger.level">${sys:hadoop.root.logger.level:-INFO}</Property>
         <Property name="hadoop.root.logger.appender">${sys:hadoop.root.logger.appender:-console}</Property>
-        <Property name="hadoop.log.dir">${sys:hadoop.log.dir:-.}</Property>
-        <Property name="hadoop.log.file">${sys:hadoop.log.file:-hadoop.log}</Property>
-        <Property name="hadoop.log.maxfilesize">${sys:hadoop.log.maxfilesize:-256MB}</Property>
-        <Property name="hadoop.log.maxbackupindex">${sys:hadoop.log.maxbackupindex:-20}</Property>
-        <Property name="hadoop.security.logger">${sys:hadoop.security.logger:-INFO,NullAppender}</Property>
-        <Property name="hadoop.security.log.maxfilesize">${sys:hadoop.security.log.maxfilesize:-256MB}</Property>
-        <Property name="hadoop.security.log.maxbackupindex">${sys:hadoop.security.log.maxbackupindex:-20}</Property>
-        <Property name="hadoop.security.log.file">${sys:hadoop.security.log.file:-SecurityAuth-${sys:user.name}}</Property>
     </Properties>
 
     <Appenders>
         <Console name="console" target="SYSTEM_OUT">
             <PatternLayout pattern="%d{ISO8601} [%t] %p %c: %m%n"/>
         </Console>
-
-        <RollingFile name="RFA" fileName="${hadoop.log.dir}/${hadoop.log.file}" filePattern="${hadoop.log.dir}/${hadoop.log.file}-%d{yyyy-MM-dd}-%i.gz">
-            <PatternLayout pattern="%d{ISO8601} [%t] %p %c: %m%n"/>
-            <Policies>
-                <SizeBasedTriggeringPolicy size="${hadoop.log.maxfilesize}"/>
-                <TimeBasedTriggeringPolicy />
-            </Policies>
-            <DefaultRolloverStrategy max="${hadoop.log.maxbackupindex}"/>
-        </RollingFile>
     </Appenders>
 
     <Loggers>

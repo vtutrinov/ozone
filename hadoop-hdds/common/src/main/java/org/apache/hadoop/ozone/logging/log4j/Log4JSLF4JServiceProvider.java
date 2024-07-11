@@ -30,7 +30,7 @@ import org.slf4j.spi.MDCAdapter;
  */
 public class Log4JSLF4JServiceProvider implements org.slf4j.spi.SLF4JServiceProvider {
 
-  public static final String REQUESTED_API_VERSION = "2.0.99";
+  public static final String REQUESTED_API_VERSION = "2.0.13";
 
   private ILoggerFactory loggerFactory;
   private Log4jMarkerFactory markerFactory;
@@ -59,7 +59,7 @@ public class Log4JSLF4JServiceProvider implements org.slf4j.spi.SLF4JServiceProv
   @Override
   public void initialize() {
     markerFactory = new Log4jMarkerFactory();
-    loggerFactory = new Log4jLoggerFactory();
+    loggerFactory = new Log4jLoggerFactory(markerFactory);
     mdcAdapter = new Log4jMDCAdapter();
   }
 

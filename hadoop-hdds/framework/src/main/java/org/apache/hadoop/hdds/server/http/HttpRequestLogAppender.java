@@ -17,18 +17,30 @@
  */
 package org.apache.hadoop.hdds.server.http;
 
-import org.apache.log4j.spi.LoggingEvent;
-import org.apache.log4j.AppenderSkeleton;
+import org.apache.logging.log4j.core.Filter;
+import org.apache.logging.log4j.core.Layout;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.config.plugins.Plugin;
+import org.apache.logging.log4j.core.config.plugins.PluginAttribute;
+import org.apache.logging.log4j.core.config.plugins.PluginFactory;
+
+import java.io.Serializable;
 
 /**
  * Log4j Appender adapter for HttpRequestLog.
  */
-public class HttpRequestLogAppender extends AppenderSkeleton {
+@Plugin(name = "HttpRequestLogAppender", category = "Core", elementType = "appender", printObject = true)
+public class HttpRequestLogAppender extends AbstractAppender {
 
   private String filename;
   private int retainDays;
 
-  public HttpRequestLogAppender() {
+  protected HttpRequestLogAppender(String name, Filter filter, Layout<? extends Serializable> layout, String filename,
+                                   int retainDays) {
+    super(name, filter, layout, false, null);
+    this.filename = filename;
+    this.retainDays = retainDays;
   }
 
   public void setRetainDays(int retainDays) {
@@ -48,15 +60,16 @@ public class HttpRequestLogAppender extends AppenderSkeleton {
   }
 
   @Override
-  public void append(LoggingEvent event) {
+  public void append(LogEvent event) {
+
   }
 
-  @Override
-  public void close() {
+  @PluginFactory
+  public static HttpRequestLogAppender createAppender(
+      @PluginAttribute("name") String name,
+      @PluginAttribute("fileName") String filename,
+      @PluginAttribute("retainDays") int retainDays) {
+    return new HttpRequestLogAppender(name, null, null, filename, retainDays);
   }
 
-  @Override
-  public boolean requiresLayout() {
-    return false;
-  }
 }
