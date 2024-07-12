@@ -41,7 +41,6 @@ import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServerConfig;
 import org.apache.hadoop.ozone.om.snapshot.ReferenceCounted;
-import org.apache.hadoop.ozone.om.snapshot.SnapshotCache;
 import org.apache.hadoop.ozone.snapshot.SnapshotDiffReportOzone;
 import org.apache.hadoop.ozone.snapshot.SnapshotDiffResponse;
 import org.apache.ozone.compaction.log.CompactionLogEntry;
@@ -78,9 +77,9 @@ import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SNAPSHOT_DELETING_SE
 import static org.apache.hadoop.ozone.OzoneConsts.OM_KEY_PREFIX;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_SNAPSHOT_SST_FILTERING_SERVICE_INTERVAL;
 import static org.apache.hadoop.ozone.om.OmSnapshotManager.getSnapshotPath;
-import static org.apache.hadoop.ozone.om.OmSnapshotManager.getSnapshotPrefix;
 import static org.apache.hadoop.ozone.om.TestOzoneManagerHAWithStoppedNodes.createKey;
 import static org.apache.hadoop.ozone.snapshot.SnapshotDiffResponse.JobStatus.DONE;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Tests snapshot background services.
@@ -245,11 +244,11 @@ public class TestSnapshotBackgroundServices {
         .getMetadataManager()
         .getKeyTable(ozoneBucket.getBucketLayout());
     OmKeyInfo keyInfoA = omKeyInfoTable.get(keyA);
-    Assertions.assertNotNull(keyInfoA);
+    assertNotNull(keyInfoA);
 
     // create snapshot b
     SnapshotInfo snapshotInfoB = createOzoneSnapshot(newLeaderOM, SNAPSHOT_NAME_PREFIX + counter.incrementAndGet());
-    Assertions.assertNotNull(snapshotInfoB);
+    assertNotNull(snapshotInfoB);
 
     // delete key a
     ozoneBucket.deleteKey(keyNameA);
@@ -262,12 +261,11 @@ public class TestSnapshotBackgroundServices {
 
     // get snapshot c
     OmSnapshot snapC;
-    try (ReferenceCounted<IOmMetadataReader, SnapshotCache> rcC = newLeaderOM
+    try (ReferenceCounted<OmSnapshot> rcC = newLeaderOM
         .getOmSnapshotManager()
-        .checkForSnapshot(volumeName, bucketName,
-            getSnapshotPrefix(snapshotInfoC.getName()), true)) {
-      Assertions.assertNotNull(rcC);
-      snapC = (OmSnapshot) rcC.get();
+        .getSnapshot(volumeName, bucketName, snapshotInfoC.getName())) {
+      assertNotNull(rcC);
+      snapC = rcC.get();
     }
 
     // assert that key a is in snapshot c's deleted table
@@ -287,12 +285,11 @@ public class TestSnapshotBackgroundServices {
 
     // get snapshot d
     OmSnapshot snapD;
-    try (ReferenceCounted<IOmMetadataReader, SnapshotCache> rcD = newLeaderOM
+    try (ReferenceCounted<OmSnapshot> rcD = newLeaderOM
         .getOmSnapshotManager()
-        .checkForSnapshot(volumeName, bucketName,
-            getSnapshotPrefix(snapshotInfoD.getName()), true)) {
-      Assertions.assertNotNull(rcD);
-      snapD = (OmSnapshot) rcD.get();
+        .getSnapshot(volumeName, bucketName, snapshotInfoD.getName())) {
+      assertNotNull(rcD);
+      snapD = rcD.get();
     }
 
     // wait until key a appears in deleted table of snapshot d
@@ -468,7 +465,7 @@ public class TestSnapshotBackgroundServices {
 
     File sstBackupDir = getSstBackupDir(newLeaderOM);
     File[] files = sstBackupDir.listFiles();
-    Assertions.assertNotNull(files);
+    assertNotNull(files);
     int numberOfSstFiles = files.length;
 
     resumeBackupCompactionFilesPruning(newLeaderOM);
@@ -556,9 +553,9 @@ public class TestSnapshotBackgroundServices {
         .getStore()
         .getRocksDBCheckpointDiffer()
         .getSSTBackupDir();
-    Assertions.assertNotNull(sstBackupDirPath);
+    assertNotNull(sstBackupDirPath);
     File sstBackupDir = new File(sstBackupDirPath);
-    Assertions.assertNotNull(sstBackupDir);
+    assertNotNull(sstBackupDir);
     return sstBackupDir;
   }
 
@@ -566,7 +563,7 @@ public class TestSnapshotBackgroundServices {
       throws IOException, TimeoutException, InterruptedException {
     writeKeys(1);
     SnapshotInfo newSnapshot = createOzoneSnapshot(ozoneManager, SNAPSHOT_NAME_PREFIX + counter.incrementAndGet());
-    Assertions.assertNotNull(newSnapshot);
+    assertNotNull(newSnapshot);
     Table<String, SnapshotInfo> snapshotInfoTable =
         ozoneManager.getMetadataManager().getSnapshotInfoTable();
     GenericTestUtils.waitFor(() -> {
