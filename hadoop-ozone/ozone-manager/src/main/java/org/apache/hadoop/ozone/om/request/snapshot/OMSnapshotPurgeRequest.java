@@ -136,7 +136,7 @@ public class OMSnapshotPurgeRequest extends OMClientRequest {
               updatedPathPreviousAndGlobalSnapshots);
           updateSnapshotInfoAndCache(nextSnapshot, omMetadataManager, trxnLogIndex, updatedSnapInfos);
           // Remove and close snapshot's RocksDB instance from SnapshotCache.
-          ozoneManager.getOmSnapshotManager().invalidateCacheEntry(snapTableKey);
+          ozoneManager.getOmSnapshotManager().invalidateCacheEntry(fromSnapshot.getSnapshotId());
           // Update SnapshotInfoTable cache.
           omMetadataManager.getSnapshotInfoTable()
               .addCacheEntry(new CacheKey<>(fromSnapshot.getTableKey()), CacheValue.get(trxnLogIndex));
