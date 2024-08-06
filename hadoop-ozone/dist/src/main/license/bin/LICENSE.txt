@@ -315,6 +315,7 @@ Apache License 2.0
    commons-digester:commons-digester
    commons-httpclient:commons-httpclient
    commons-io:commons-io
+   commons-logging:commons-logging
    commons-net:commons-net
    commons-validator:commons-validator
    commons-fileupload:commons-fileupload
@@ -420,6 +421,8 @@ Apache License 2.0
    org.apache.kerby:token-provider
    org.apache.logging.log4j:log4j-api
    org.apache.logging.log4j:log4j-core
+   org.apache.logging.log4j:log4j-jcl
+   org.apache.logging.log4j:log4j-slf4j-impl
    org.apache.orc:orc-core
    org.apache.orc:orc-shims
    org.apache.parquet:parquet-avro
