@@ -44,7 +44,9 @@ _install_hugo() {
       ;;
   esac
 
-  curl -LSs "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_${HUGO_VERSION}_${os}-${arch}.tar.gz" | tar -xz -f - -C bin hugo
+  # SDP: download from the internal mirror (it must host this HUGO_VERSION)
+  : ${HUGO_DOWNLOAD_BASE:=http://tklew-kap000001.vm.esrt.cloud.sbrf.ru/ozone/lib/hugo}
+  curl -LSs "${HUGO_DOWNLOAD_BASE}/v${HUGO_VERSION}/hugo_${HUGO_VERSION}_${os}-${arch}.tar.gz" | tar -xz -f - -C bin hugo
   chmod +x bin/hugo
 }
 

@@ -27,10 +27,10 @@ REPORT_FILE="$REPORT_DIR/summary.txt"
 MAVEN_OPTIONS='-B -fae -DskipDocs -DskipRecon -Dcheckstyle.failOnViolation=false --no-transfer-progress'
 
 declare -i rc
-mvn ${MAVEN_OPTIONS} checkstyle:check > "${REPORT_DIR}/output.log"
+mvn ${MAVEN_OPTIONS} checkstyle:check "$@" > "${REPORT_DIR}/output.log"
 rc=$?
 if [[ ${rc} -ne 0 ]]; then
-  mvn ${MAVEN_OPTIONS} clean test-compile checkstyle:check > output.log
+  mvn ${MAVEN_OPTIONS} clean test-compile checkstyle:check "$@" > output.log
   rc=$?
   mkdir -p "$REPORT_DIR" # removed by mvn clean
   mv output.log "${REPORT_DIR}"/

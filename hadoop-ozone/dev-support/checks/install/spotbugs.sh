@@ -20,7 +20,9 @@
 : ${SPOTBUGS_VERSION:=3.1.12}
 
 _install_spotbugs() {
-  curl -LSs "https://repo.maven.apache.org/maven2/com/github/spotbugs/spotbugs/${SPOTBUGS_VERSION}/spotbugs-${SPOTBUGS_VERSION}.tgz" | tar -xz -f -
+  # SDP: download from the internal mirror
+  : ${SPOTBUGS_DOWNLOAD_BASE:=http://tklew-kap000001.vm.esrt.cloud.sbrf.ru/ozone/lib/spotbugs}
+  curl -LSs "${SPOTBUGS_DOWNLOAD_BASE}/v${SPOTBUGS_VERSION}/spotbugs-${SPOTBUGS_VERSION}.tgz" | tar -xz -f -
 }
 
 _install_tool spotbugs "spotbugs-${SPOTBUGS_VERSION}/bin"
