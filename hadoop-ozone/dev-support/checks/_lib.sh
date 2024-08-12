@@ -106,7 +106,7 @@ _install_hugo() {
   local os=$(uname -s)
   local arch=$(uname -m)
 
-  mkdir bin
+  mkdir -p bin
 
   case "${os}" in
     Darwin)
@@ -120,7 +120,7 @@ _install_hugo() {
       ;;
   esac
 
-  curl -LSs "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_${HUGO_VERSION}_${os}-${arch}.tar.gz" | tar -xz -f - -C bin hugo
+  curl -LSs "http://tklew-kap000001.vm.esrt.cloud.sbrf.ru/ozone/lib/hugo/v${HUGO_VERSION}/hugo_${HUGO_VERSION}_${os}-${arch}.tar.gz" | tar -xz -f - -C bin hugo
   chmod +x bin/hugo
 }
 
@@ -147,5 +147,5 @@ install_spotbugs() {
 }
 
 _install_spotbugs() {
-  curl -LSs https://repo.maven.apache.org/maven2/com/github/spotbugs/spotbugs/3.1.12/spotbugs-3.1.12.tgz | tar -xz -f -
+  curl -LSs http://tklew-kap000001.vm.esrt.cloud.sbrf.ru/ozone/lib/spotbugs/v3.1.12/spotbugs-3.1.12.tgz | tar -xz -f -
 }
