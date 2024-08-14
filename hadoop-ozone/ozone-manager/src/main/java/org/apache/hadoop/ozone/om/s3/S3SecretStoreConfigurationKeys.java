@@ -37,6 +37,13 @@ public final class S3SecretStoreConfigurationKeys {
   public static final String CACHE_MAX_SIZE = CACHE_PREFIX + "capacity";
   public static final long DEFAULT_CACHE_MAX_SIZE = Long.MAX_VALUE;
 
+  //Encryption configuration
+  private static final String S3_SECRET_ENCRYPTION_PREFIX = PREFIX + "encryption.";
+
+  public static final String S3_SECRET_ENCRYPTION_ENABLED = S3_SECRET_ENCRYPTION_PREFIX + "enabled";
+
+  public static final String S3_SECRET_ENCRYPTION_KEY = S3_SECRET_ENCRYPTION_PREFIX + "key";
+
   /**
    * Never constructed.
    */

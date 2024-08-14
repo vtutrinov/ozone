@@ -95,6 +95,7 @@ import org.apache.hadoop.ozone.om.helpers.KeyInfoWithVolumeContext;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
 import org.apache.hadoop.ozone.om.s3.S3SecretCacheProvider;
+import org.apache.hadoop.ozone.om.s3.S3SecretEncryptionImpl;
 import org.apache.hadoop.ozone.om.s3.S3SecretStoreProvider;
 import org.apache.hadoop.ozone.om.service.OMRangerBGSyncService;
 import org.apache.hadoop.ozone.om.snapshot.OmSnapshotUtils;
@@ -301,6 +302,8 @@ import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.INVA
 import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.PERMISSION_DENIED;
 import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.TOKEN_ERROR_OTHER;
 import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.DEFAULT_SECRET_STORAGE_TYPE;
+import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SECRET_ENCRYPTION_ENABLED;
+import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SECRET_ENCRYPTION_KEY;
 import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SECRET_STORAGE_TYPE;
 import static org.apache.hadoop.security.UserGroupInformation.getCurrentUser;
 import static org.apache.hadoop.util.ExitUtil.terminate;
@@ -831,10 +834,20 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
     S3SecretCacheProvider secretCacheProvider = S3SecretCacheProvider.IN_MEMORY;
 
+    boolean encryptionEnabled = configuration.getBoolean(
+        S3_SECRET_ENCRYPTION_ENABLED,
+        true
+    );
+
+    S3SecretEncryption s3SecretEncryption = encryptionEnabled
+        ? new S3SecretEncryptionImpl(configuration.get(S3_SECRET_ENCRYPTION_KEY))
+        : S3SecretEncryption.NOOP;
+
     s3SecretManager = new S3SecretLockedManager(
         new S3SecretManagerImpl(
             store,
-            secretCacheProvider.get(configuration)
+            secretCacheProvider.get(configuration),
+            s3SecretEncryption
         ),
         metadataManager.getLock()
     );

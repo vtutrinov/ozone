@@ -25,19 +25,21 @@ import org.apache.hadoop.ipc.Server.Call;
 import org.apache.hadoop.ozone.audit.AuditLogger;
 import org.apache.hadoop.ozone.audit.AuditMessage;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
-import org.apache.hadoop.ozone.om.OmMetadataManagerImpl;
-import org.apache.hadoop.ozone.om.OzoneManager;
-import org.apache.hadoop.ozone.om.S3SecretLockedManager;
 import org.apache.hadoop.ozone.om.OMMetrics;
 import org.apache.hadoop.ozone.om.OMMultiTenantManager;
+import org.apache.hadoop.ozone.om.OmMetadataManagerImpl;
+import org.apache.hadoop.ozone.om.OzoneManager;
+import org.apache.hadoop.ozone.om.S3SecretCache;
+import org.apache.hadoop.ozone.om.S3SecretFunction;
+import org.apache.hadoop.ozone.om.S3SecretLockedManager;
+import org.apache.hadoop.ozone.om.S3SecretManager;
 import org.apache.hadoop.ozone.om.S3SecretManagerImpl;
 import org.apache.hadoop.ozone.om.TenantOp;
-import org.apache.hadoop.ozone.om.S3SecretCache;
-import org.apache.hadoop.ozone.om.multitenant.AuthorizerLockImpl;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes;
 import org.apache.hadoop.ozone.om.helpers.OmDBAccessIdInfo;
 import org.apache.hadoop.ozone.om.helpers.S3SecretValue;
+import org.apache.hadoop.ozone.om.multitenant.AuthorizerLockImpl;
 import org.apache.hadoop.ozone.om.multitenant.Tenant;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
 import org.apache.hadoop.ozone.om.request.s3.tenant.OMTenantAssignUserAccessIdRequest;
@@ -48,6 +50,7 @@ import org.apache.hadoop.ozone.om.response.s3.security.S3RevokeSecretResponse;
 import org.apache.hadoop.ozone.om.response.s3.tenant.OMTenantAssignUserAccessIdResponse;
 import org.apache.hadoop.ozone.om.response.s3.tenant.OMTenantCreateResponse;
 import org.apache.hadoop.ozone.om.s3.S3SecretCacheProvider;
+import org.apache.hadoop.ozone.om.s3.S3SecretEncryptionImpl;
 import org.apache.hadoop.ozone.om.upgrade.OMLayoutVersionManager;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateTenantRequest;
@@ -73,8 +76,10 @@ import java.util.UUID;
 import com.google.common.base.Optional;
 
 import static org.apache.hadoop.security.authentication.util.KerberosName.DEFAULT_MECHANISM;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.framework;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -142,7 +147,8 @@ public class TestS3GetSecretRequest {
     S3SecretLockedManager secretManager = new S3SecretLockedManager(
             new S3SecretManagerImpl(
                     omMetadataManager,
-                    S3SecretCacheProvider.IN_MEMORY.get(conf)
+                    S3SecretCacheProvider.IN_MEMORY.get(conf),
+                    new S3SecretEncryptionImpl("password")
             ),
             omMetadataManager.getLock()
     );
@@ -315,6 +321,30 @@ public class TestS3GetSecretRequest {
     when(ozoneManager.isS3Admin(ugiAlice)).thenReturn(true);
 
     processSuccessSecretRequest(USER_CAROL, 1, true);
+  }
+
+  @Test
+  public void testFailSecretManagerOnGetSecret() throws IOException {
+
+    // This effectively makes alice an S3 admin.
+    when(ozoneManager.isS3Admin(ugiAlice)).thenReturn(true);
+
+    S3SecretManager failingS3Secret = mock(S3SecretManager.class);
+    doThrow(new IOException("Test Exception: Failed to store secret"))
+        .when(failingS3Secret).storeSecret(any(), any());
+    when(failingS3Secret.doUnderLock(any(), any()))
+        .thenAnswer(invocationOnMock -> {
+          S3SecretFunction<Boolean> action =
+              invocationOnMock.getArgument(1, S3SecretFunction.class);
+
+          return action.accept(failingS3Secret);
+        });
+
+    when(ozoneManager.getS3SecretManager()).thenReturn(failingS3Secret);
+
+    assertThrows(Exception.class, () ->
+        processSuccessSecretRequest(USER_ALICE, 1, true)
+    );
   }
 
   @Test
