@@ -148,7 +148,15 @@ public class S3GetSecretRequest extends OMClientRequest {
       omClientResponse = ozoneManager.getS3SecretManager()
           .doUnderLock(accessId, s3SecretManager -> {
             final S3SecretValue assignS3SecretValue;
-            S3SecretValue s3SecretValue = s3SecretManager.getSecret(accessId);
+            S3SecretValue s3SecretValue;
+            try {
+              s3SecretValue = s3SecretManager.getSecret(accessId);
+            } catch (IOException e) {
+              // Failed to decrypt the key
+              throw new OMException("Failed to read secret for '" + accessId +
+                  "'. Please revoke and create again.", e, OMException.ResultCodes.
+                  ACCESS_DENIED);
+            }
 
             if (s3SecretValue == null) {
               // Not found in S3SecretTable.
@@ -189,8 +197,15 @@ public class S3GetSecretRequest extends OMClientRequest {
               // A storage that does not support batch writing is likely to be a
               // third-party secret storage that might throw an exception on write.
               // In the case of the exception the request will fail.
-              s3SecretManager.storeSecret(assignS3SecretValue.getKerberosID(),
-                                          assignS3SecretValue);
+              try {
+                s3SecretManager.storeSecret(assignS3SecretValue.getKerberosID(),
+                                            assignS3SecretValue);
+              } catch (IOException e) {
+                // Failed to decrypt the key
+                throw new OMException("Failed to store secret for '" + accessId +
+                    "'. Please revoke and create again.", e, OMException.ResultCodes.
+                    ACCESS_DENIED);
+              }
             }
 
             // Compose response

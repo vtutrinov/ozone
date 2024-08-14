@@ -101,6 +101,8 @@ import static org.apache.hadoop.ozone.om.lock.OzoneManagerLock.LeveledResource.V
 import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.LEADER_AND_READY;
 import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.getRaftGroupIdFromOmServiceId;
 import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.DEFAULT_SECRET_STORAGE_TYPE;
+import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SECRET_ENCRYPTION_ENABLED;
+import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SECRET_ENCRYPTION_KEY;
 import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SECRET_STORAGE_TYPE;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerInterServiceProtocolProtos.OzoneManagerInterService;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OzoneManagerService;
@@ -291,6 +293,7 @@ import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.ratis_snapshot.OmRatisSnapshotProvider;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
 import org.apache.hadoop.ozone.om.s3.S3SecretCacheProvider;
+import org.apache.hadoop.ozone.om.s3.S3SecretEncryptionImpl;
 import org.apache.hadoop.ozone.om.s3.S3SecretStoreProvider;
 import org.apache.hadoop.ozone.om.service.CompactDBUtil;
 import org.apache.hadoop.ozone.om.service.DirectoryDeletingService;
@@ -979,10 +982,20 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
     S3SecretCacheProvider secretCacheProvider = S3SecretCacheProvider.IN_MEMORY;
 
+    boolean encryptionEnabled = configuration.getBoolean(
+        S3_SECRET_ENCRYPTION_ENABLED,
+        true
+    );
+
+    S3SecretEncryption s3SecretEncryption = encryptionEnabled
+        ? new S3SecretEncryptionImpl(configuration.get(S3_SECRET_ENCRYPTION_KEY))
+        : S3SecretEncryption.NOOP;
+
     s3SecretManager = new S3SecretLockedManager(
         new S3SecretManagerImpl(
             store,
-            secretCacheProvider.get(configuration)
+            secretCacheProvider.get(configuration),
+            s3SecretEncryption
         ),
         metadataManager.getLock()
     );

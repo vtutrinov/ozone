@@ -90,6 +90,10 @@ public class VaultS3SecretStore implements S3SecretStore {
     vault = auth.auth(config);
   }
 
+  private boolean isInitialized() {
+    return vault != null;
+  }
+
   @Override
   public void storeSecret(String kerberosId, S3SecretValue secret)
       throws IOException {
@@ -138,6 +142,9 @@ public class VaultS3SecretStore implements S3SecretStore {
 
   private LogicalResponse callWithReAuth(RestCall action)
       throws VaultException {
+    if(!isInitialized()){
+      auth();
+    }
     LogicalResponse response = action.call();
     int status = response.getRestResponse().getStatus();
     if (isAuthFailed(status)) {
