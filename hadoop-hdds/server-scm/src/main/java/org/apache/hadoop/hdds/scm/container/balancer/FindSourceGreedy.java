@@ -190,4 +190,9 @@ public class FindSourceGreedy implements FindSourceStrategy {
     sizeLeavingNode.clear();
     resetSources(potentialDataNodes);
   }
+
+  @Override
+  public Map<DatanodeDetails, Long> getSizeLeavingNodes() {
+    return sizeLeavingNode;
+  }
 }

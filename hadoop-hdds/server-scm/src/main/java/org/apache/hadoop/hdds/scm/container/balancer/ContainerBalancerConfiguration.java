@@ -449,7 +449,7 @@ public final class ContainerBalancerConfiguration {
         excludeNodes.equals("") ? "None" : excludeNodes);
   }
 
-  ContainerBalancerConfigurationProto.Builder toProtobufBuilder() {
+  public ContainerBalancerConfigurationProto.Builder toProtobufBuilder() {
     ContainerBalancerConfigurationProto.Builder builder =
         ContainerBalancerConfigurationProto.newBuilder();
 

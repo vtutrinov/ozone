@@ -26,6 +26,7 @@ import javax.annotation.Nonnull;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
 
 /**
  * This interface can be used to implement strategies to find a target for a
@@ -69,4 +70,6 @@ public interface FindTargetStrategy {
    *               that containers can be moved to
    */
   void resetPotentialTargets(@Nonnull Collection<DatanodeDetails> targets);
+
+  Map<DatanodeDetails, Long> getSizeEnteringNodes();
 }

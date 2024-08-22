@@ -23,6 +23,7 @@ import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos.DeletedBlocksTransactionInfo;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.DecommissionScmResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.StartContainerBalancerResponseProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.ContainerBalancerStatusInfoResponseProto;
 import org.apache.hadoop.hdds.scm.DatanodeAdminError;
 import org.apache.hadoop.hdds.scm.container.ContainerReplicaInfo;
 import org.apache.hadoop.hdds.scm.container.ReplicationManagerReport;
@@ -356,6 +357,8 @@ public interface ScmClient extends Closeable {
    * @return True if ContainerBalancer is running, false otherwise.
    */
   boolean getContainerBalancerStatus() throws IOException;
+
+  ContainerBalancerStatusInfoResponseProto getContainerBalancerStatusInfo() throws IOException;
 
   /**
    * returns the list of ratis peer roles. Currently only include peer address.
