@@ -174,11 +174,6 @@ public final class StorageLocationReport implements
    * @throws IOException In case, the storage type specified is invalid.
    */
   public StorageReportProto getProtoBufMessage() throws IOException {
-    return getProtoBufMessage(null);
-  }
-
-  public StorageReportProto getProtoBufMessage(ConfigurationSource conf)
-      throws IOException {
     StorageReportProto.Builder srb = StorageReportProto.newBuilder();
     return srb.setStorageUuid(getId())
         .setCapacity(getCapacity())
@@ -188,8 +183,7 @@ public final class StorageLocationReport implements
         .setStorageType(getStorageTypeProto())
         .setStorageLocation(getStorageLocation())
         .setFailed(isFailed())
-        .setFreeSpaceToSpare(conf != null ?
-            VolumeUsage.getMinVolumeFreeSpace(conf, getCapacity()) : 0)
+        .setFreeSpaceToSpare(getFreeSpaceToSpare())
         .build();
   }
 

@@ -55,7 +55,7 @@ public class MutableVolumeSet implements VolumeSet {
   private static final Logger LOG =
       LoggerFactory.getLogger(MutableVolumeSet.class);
 
-  private ConfigurationSource conf;
+  private final ConfigurationSource conf;
 
   /**
    * Maintains a map of all active volumes in the DataNode.
@@ -89,6 +89,7 @@ public class MutableVolumeSet implements VolumeSet {
   private final StorageVolumeFactory volumeFactory;
   private final StorageVolume.VolumeType volumeType;
   private int maxVolumeFailuresTolerated;
+  private long freeSpaceToSpare = -1;
 
   public MutableVolumeSet(String dnUuid, ConfigurationSource conf,
       StateContext context, StorageVolume.VolumeType volumeType,
@@ -495,6 +496,7 @@ public class MutableVolumeSet implements VolumeSet {
             .setRemaining(remaining)
             .setScmUsed(scmUsed)
             .setCommitted(committed)
+            .setFreeSpaceToSpare(getFreeSpaceToSpare(capacity))
             .setStorageType(volume.getStorageType());
         StorageLocationReport r = builder.build();
         reports[counter++] = r;
@@ -515,5 +517,13 @@ public class MutableVolumeSet implements VolumeSet {
     } finally {
       this.readUnlock();
     }
+  }
+
+  private long getFreeSpaceToSpare(long capacity) {
+    if (freeSpaceToSpare != -1) {
+      freeSpaceToSpare = VolumeUsage.getMinVolumeFreeSpace(conf, capacity);
+    }
+
+    return freeSpaceToSpare;
   }
 }
