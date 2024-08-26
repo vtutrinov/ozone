@@ -836,7 +836,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
     boolean encryptionEnabled = configuration.getBoolean(
         S3_SECRET_ENCRYPTION_ENABLED,
-        true
+        false
     );
 
     S3SecretEncryption s3SecretEncryption = encryptionEnabled
