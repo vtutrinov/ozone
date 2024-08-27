@@ -22,6 +22,7 @@ import static org.apache.hadoop.ozone.s3.remote.S3SecretRemoteStoreConfiguration
 import static org.apache.hadoop.ozone.s3.remote.S3SecretRemoteStoreConfigurationKeys.APP_ROLE_SECRET;
 import static org.apache.hadoop.ozone.s3.remote.S3SecretRemoteStoreConfigurationKeys.AUTH_TYPE;
 
+import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ozone.s3.remote.S3SecretRemoteStoreConfigurationKeys;
 
@@ -41,7 +42,18 @@ public enum AuthType {
     case APP_ROLE:
       String rolePath = conf.get(APP_ROLE_PATH);
       String roleId = conf.get(APP_ROLE_ID);
-      String roleSecret = conf.get(APP_ROLE_SECRET);
+      String roleSecret = null;
+      try {
+        char[] roleSecretRaw = conf.getPassword(APP_ROLE_SECRET);
+        if (roleSecretRaw == null) {
+          throw new IllegalStateException("The configuration property " +
+                  "'ozone.secret.s3.store.remote.vault.auth.approle.secret' is not set");
+        }
+        roleSecret = new String(roleSecretRaw).trim();
+      } catch (IOException e) {
+        throw new IllegalStateException(e);
+      }
+
       return new AppRoleAuth(rolePath, roleId, roleSecret);
     default:
       throw new IllegalStateException(
