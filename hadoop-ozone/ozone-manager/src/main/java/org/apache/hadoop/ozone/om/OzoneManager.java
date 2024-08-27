@@ -839,8 +839,13 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         false
     );
 
+    char[] secretKeyRaw = configuration.getPassword(S3_SECRET_ENCRYPTION_KEY);
+    if (secretKeyRaw == null) {
+      throw new IOException("The configuration property 'ozone.secret.s3.store.encryption.key' is not set");
+    }
+    String secretKey = new String(secretKeyRaw).trim();
     S3SecretEncryption s3SecretEncryption = encryptionEnabled
-        ? new S3SecretEncryptionImpl(configuration.get(S3_SECRET_ENCRYPTION_KEY))
+        ? new S3SecretEncryptionImpl(secretKey)
         : S3SecretEncryption.NOOP;
 
     s3SecretManager = new S3SecretLockedManager(
