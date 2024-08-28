@@ -839,20 +839,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         false
     );
 
-    char[] secretKeyRaw = configuration.getPassword(S3_SECRET_ENCRYPTION_KEY);
-    if (secretKeyRaw == null) {
-      throw new IOException("The configuration property 'ozone.secret.s3.store.encryption.key' is not set");
-    }
-    String secretKey = new String(secretKeyRaw).trim();
-    S3SecretEncryption s3SecretEncryption = encryptionEnabled
-        ? new S3SecretEncryptionImpl(secretKey)
-        : S3SecretEncryption.NOOP;
-
     s3SecretManager = new S3SecretLockedManager(
         new S3SecretManagerImpl(
             store,
             secretCacheProvider.get(configuration),
-            s3SecretEncryption
+            initS3SecretEncryption(encryptionEnabled)
         ),
         metadataManager.getLock()
     );
@@ -905,6 +896,20 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       instantiatePrepareStateOnStartup();
     }
   }
+
+  private S3SecretEncryption initS3SecretEncryption(boolean encryptionEnabled) throws IOException {
+    if (!encryptionEnabled) {
+      return S3SecretEncryption.NOOP;
+    } else {
+      char[] secretKeyRaw = configuration.getPassword(S3_SECRET_ENCRYPTION_KEY);
+      if (secretKeyRaw == null) {
+        throw new IOException("The configuration property 'ozone.secret.s3.store.encryption.key' is not set");
+      }
+      String secretKey = new String(secretKeyRaw).trim();
+      return new S3SecretEncryptionImpl(secretKey);
+    }
+  }
+
 
   /**
    * Return scmClient.
