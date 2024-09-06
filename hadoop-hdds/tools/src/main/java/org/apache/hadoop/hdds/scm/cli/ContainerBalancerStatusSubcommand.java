@@ -153,9 +153,15 @@ public class ContainerBalancerStatusSubcommand extends ScmSubcommand {
     String enteringDataNodeList = iterationStatusInfo.getSizeEnteringNodesList()
             .stream().map(nodeInfo -> nodeInfo.getUuid() + " <- " + getPrettySize(nodeInfo.getDataVolume()) + "\n")
             .collect(Collectors.joining());
+    if (enteringDataNodeList.isEmpty()) {
+      enteringDataNodeList = " -\n";
+    }
     String leavingDataNodeList = iterationStatusInfo.getSizeLeavingNodesList()
             .stream().map(nodeInfo -> nodeInfo.getUuid() + " -> " + getPrettySize(nodeInfo.getDataVolume()) + "\n")
             .collect(Collectors.joining());
+    if (leavingDataNodeList.isEmpty()) {
+      leavingDataNodeList = " -\n";
+    }
     return String.format(
             "%-50s %s%n" +
                     "%-50s %s%n" +
@@ -173,7 +179,7 @@ public class ContainerBalancerStatusSubcommand extends ScmSubcommand {
             "Iteration number", iterationNumber,
             "Iteration duration", getPrettyIterationStatusInfo(iterationDuration),
             "Iteration result",
-            iterationResult.isEmpty() ? "IN_PROGRESS" : iterationResult,
+            iterationResult.isEmpty() ? "-" : iterationResult,
             "Size scheduled to move", getPrettySize(sizeScheduledForMove),
             "Moved data size", getPrettySize(dataSizeMoved),
             "Scheduled to move containers", containerMovesScheduled,

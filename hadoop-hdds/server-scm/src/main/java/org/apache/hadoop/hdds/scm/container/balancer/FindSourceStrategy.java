@@ -77,5 +77,15 @@ public interface FindSourceStrategy {
    */
   void resetPotentialSources(@Nonnull Collection<DatanodeDetails> sources);
 
+  /**
+   * get size leaving nodes
+   *
+   * @return map with {@link DatanodeDetails} and leaving size
+   */
   Map<DatanodeDetails, Long> getSizeLeavingNodes();
+
+  /**
+   * clear sizeLeavingNodes
+   */
+  void clearSizeLeavingNodes();
 }

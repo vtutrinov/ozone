@@ -61,7 +61,7 @@ Datanode Recommission is Finished
                             Should Not Contain   ${result}   ENTERING_MAINTENANCE
 
 Run Container Balancer
-    ${result} =             Execute                         ozone admin containerbalancer start -t 1 -d 100 -i 1
+    ${result} =             Execute                         ozone admin containerbalancer start -t 0.1 -i 3 -e 500 -l 500 -s 500 -d 100
                             Should Contain                  ${result}             Container Balancer started successfully.
 
 Wait Finish Of Balancing
@@ -70,19 +70,16 @@ Wait Finish Of Balancing
                             Wait Until Keyword Succeeds      3min    10sec    ContainerBalancer is Not Running
                             Sleep                   60000ms
 
-Verify Verbose Balancer Status
-    [arguments]    ${output}
-
+Verify Balancer Iteration
+    [arguments]       ${output}    ${number}    ${containers}
     Should Contain    ${output}    ContainerBalancer is Running.
     Should Contain    ${output}    Started at:
     Should Contain    ${output}    Container Balancer Configuration values:
-
-Verify Balancer Iteration
-    [arguments]    ${output}    ${number}    ${status}    ${containers}
-
-    Should Contain    ${output}    Iteration number                                   ${number}
-    Should Contain    ${output}    Iteration result                                   ${status}
-    Should Contain    ${output}    Scheduled to move containers                       ${containers}
+    Should Contain    ${output}    Iteration number${SPACE * 35}${number}
+    Should Contain    ${output}    Scheduled to move containers${SPACE * 23}${containers}
+    Should Contain    ${output}    Balancing duration:
+    Should Contain    ${output}    Iteration duration
+    Should Contain    ${result}    Current iteration info:
 
 Run Balancer Status
     ${result} =      Execute                         ozone admin containerbalancer status
@@ -90,19 +87,22 @@ Run Balancer Status
 
 Run Balancer Verbose Status
     ${result} =      Execute                         ozone admin containerbalancer status -v
-                     Verify Verbose Balancer Status    ${result}
-                     Verify Balancer Iteration    ${result}    1    IN_PROGRESS    3
-                     Should Contain                  ${result}             Current iteration info:
-                     Should Contain                  ${result}             Balancing duration:
-                     Should Contain                  ${result}             Iteration duration
+                     Verify Balancer Iteration       ${result}             1    3
+                     Should Contain                  ${result}             Iteration result${SPACE * 35}-
+                     Sleep                   60000ms
 
 Run Balancer Verbose History Status
     ${result} =    Execute                         ozone admin containerbalancer status -v --history
-                   Verify Verbose Balancer Status          ${result}
-                   Verify Balancer Iteration    ${result}    1    IN_PROGRESS    3
+                   Verify Balancer Iteration       ${result}             1    3
                    Should Contain                  ${result}             Iteration history list:
-                   Should Contain                  ${result}             Balancing duration:
-                   Should Contain                  ${result}             Iteration duration
+                   Should Contain                  ${result}             Size scheduled to move${SPACE * 29}0
+                   Should Contain                  ${result}             Moved data size${SPACE * 36}0
+                   Should Contain                  ${result}             Scheduled to move containers${SPACE * 23}0
+                   Should Contain                  ${result}             Already moved containers${SPACE * 27}0
+                   Should Contain                  ${result}             Failed to move containers${SPACE * 26}0
+                   Should Contain                  ${result}             Failed to move containers by timeout${SPACE * 15}0
+                   Should Contain                  ${result}             Iteration result${SPACE * 35}-
+                   Should Contain                  ${result}             Iteration result${SPACE * 35}ITERATION_COMPLETED
 
 ContainerBalancer is Not Running
     ${result} =         Execute          ozone admin containerbalancer status

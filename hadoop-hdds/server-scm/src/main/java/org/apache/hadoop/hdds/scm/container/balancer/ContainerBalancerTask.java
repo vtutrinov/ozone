@@ -263,6 +263,11 @@ public class ContainerBalancerTask implements Runnable {
 
       IterationResult iR = doIteration();
       saveIterationStatistic(i, iR);
+
+      resetState();
+      findTargetStrategy.clearSizeEnteringNodes();
+      findSourceStrategy.clearSizeLeavingNodes();
+
       metrics.incrementNumIterations(1);
 
       LOG.info("Result of this iteration of Container Balancer: {}", iR);
