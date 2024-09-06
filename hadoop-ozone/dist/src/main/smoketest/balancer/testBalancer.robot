@@ -75,11 +75,11 @@ Verify Balancer Iteration
     Should Contain    ${output}    ContainerBalancer is Running.
     Should Contain    ${output}    Started at:
     Should Contain    ${output}    Container Balancer Configuration values:
-    Should Contain    ${output}    Iteration number${SPACE * 35}${number}
-    Should Contain    ${output}    Scheduled to move containers${SPACE * 23}${containers}
+    Should Contain    ${output}    Iteration number ${number}                    collapse_spaces=True
+    Should Contain    ${output}    Scheduled to move containers ${containers}    collapse_spaces=True
     Should Contain    ${output}    Balancing duration:
     Should Contain    ${output}    Iteration duration
-    Should Contain    ${result}    Current iteration info:
+    Should Contain    ${output}    Current iteration info:
 
 Run Balancer Status
     ${result} =      Execute                         ozone admin containerbalancer status
@@ -88,21 +88,21 @@ Run Balancer Status
 Run Balancer Verbose Status
     ${result} =      Execute                         ozone admin containerbalancer status -v
                      Verify Balancer Iteration       ${result}             1    3
-                     Should Contain                  ${result}             Iteration result${SPACE * 35}-
+                     Should Contain                  ${result}             Iteration result -    collapse_spaces=True
                      Sleep                   60000ms
 
 Run Balancer Verbose History Status
     ${result} =    Execute                         ozone admin containerbalancer status -v --history
                    Verify Balancer Iteration       ${result}             1    3
                    Should Contain                  ${result}             Iteration history list:
-                   Should Contain                  ${result}             Size scheduled to move${SPACE * 29}0
-                   Should Contain                  ${result}             Moved data size${SPACE * 36}0
-                   Should Contain                  ${result}             Scheduled to move containers${SPACE * 23}0
-                   Should Contain                  ${result}             Already moved containers${SPACE * 27}0
-                   Should Contain                  ${result}             Failed to move containers${SPACE * 26}0
-                   Should Contain                  ${result}             Failed to move containers by timeout${SPACE * 15}0
-                   Should Contain                  ${result}             Iteration result${SPACE * 35}-
-                   Should Contain                  ${result}             Iteration result${SPACE * 35}ITERATION_COMPLETED
+                   Should Contain                  ${result}             Size scheduled to move 0                  collapse_spaces=True
+                   Should Contain                  ${result}             Moved data size 0                         collapse_spaces=True
+                   Should Contain                  ${result}             Scheduled to move containers 0            collapse_spaces=True
+                   Should Contain                  ${result}             Already moved containers 0                collapse_spaces=True
+                   Should Contain                  ${result}             Failed to move containers 0               collapse_spaces=True
+                   Should Contain                  ${result}             Failed to move containers by timeout 0    collapse_spaces=True
+                   Should Contain                  ${result}             Iteration result -                        collapse_spaces=True
+                   Should Contain                  ${result}             Iteration result ITERATION_COMPLETED      collapse_spaces=True
 
 ContainerBalancer is Not Running
     ${result} =         Execute          ozone admin containerbalancer status
