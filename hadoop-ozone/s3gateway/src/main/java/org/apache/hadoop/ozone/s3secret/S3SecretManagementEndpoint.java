@@ -34,6 +34,7 @@ import javax.ws.rs.core.Response;
 import java.io.IOException;
 
 import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
+import static javax.ws.rs.core.Response.Status.FORBIDDEN;
 import static javax.ws.rs.core.Response.Status.METHOD_NOT_ALLOWED;
 import static javax.ws.rs.core.Response.Status.NOT_FOUND;
 
@@ -74,6 +75,8 @@ public class S3SecretManagementEndpoint extends S3SecretEndpointBase {
           S3GAction.GENERATE_SECRET, getAuditParameters(), e));
       if (e.getResult() == OMException.ResultCodes.S3_SECRET_ALREADY_EXISTS) {
         return Response.status(BAD_REQUEST.getStatusCode(), e.getResult().toString()).build();
+      } else if (e.getResult() == OMException.ResultCodes.ACCESS_DENIED) {
+        return Response.status(FORBIDDEN.getStatusCode(), e.getLocalizedMessage()).build();
       } else {
         LOG.error("Can't execute get secret request: ", e);
         return Response.serverError().build();
