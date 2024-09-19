@@ -20,10 +20,12 @@ package org.apache.hadoop.ozone.om;
 import java.util.Iterator;
 import java.util.Map.Entry;
 import org.apache.hadoop.hdds.annotation.InterfaceAudience;
+import org.apache.hadoop.hdds.client.DefaultReplicationConfig;
 import org.apache.hadoop.hdds.utils.db.cache.CacheKey;
 import org.apache.hadoop.hdds.utils.db.cache.CacheValue;
 import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsInfo;
+import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metrics;
@@ -79,15 +81,24 @@ public class BucketUtilizationMetrics implements MetricsSource {
         availableSpace = Math.max(bucketInfo.getQuotaInBytes() - bucketInfo.getTotalBucketSpace(), 0);
       }
 
-      collector.addRecord(SOURCE)
+      MetricsRecordBuilder bucketMetrics = collector.addRecord(SOURCE)
           .setContext("Bucket metrics")
           .tag(BucketMetricsInfo.VolumeName, bucketInfo.getVolumeName())
           .tag(BucketMetricsInfo.BucketName, bucketInfo.getBucketName())
+          .tag(BucketMetricsInfo.BucketLayout, bucketInfo.getBucketLayout().name())
           .addGauge(BucketMetricsInfo.BucketUsedBytes, bucketInfo.getUsedBytes())
           .addGauge(BucketMetricsInfo.BucketSnapshotUsedBytes, bucketInfo.getSnapshotUsedBytes())
           .addGauge(BucketMetricsInfo.BucketQuotaBytes, bucketInfo.getQuotaInBytes())
           .addGauge(BucketMetricsInfo.BucketQuotaNamespace, bucketInfo.getQuotaInNamespace())
           .addGauge(BucketMetricsInfo.BucketAvailableBytes, availableSpace);
+
+      DefaultReplicationConfig replicationConfig = bucketInfo.getDefaultReplicationConfig();
+      if (replicationConfig != null) {
+        bucketMetrics.tag(
+            BucketMetricsInfo.ReplicationConfig,
+            replicationConfig.getReplicationConfig().getReplication()
+        );
+      }
     }
   }
 
@@ -99,6 +110,8 @@ public class BucketUtilizationMetrics implements MetricsSource {
   enum BucketMetricsInfo implements MetricsInfo {
     VolumeName("Volume Metrics."),
     BucketName("Bucket Metrics."),
+    BucketLayout("Bucket Layout."),
+    ReplicationConfig("Replication Config."),
     BucketUsedBytes("Bytes used by bucket in AOS."),
     BucketQuotaBytes("Bucket quota in bytes"),
     BucketSnapshotUsedBytes("Bucket quota bytes held in snapshots"),

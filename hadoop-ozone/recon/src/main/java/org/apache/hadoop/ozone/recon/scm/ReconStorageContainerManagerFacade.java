@@ -117,6 +117,7 @@ import org.apache.hadoop.ozone.recon.fsck.ContainerHealthTask;
 import org.apache.hadoop.ozone.recon.fsck.ReconReplicationManager;
 import org.apache.hadoop.ozone.recon.fsck.ReconSafeModeMgrTask;
 import org.apache.hadoop.ozone.recon.metrics.ReconScmContainerSyncMetrics;
+import org.apache.hadoop.ozone.recon.metrics.ReconSizeDistributionMetric;
 import org.apache.hadoop.ozone.recon.persistence.ContainerHealthSchemaManager;
 import org.apache.hadoop.ozone.recon.spi.ReconContainerMetadataManager;
 import org.apache.hadoop.ozone.recon.spi.StorageContainerServiceProvider;
@@ -340,7 +341,8 @@ public class ReconStorageContainerManagerFacade
                                             ReconContext reconContext,
                                             DataSource dataSource,
                                             ReconTaskStatusUpdaterManager taskStatusUpdaterManager,
-                                            ContainerHealthSchemaManager containerHealthSchemaManager)
+                                            ContainerHealthSchemaManager containerHealthSchemaManager,
+                                            ReconSizeDistributionMetric distributionMetric)
       throws IOException {
     reconNodeDetails = reconUtils.getReconNodeDetails(conf);
     this.threadNamePrefix = reconNodeDetails.threadNamePrefix();
@@ -437,7 +439,8 @@ public class ReconStorageContainerManagerFacade
     );
 
     this.containerSizeCountTask = new ContainerSizeCountTask(containerManager,
-        reconTaskConfig, containerCountBySizeDao, utilizationSchemaDefinition, taskStatusUpdaterManager);
+        reconTaskConfig, containerCountBySizeDao, utilizationSchemaDefinition, taskStatusUpdaterManager,
+        distributionMetric);
 
     this.containerHealthSchemaManager = containerHealthSchemaManager;
     this.dataSource = dataSource;

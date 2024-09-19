@@ -123,6 +123,7 @@ import org.apache.hadoop.ozone.recon.api.types.RemoveDataNodesResponseWrapper;
 import org.apache.hadoop.ozone.recon.api.types.VolumeObjectDBInfo;
 import org.apache.hadoop.ozone.recon.api.types.VolumesResponse;
 import org.apache.hadoop.ozone.recon.common.ReconTestUtils;
+import org.apache.hadoop.ozone.recon.metrics.ReconSizeDistributionMetric;
 import org.apache.hadoop.ozone.recon.persistence.AbstractReconSqlDBTest;
 import org.apache.hadoop.ozone.recon.persistence.ContainerHealthSchemaManager;
 import org.apache.hadoop.ozone.recon.recovery.ReconOMMetadataManager;
@@ -283,6 +284,7 @@ public class TestEndpoints extends AbstractReconSqlDBTest {
             .addBinding(MetricsServiceProviderFactory.class)
             .addBinding(ContainerHealthSchemaManager.class)
             .addBinding(UtilizationEndpoint.class)
+            .addBinding(ReconSizeDistributionMetric.class)
             .addBinding(ReconUtils.class, reconUtilsMock)
             .addBinding(StorageContainerLocationProtocol.class, mockScmClient)
             .build();

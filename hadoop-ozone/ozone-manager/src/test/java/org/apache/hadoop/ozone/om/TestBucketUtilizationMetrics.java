@@ -35,6 +35,7 @@ import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsInfo;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.ozone.om.BucketUtilizationMetrics.BucketMetricsInfo;
+import org.apache.hadoop.ozone.om.helpers.BucketLayout;
 import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.junit.jupiter.api.Test;
 
@@ -92,6 +93,7 @@ public class TestBucketUtilizationMetrics {
 
     verify(mb, times(1)).tag(BucketMetricsInfo.VolumeName, VOLUME_NAME_1);
     verify(mb, times(1)).tag(BucketMetricsInfo.BucketName, BUCKET_NAME_1);
+    verify(mb, times(2)).tag(BucketMetricsInfo.BucketLayout, BucketLayout.OBJECT_STORE.name());
     verify(mb, times(1)).addGauge(BucketMetricsInfo.BucketUsedBytes, USED_BYTES_1);
     verify(mb, times(1)).addGauge(BucketMetricsInfo.BucketSnapshotUsedBytes, SNAPSHOT_USED_BYTES_1);
     verify(mb, times(1)).addGauge(BucketMetricsInfo.BucketQuotaBytes, QUOTA_IN_BYTES_1);
@@ -116,6 +118,7 @@ public class TestBucketUtilizationMetrics {
 
     when(bucketInfo.getVolumeName()).thenReturn(volumeName);
     when(bucketInfo.getBucketName()).thenReturn(bucketName);
+    when(bucketInfo.getBucketLayout()).thenReturn(BucketLayout.OBJECT_STORE);
     when(bucketInfo.getUsedBytes()).thenReturn(usedBytes);
     when(bucketInfo.getSnapshotUsedBytes()).thenReturn(snapshotUsedBytes);
     when(bucketInfo.getQuotaInBytes()).thenReturn(quotaInBytes);

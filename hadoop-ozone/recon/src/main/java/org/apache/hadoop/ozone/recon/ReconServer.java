@@ -47,6 +47,7 @@ import org.apache.hadoop.hdds.server.OzoneAdmins;
 import org.apache.hadoop.hdds.utils.HddsServerUtil;
 import org.apache.hadoop.ozone.OzoneSecurityUtil;
 import org.apache.hadoop.ozone.recon.api.types.FeatureProvider;
+import org.apache.hadoop.ozone.recon.metrics.ReconSizeDistributionMetric;
 import org.apache.hadoop.ozone.recon.metrics.ReconTaskStatusMetrics;
 import org.apache.hadoop.ozone.recon.scm.ReconSafeModeManager;
 import org.apache.hadoop.ozone.recon.scm.ReconStorageConfig;
@@ -89,6 +90,7 @@ public class ReconServer extends GenericCli implements Callable<Void> {
   private CertificateClient certClient;
   private ReconTaskStatusMetrics reconTaskStatusMetrics;
   private OzoneAdmins reconAdmins;
+  private ReconSizeDistributionMetric reconSizeDistributionMetric;
 
   private volatile boolean isStarted = false;
 
@@ -172,6 +174,8 @@ public class ReconServer extends GenericCli implements Callable<Void> {
 
       this.reconTaskStatusMetrics =
           injector.getInstance(ReconTaskStatusMetrics.class);
+      this.reconSizeDistributionMetric =
+          injector.getInstance(ReconSizeDistributionMetric.class);
 
       LOG.info("Initializing support of Recon Features...");
       FeatureProvider.initFeatureSupport(configuration);
@@ -297,6 +301,9 @@ public class ReconServer extends GenericCli implements Callable<Void> {
       isStarted = true;
       // Initialize metrics for Recon
       HddsServerUtil.initializeMetrics(configuration, "Recon");
+      if (reconSizeDistributionMetric != null) {
+        reconSizeDistributionMetric.register();
+      }
       if (httpServer != null) {
         httpServer.start();
       }
@@ -332,6 +339,9 @@ public class ReconServer extends GenericCli implements Callable<Void> {
         } catch (Exception e) {
           LOG.error("Stopping ozoneManagerServiceProvider is failed.", e);
         }
+      }
+      if (reconSizeDistributionMetric != null) {
+        reconSizeDistributionMetric.unregister();
       }
       if (reconTaskStatusMetrics != null) {
         reconTaskStatusMetrics.unregister();

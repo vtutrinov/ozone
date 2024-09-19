@@ -31,6 +31,7 @@ import org.apache.hadoop.hdds.scm.container.ContainerID;
 import org.apache.hadoop.hdds.scm.container.ContainerInfo;
 import org.apache.hadoop.hdds.scm.container.ContainerManager;
 import org.apache.hadoop.ozone.recon.ReconUtils;
+import org.apache.hadoop.ozone.recon.metrics.ReconSizeDistributionMetric;
 import org.apache.hadoop.ozone.recon.scm.ReconScmTask;
 import org.apache.hadoop.ozone.recon.tasks.updater.ReconTaskStatusUpdater;
 import org.apache.hadoop.ozone.recon.tasks.updater.ReconTaskStatusUpdaterManager;
@@ -59,19 +60,22 @@ public class ContainerSizeCountTask extends ReconScmTask {
   private HashMap<ContainerID, Long> processedContainers = new HashMap<>();
   private ReadWriteLock lock = new ReentrantReadWriteLock(true);
   private final ReconTaskStatusUpdater taskStatusUpdater;
+  private final ReconSizeDistributionMetric distributionMetric;
 
   public ContainerSizeCountTask(
       ContainerManager containerManager,
       ReconTaskConfig reconTaskConfig,
       ContainerCountBySizeDao containerCountBySizeDao,
       UtilizationSchemaDefinition utilizationSchemaDefinition,
-      ReconTaskStatusUpdaterManager taskStatusUpdaterManager) {
+      ReconTaskStatusUpdaterManager taskStatusUpdaterManager,
+      ReconSizeDistributionMetric distributionMetric) {
     super(taskStatusUpdaterManager);
     this.containerManager = containerManager;
     this.containerCountBySizeDao = containerCountBySizeDao;
     this.dslContext = utilizationSchemaDefinition.getDSLContext();
     interval = reconTaskConfig.getContainerSizeCountTaskInterval().toMillis();
     this.taskStatusUpdater = getTaskStatusUpdater();
+    this.distributionMetric = distributionMetric;
   }
 
 
@@ -240,14 +244,17 @@ public class ContainerSizeCountTask extends ReconScmTask {
         if (containerCountRecord == null && newRecord.getCount() > 0L) {
           // insert new row only for non-zero counts.
           insertToDb.add(newRecord);
+          distributionMetric.containerSizeDistribution(newRecord);
         } else if (containerCountRecord != null) {
           newRecord.setCount(containerCountRecord.getCount() +
               containerSizeCountMap.get(key));
           updateInDb.add(newRecord);
+          distributionMetric.containerSizeDistribution(newRecord);
         }
       } else if (newRecord.getCount() > 0) {
         // insert new row only for non-zero counts.
         insertToDb.add(newRecord);
+        distributionMetric.containerSizeDistribution(newRecord);
       }
     });
     containerCountBySizeDao.insert(insertToDb);
