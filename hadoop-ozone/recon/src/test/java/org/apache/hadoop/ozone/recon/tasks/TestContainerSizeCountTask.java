@@ -30,6 +30,7 @@ import java.util.List;
 import org.apache.hadoop.hdds.scm.container.ContainerID;
 import org.apache.hadoop.hdds.scm.container.ContainerInfo;
 import org.apache.hadoop.hdds.scm.container.ContainerManager;
+import org.apache.hadoop.ozone.recon.metrics.ReconSizeDistributionMetric;
 import org.apache.hadoop.ozone.recon.persistence.AbstractReconSqlDBTest;
 import org.apache.hadoop.ozone.recon.spi.StorageContainerServiceProvider;
 import org.hadoop.ozone.recon.schema.UtilizationSchemaDefinition;
@@ -71,7 +72,9 @@ public class TestContainerSizeCountTask extends AbstractReconSqlDBTest {
         reconTaskStatusDao,
         reconTaskConfig,
         containerCountBySizeDao,
-        utilizationSchemaDefinition);
+        utilizationSchemaDefinition,
+        mock(ReconSizeDistributionMetric.class)
+    );
     // Truncate table before running each test
     dslContext.truncate(CONTAINER_COUNT_BY_SIZE);
   }

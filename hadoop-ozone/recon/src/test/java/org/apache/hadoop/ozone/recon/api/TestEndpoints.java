@@ -76,6 +76,7 @@ import org.apache.hadoop.ozone.recon.api.types.PipelinesResponse;
 import org.apache.hadoop.ozone.recon.api.types.VolumeObjectDBInfo;
 import org.apache.hadoop.ozone.recon.api.types.VolumesResponse;
 import org.apache.hadoop.ozone.recon.common.CommonUtils;
+import org.apache.hadoop.ozone.recon.metrics.ReconSizeDistributionMetric;
 import org.apache.hadoop.ozone.recon.persistence.AbstractReconSqlDBTest;
 import org.apache.hadoop.ozone.recon.persistence.ContainerHealthSchemaManager;
 import org.apache.hadoop.ozone.recon.recovery.ReconOMMetadataManager;
@@ -257,6 +258,7 @@ public class TestEndpoints extends AbstractReconSqlDBTest {
             .addBinding(MetricsServiceProviderFactory.class)
             .addBinding(ContainerHealthSchemaManager.class)
             .addBinding(UtilizationEndpoint.class)
+            .addBinding(ReconSizeDistributionMetric.class)
             .addBinding(ReconUtils.class, reconUtilsMock)
             .addBinding(StorageContainerLocationProtocol.class, mockScmClient)
             .build();
@@ -279,9 +281,14 @@ public class TestEndpoints extends AbstractReconSqlDBTest {
         containerCountBySizeDao,
         utilizationSchemaDefinition);
     fileSizeCountTask =
-        new FileSizeCountTask(fileCountBySizeDao, utilizationSchemaDefinition);
-    omTableInsightTask = new OmTableInsightTask(
-        globalStatsDao, sqlConfiguration, reconOMMetadataManager);
+        new FileSizeCountTask(
+                fileCountBySizeDao,
+                reconTestInjector.getInstance(ReconSizeDistributionMetric.class),
+                utilizationSchemaDefinition
+        );
+    omTableInsightTask =
+        new OmTableInsightTask(globalStatsDao, sqlConfiguration,
+            reconOMMetadataManager);
     containerHealthSchemaManager =
         reconTestInjector.getInstance(ContainerHealthSchemaManager.class);
     clusterStateEndpoint =

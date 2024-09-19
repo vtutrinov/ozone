@@ -31,6 +31,7 @@ import org.apache.hadoop.hdds.scm.server.OzoneStorageContainerManager;
 import org.apache.hadoop.hdds.security.SecurityConfig;
 import org.apache.hadoop.hdds.security.x509.certificate.client.CertificateClient;
 import org.apache.hadoop.ozone.recon.api.types.FeatureProvider;
+import org.apache.hadoop.ozone.recon.metrics.ReconSizeDistributionMetric;
 import org.apache.hadoop.ozone.recon.security.ReconCertificateClient;
 import org.apache.hadoop.hdds.utils.HddsServerUtil;
 import org.apache.hadoop.ozone.OzoneSecurityUtil;
@@ -85,6 +86,7 @@ public class ReconServer extends GenericCli {
   private ReconStorageConfig reconStorage;
   private CertificateClient certClient;
   private ReconTaskStatusMetrics reconTaskStatusMetrics;
+  private ReconSizeDistributionMetric reconSizeDistributionMetric;
 
   private volatile boolean isStarted = false;
 
@@ -150,6 +152,8 @@ public class ReconServer extends GenericCli {
 
       this.reconTaskStatusMetrics =
           injector.getInstance(ReconTaskStatusMetrics.class);
+      this.reconSizeDistributionMetric =
+          injector.getInstance(ReconSizeDistributionMetric.class);
 
       LOG.info("Initializing support of Recon Features...");
       FeatureProvider.initFeatureSupport(configuration);
@@ -215,6 +219,9 @@ public class ReconServer extends GenericCli {
       if (reconTaskStatusMetrics != null) {
         reconTaskStatusMetrics.register();
       }
+      if (reconSizeDistributionMetric != null) {
+        reconSizeDistributionMetric.register();
+      }
       if (httpServer != null) {
         httpServer.start();
       }
@@ -250,6 +257,9 @@ public class ReconServer extends GenericCli {
         } catch (Exception e) {
           LOG.error("Stopping ozoneManagerServiceProvider is failed.", e);
         }
+      }
+      if (reconSizeDistributionMetric != null) {
+        reconSizeDistributionMetric.unregister();
       }
       if (reconTaskStatusMetrics != null) {
         reconTaskStatusMetrics.unregister();

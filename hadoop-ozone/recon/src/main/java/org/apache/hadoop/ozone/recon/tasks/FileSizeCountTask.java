@@ -27,6 +27,7 @@ import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
 import org.apache.hadoop.hdds.utils.db.Table;
 import org.apache.hadoop.hdds.utils.db.TableIterator;
 import org.apache.hadoop.ozone.recon.ReconUtils;
+import org.apache.hadoop.ozone.recon.metrics.ReconSizeDistributionMetric;
 import org.hadoop.ozone.recon.schema.UtilizationSchemaDefinition;
 import org.hadoop.ozone.recon.schema.tables.daos.FileCountBySizeDao;
 import org.hadoop.ozone.recon.schema.tables.pojos.FileCountBySize;
@@ -58,12 +59,15 @@ public class FileSizeCountTask implements ReconOmTask {
 
   private FileCountBySizeDao fileCountBySizeDao;
   private DSLContext dslContext;
+  private ReconSizeDistributionMetric distributionMetric;
 
   @Inject
   public FileSizeCountTask(FileCountBySizeDao fileCountBySizeDao,
+                           ReconSizeDistributionMetric distributionMetric,
                            UtilizationSchemaDefinition
                                utilizationSchemaDefinition) {
     this.fileCountBySizeDao = fileCountBySizeDao;
+    this.distributionMetric = distributionMetric;
     this.dslContext = utilizationSchemaDefinition.getDSLContext();
   }
 
@@ -233,14 +237,17 @@ public class FileSizeCountTask implements ReconOmTask {
         if (fileCountRecord == null && newRecord.getCount() > 0L) {
           // insert new row only for non-zero counts.
           insertToDb.add(newRecord);
+          distributionMetric.fileSizeDistribution(newRecord);
         } else if (fileCountRecord != null) {
           newRecord.setCount(fileCountRecord.getCount() +
               fileSizeCountMap.get(key));
           updateInDb.add(newRecord);
+          distributionMetric.fileSizeDistribution(newRecord);
         }
       } else if (newRecord.getCount() > 0) {
         // insert new row only for non-zero counts.
         insertToDb.add(newRecord);
+        distributionMetric.fileSizeDistribution(newRecord);
       }
     });
     fileCountBySizeDao.insert(insertToDb);

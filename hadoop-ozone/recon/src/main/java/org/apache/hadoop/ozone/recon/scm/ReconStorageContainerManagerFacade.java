@@ -93,6 +93,7 @@ import org.apache.hadoop.ozone.recon.ReconServerConfigKeys;
 import org.apache.hadoop.ozone.recon.ReconUtils;
 import org.apache.hadoop.ozone.recon.fsck.ContainerHealthTask;
 import org.apache.hadoop.ozone.recon.fsck.ReconSafeModeMgrTask;
+import org.apache.hadoop.ozone.recon.metrics.ReconSizeDistributionMetric;
 import org.apache.hadoop.ozone.recon.persistence.ContainerHealthSchemaManager;
 import org.apache.hadoop.ozone.recon.spi.ReconContainerMetadataManager;
 import org.apache.hadoop.ozone.recon.spi.StorageContainerServiceProvider;
@@ -172,7 +173,8 @@ public class ReconStorageContainerManagerFacade
       ContainerHealthSchemaManager containerHealthSchemaManager,
       ReconContainerMetadataManager reconContainerMetadataManager,
       ReconUtils reconUtils,
-      ReconSafeModeManager safeModeManager) throws IOException {
+      ReconSafeModeManager safeModeManager,
+      ReconSizeDistributionMetric distributionMetric) throws IOException {
     reconNodeDetails = reconUtils.getReconNodeDetails(conf);
     this.threadNamePrefix = reconNodeDetails.threadNamePrefix();
     this.eventQueue = new EventQueue(threadNamePrefix);
@@ -249,7 +251,8 @@ public class ReconStorageContainerManagerFacade
         reconTaskStatusDao,
         reconTaskConfig,
         containerCountBySizeDao,
-        utilizationSchemaDefinition);
+        utilizationSchemaDefinition,
+        distributionMetric);
 
     StaleNodeHandler staleNodeHandler =
         new ReconStaleNodeHandler(nodeManager, pipelineManager, conf,
