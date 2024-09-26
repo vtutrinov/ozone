@@ -21,6 +21,7 @@ package org.apache.hadoop.ozone.om.request.s3.security;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.audit.OMAction;
 import org.apache.hadoop.ozone.om.OzoneManager;
+import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
 import org.apache.hadoop.ozone.om.request.util.OmResponseUtil;
 import org.apache.hadoop.ozone.om.response.OMClientResponse;
@@ -92,21 +93,33 @@ public class S3RevokeSecretRequest extends OMClientRequest {
       omClientResponse = ozoneManager.getS3SecretManager()
           .doUnderLock(kerberosID, s3SecretManager -> {
             // Remove if entry exists in table
-            if (s3SecretManager.hasS3Secret(kerberosID)) {
-              LOG.info("Secret for {} exists in table, removing it.",
-                  kerberosID);
-              // Invalid entry in table cache immediately
-              s3SecretManager.invalidateCacheEntry(kerberosID);
-              return new S3RevokeSecretResponse(kerberosID,
-                  s3SecretManager,
-                  omResponse.setStatus(Status.OK).build());
-            } else {
-              LOG.info(
-                  "Secret for {} doesn't exist in table hence cannot" +
-                      " invalidate it", kerberosID);
-              return new S3RevokeSecretResponse(null,
-                  s3SecretManager,
-                  omResponse.setStatus(Status.S3_SECRET_NOT_FOUND).build());
+            try {
+              if (s3SecretManager.hasS3Secret(kerberosID)) {
+                LOG.info("Secret for {} exists in table, removing it.",
+                    kerberosID);
+                // Invalid entry in table cache immediately
+                s3SecretManager.invalidateCacheEntry(kerberosID);
+
+                if (!s3SecretManager.isBatchSupported()) {
+                  s3SecretManager.revokeSecret(kerberosID);
+                }
+
+                return new S3RevokeSecretResponse(kerberosID,
+                    s3SecretManager,
+                    omResponse.setStatus(Status.OK).build());
+              } else {
+                LOG.info(
+                    "Secret for {} doesn't exist in table hence cannot" +
+                        " invalidate it", kerberosID);
+                return new S3RevokeSecretResponse(null,
+                    s3SecretManager,
+                    omResponse.setStatus(Status.S3_SECRET_NOT_FOUND).build());
+              }
+            } catch (IOException e) {
+              // Failed to read the key, perhaps Secman is offline.
+              throw new OMException("Failed to check secret for '" + kerberosID +
+                  "'. Please make sure Secret Storage is running and correctly configured.", e, OMException.ResultCodes.
+                  ACCESS_DENIED);
             }
           });
     } catch (IOException ex) {
