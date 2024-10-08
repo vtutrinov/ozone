@@ -150,7 +150,7 @@ public class TestOzoneECClient {
     Map<DatanodeDetails, MockDatanodeStorage> storages =
         ((MockXceiverClientFactory) factoryStub).getStorages();
     DatanodeDetails[] dnDetails =
-        storages.keySet().toArray(new DatanodeDetails[storages.size()]);
+        storages.keySet().toArray(new DatanodeDetails[0]);
     Arrays.sort(dnDetails);
     for (int i = 0; i < inputChunks.length; i++) {
       MockDatanodeStorage datanodeStorage = storages.get(dnDetails[i]);
@@ -179,7 +179,7 @@ public class TestOzoneECClient {
     Map<DatanodeDetails, MockDatanodeStorage> storages =
         ((MockXceiverClientFactory) factoryStub).getStorages();
     DatanodeDetails[] dnDetails =
-        storages.keySet().toArray(new DatanodeDetails[storages.size()]);
+        storages.keySet().toArray(new DatanodeDetails[0]);
     Arrays.sort(dnDetails);
 
     for (int i = dataBlocks; i < parityBlocks + dataBlocks; i++) {

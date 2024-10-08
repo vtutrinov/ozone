@@ -19,6 +19,7 @@
 package org.apache.hadoop.hdds.scm.container.balancer;
 
 import com.google.common.annotations.VisibleForTesting;
+import java.util.Collection;
 import org.apache.hadoop.hdds.HddsConfigKeys;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.protocol.DatanodeDetails;
@@ -709,21 +710,25 @@ public class ContainerBalancerTask implements Runnable {
    */
   private void checkIterationMoveResults() {
     this.countDatanodesInvolvedPerIteration = 0;
-    CompletableFuture<Void> allFuturesResult = CompletableFuture.allOf(
-        moveSelectionToFutureMap.values()
-            .toArray(new CompletableFuture[moveSelectionToFutureMap.size()]));
-    try {
-      allFuturesResult.get(config.getMoveTimeout().toMillis(),
-          TimeUnit.MILLISECONDS);
-    } catch (InterruptedException e) {
-      LOG.warn("Container balancer is interrupted");
-      Thread.currentThread().interrupt();
-    } catch (TimeoutException e) {
-      long timeoutCounts = cancelMovesThatExceedTimeoutDuration();
-      LOG.warn("{} Container moves are canceled.", timeoutCounts);
-      metrics.incrementNumContainerMovesTimeoutInLatestIteration(timeoutCounts);
-    } catch (ExecutionException e) {
-      LOG.error("Got exception while checkIterationMoveResults", e);
+    Collection<CompletableFuture<MoveManager.MoveResult>> futures =
+        moveSelectionToFutureMap.values();
+    if (!futures.isEmpty()) {
+      CompletableFuture<Void> allFuturesResult = CompletableFuture.allOf(
+          futures.toArray(new CompletableFuture[0]));
+      try {
+        allFuturesResult.get(config.getMoveTimeout().toMillis(),
+            TimeUnit.MILLISECONDS);
+      } catch (InterruptedException e) {
+        LOG.warn("Container balancer is interrupted");
+        Thread.currentThread().interrupt();
+      } catch (TimeoutException e) {
+        long timeoutCounts = cancelMovesThatExceedTimeoutDuration();
+        LOG.warn("{} Container moves are canceled.", timeoutCounts);
+        metrics.incrementNumContainerMovesTimeoutInLatestIteration(
+            timeoutCounts);
+      } catch (ExecutionException e) {
+        LOG.error("Got exception while checkIterationMoveResults", e);
+      }
     }
 
     countDatanodesInvolvedPerIteration =
