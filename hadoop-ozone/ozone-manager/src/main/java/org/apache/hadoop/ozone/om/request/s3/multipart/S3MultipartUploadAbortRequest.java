@@ -165,6 +165,13 @@ public class S3MultipartUploadAbortRequest extends OMKeyRequest {
 
       multipartKeyInfo = omMetadataManager.getMultipartInfoTable()
           .get(multipartKey);
+
+      if (multipartKeyInfo == null) {
+        throw new OMException(
+            failureMessage(requestedVolume, requestedBucket, keyName),
+            OMException.ResultCodes.NO_SUCH_MULTIPART_UPLOAD_ERROR);
+      }
+
       multipartKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled());
 
       // When abort uploaded key, we need to subtract the PartKey length from
@@ -228,6 +235,12 @@ public class S3MultipartUploadAbortRequest extends OMKeyRequest {
     }
 
     return omClientResponse;
+  }
+
+  private static String failureMessage(String volume, String bucket,
+                                       String keyName) {
+    return "Abort Multipart Upload Failed: volume: " +
+        volume + " bucket: " + bucket + " key: " + keyName;
   }
 
   protected OMClientResponse getOmClientResponse(Exception exception,
