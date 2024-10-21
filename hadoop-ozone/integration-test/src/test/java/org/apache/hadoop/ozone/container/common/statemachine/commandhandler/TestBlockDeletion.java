@@ -102,6 +102,8 @@ import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_PIPELINE_OWNER_
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_STALENODE_INTERVAL;
 import static org.apache.hadoop.ozone
     .OzoneConfigKeys.OZONE_BLOCK_DELETING_SERVICE_INTERVAL;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Tests for Block deletion.
@@ -244,23 +246,23 @@ public class TestBlockDeletion {
       }
     }, 1000, 10000);
     // No containers with deleted blocks
-    Assertions.assertTrue(containerIdsWithDeletedBlocks.isEmpty());
+    assertTrue(containerIdsWithDeletedBlocks.isEmpty());
     // Delete transactionIds for the containers should be 0.
     // NOTE: this test assumes that all the container is KetValueContainer. If
     // other container types is going to be added, this test should be checked.
     matchContainerTransactionIds();
 
-    Assertions.assertEquals(0L,
+    assertEquals(0L,
         metrics.getNumBlockDeletionTransactionCreated());
     writeClient.deleteKey(keyArgs);
     Thread.sleep(5000);
     // The blocks should not be deleted in the DN as the container is open
     Throwable e = Assertions.assertThrows(AssertionError.class,
         () -> verifyBlocksDeleted(omKeyLocationInfoGroupList));
-    Assertions.assertTrue(
+    assertTrue(
         e.getMessage().startsWith("expected: <null> but was:"));
 
-    Assertions.assertEquals(0L, metrics.getNumBlockDeletionTransactionSent());
+    assertEquals(0L, metrics.getNumBlockDeletionTransactionSent());
     // close the containers which hold the blocks for the key
     OzoneTestUtils.closeAllContainers(scm.getEventQueue(), scm);
 
@@ -310,12 +312,12 @@ public class TestBlockDeletion {
     cluster.restartHddsDatanode(0, true);
     matchContainerTransactionIds();
 
-    Assertions.assertEquals(metrics.getNumBlockDeletionTransactionCreated(),
+    assertEquals(metrics.getNumBlockDeletionTransactionCreated(),
         metrics.getNumBlockDeletionTransactionCompleted());
-    Assertions.assertTrue(metrics.getNumBlockDeletionCommandSent() >=
+    assertTrue(metrics.getNumBlockDeletionCommandSent() >=
         metrics.getNumBlockDeletionCommandSuccess() +
             metrics.getBNumBlockDeletionCommandFailure());
-    Assertions.assertTrue(metrics.getNumBlockDeletionTransactionSent() >=
+    assertTrue(metrics.getNumBlockDeletionTransactionSent() >=
         metrics.getNumBlockDeletionTransactionFailure() +
             metrics.getNumBlockDeletionTransactionSuccess());
     LOG.info(metrics.toString());
@@ -324,7 +326,7 @@ public class TestBlockDeletion {
     for (int i = 5; i >= 0; i--) {
       if (logCapturer.getOutput().contains("1(" + i + ")")) {
         for (int j = 0; j <= i; j++) {
-          Assertions.assertTrue(logCapturer.getOutput()
+          assertTrue(logCapturer.getOutput()
               .contains("1(" + i + ")"));
         }
         break;
@@ -365,8 +367,8 @@ public class TestBlockDeletion {
     final int valueSize = value.getBytes(UTF_8).length;
     final int keyCount = 1;
     containerInfos.stream().forEach(container -> {
-      Assertions.assertEquals(valueSize, container.getUsedBytes());
-      Assertions.assertEquals(keyCount, container.getNumberOfKeys());
+      assertEquals(valueSize, container.getUsedBytes());
+      assertEquals(keyCount, container.getNumberOfKeys());
     });
 
     OzoneTestUtils.closeAllContainers(scm.getEventQueue(), scm);
@@ -387,7 +389,7 @@ public class TestBlockDeletion {
       containerMap.values().forEach(container -> {
         KeyValueContainerData containerData =
             (KeyValueContainerData)container.getContainerData();
-        Assertions.assertEquals(0, containerData.getNumPendingDeletionBlocks());
+        assertEquals(0, containerData.getNumPendingDeletionBlocks());
       });
     });
 
@@ -396,7 +398,7 @@ public class TestBlockDeletion {
     ((EventQueue)scm.getEventQueue()).processAll(1000);
     containerInfos = scm.getContainerManager().getContainers();
     containerInfos.stream().forEach(container ->
-        Assertions.assertEquals(HddsProtos.LifeCycleState.DELETING,
+        assertEquals(HddsProtos.LifeCycleState.DELETING,
             container.getState()));
     LogCapturer logCapturer = LogCapturer.captureLogs(
         legacyEnabled ? LegacyReplicationManager.LOG  : ReplicationManager.LOG);
@@ -420,10 +422,10 @@ public class TestBlockDeletion {
       List<ContainerInfo> infos = scm.getContainerManager().getContainers();
       try {
         infos.stream().forEach(container -> {
-          Assertions.assertEquals(HddsProtos.LifeCycleState.DELETED,
+          assertEquals(HddsProtos.LifeCycleState.DELETED,
               container.getState());
           try {
-            Assertions.assertEquals(HddsProtos.LifeCycleState.DELETED,
+            assertEquals(HddsProtos.LifeCycleState.DELETED,
                 scm.getScmMetadataStore().getContainerTable()
                     .get(container.containerID()).getState());
           } catch (IOException e) {
@@ -475,8 +477,8 @@ public class TestBlockDeletion {
     final int keyCount = 1;
     List<Long> containerIdList = new ArrayList<>();
     containerInfos.stream().forEach(container -> {
-      Assertions.assertEquals(valueSize, container.getUsedBytes());
-      Assertions.assertEquals(keyCount, container.getNumberOfKeys());
+      assertEquals(valueSize, container.getUsedBytes());
+      assertEquals(keyCount, container.getNumberOfKeys());
       containerIdList.add(container.getContainerID());
     });
 
@@ -524,14 +526,14 @@ public class TestBlockDeletion {
         100, 10 * 1000);
 
     // Container state should be empty now as key got deleted
-    Assertions.assertTrue(getContainerFromDN(
+    assertTrue(getContainerFromDN(
         cluster.getHddsDatanodes().get(0), containerId.getId())
         .getContainerData().isEmpty());
 
     // Restart DataNode
     cluster.restartHddsDatanode(0, true);
     // Container state should be empty even after restart
-    Assertions.assertTrue(getContainerFromDN(
+    assertTrue(getContainerFromDN(
         cluster.getHddsDatanodes().get(0), containerId.getId())
         .getContainerData().isEmpty());
 
@@ -541,10 +543,10 @@ public class TestBlockDeletion {
       List<ContainerInfo> infos = scm.getContainerManager().getContainers();
       try {
         infos.stream().forEach(container -> {
-          Assertions.assertEquals(HddsProtos.LifeCycleState.DELETED,
+          assertEquals(HddsProtos.LifeCycleState.DELETED,
               container.getState());
           try {
-            Assertions.assertEquals(HddsProtos.LifeCycleState.DELETED,
+            assertEquals(HddsProtos.LifeCycleState.DELETED,
                 scm.getScmMetadataStore().getContainerTable()
                     .get(container.containerID()).getState());
           } catch (IOException e) {
@@ -678,10 +680,10 @@ public class TestBlockDeletion {
       List<ContainerInfo> infos = scm.getContainerManager().getContainers();
       try {
         infos.stream().forEach(container -> {
-          Assertions.assertEquals(HddsProtos.LifeCycleState.DELETED,
+          assertEquals(HddsProtos.LifeCycleState.DELETED,
               container.getState());
           try {
-            Assertions.assertEquals(HddsProtos.LifeCycleState.DELETED,
+            assertEquals(HddsProtos.LifeCycleState.DELETED,
                 scm.getScmMetadataStore().getContainerTable()
                     .get(container.containerID()).getState());
           } catch (IOException e) {
@@ -714,15 +716,15 @@ public class TestBlockDeletion {
       for (ContainerData containerData : containerDataList) {
         long containerId = containerData.getContainerID();
         if (containerIdsWithDeletedBlocks.contains(containerId)) {
-          Assertions.assertTrue(
+          assertTrue(
               scm.getContainerInfo(containerId).getDeleteTransactionId() > 0);
           maxTransactionId = max(maxTransactionId,
               scm.getContainerInfo(containerId).getDeleteTransactionId());
         } else {
-          Assertions.assertEquals(
+          assertEquals(
               scm.getContainerInfo(containerId).getDeleteTransactionId(), 0);
         }
-        Assertions.assertEquals(
+        assertEquals(
             ((KeyValueContainerData) dnContainerSet.getContainer(containerId)
                 .getContainerData()).getDeleteTransactionId(),
             scm.getContainerInfo(containerId).getDeleteTransactionId());

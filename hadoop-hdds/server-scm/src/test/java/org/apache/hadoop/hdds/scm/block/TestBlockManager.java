@@ -77,6 +77,7 @@ import org.apache.hadoop.ozone.protocol.commands.CommandForDatanode;
 import org.apache.hadoop.ozone.protocol.commands.CreatePipelineCommand;
 import org.apache.ozone.test.GenericTestUtils;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -211,7 +212,7 @@ public class TestBlockManager {
     HddsTestUtils.openAllRatisPipelines(pipelineManager);
     AllocatedBlock block = blockManager.allocateBlock(DEFAULT_BLOCK_SIZE,
         replicationConfig, OzoneConsts.OZONE, new ExcludeList());
-    Assertions.assertNotNull(block);
+    assertNotNull(block);
   }
 
   @Test
@@ -230,7 +231,7 @@ public class TestBlockManager {
     AllocatedBlock block = blockManager
         .allocateBlock(DEFAULT_BLOCK_SIZE, replicationConfig, OzoneConsts.OZONE,
             excludeList);
-    Assertions.assertNotNull(block);
+    assertNotNull(block);
     for (PipelineID id : excludeList.getPipelineIds()) {
       Assertions.assertNotEquals(block.getPipeline().getId(), id);
     }
@@ -241,7 +242,7 @@ public class TestBlockManager {
     block = blockManager
         .allocateBlock(DEFAULT_BLOCK_SIZE, replicationConfig, OzoneConsts.OZONE,
             excludeList);
-    Assertions.assertNotNull(block);
+    assertNotNull(block);
     Assertions.assertTrue(
         excludeList.getPipelineIds().contains(block.getPipeline().getId()));
   }
@@ -497,7 +498,7 @@ public class TestBlockManager {
   @Test
   public void testAllocateBlockSucInSafeMode() throws Exception {
     // Test2: Exit safe mode and then try allocateBock again.
-    Assertions.assertNotNull(blockManager.allocateBlock(DEFAULT_BLOCK_SIZE,
+    assertNotNull(blockManager.allocateBlock(DEFAULT_BLOCK_SIZE,
         replicationConfig, OzoneConsts.OZONE, new ExcludeList()));
   }
 
@@ -608,7 +609,7 @@ public class TestBlockManager {
     }
     Assertions.assertEquals(0,
         pipelineManager.getPipelines(replicationConfig).size());
-    Assertions.assertNotNull(blockManager
+    assertNotNull(blockManager
         .allocateBlock(DEFAULT_BLOCK_SIZE, replicationConfig, OzoneConsts.OZONE,
             new ExcludeList()));
   }
