@@ -171,12 +171,16 @@ public class S3MultipartUploadCommitPartRequest extends OMKeyRequest {
       // set the data size and location info list
       omKeyInfo.setDataSize(keyArgs.getDataSize());
       omKeyInfo.updateLocationInfoList(keyArgs.getKeyLocationsList().stream()
-          .map(OmKeyLocationInfo::getFromProtobuf)
-          .collect(Collectors.toList()), true);
+          .map(keyLocation -> {
+            OmKeyLocationInfo omKeyLocationInfo = OmKeyLocationInfo.getFromProtobuf(keyLocation);
+            omKeyLocationInfo.setPipeline(null); // attempt to reduce response size
+            return omKeyLocationInfo;
+          }).collect(Collectors.toList()), true);
       // Set Modification time
       omKeyInfo.setModificationTime(keyArgs.getModificationTime());
       // Set the UpdateID to current transactionLogIndex
       omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled());
+      omKeyInfo.setAcls(null);
 
       int partNumber = keyArgs.getMultipartNumber();
       partName = getPartName(ozoneKey, uploadID, partNumber);
