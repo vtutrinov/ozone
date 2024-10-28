@@ -23,6 +23,7 @@ import static org.apache.hadoop.ozone.om.lock.OzoneManagerLock.LeveledResource.B
 import com.google.common.annotations.VisibleForTesting;
 import java.io.IOException;
 import java.nio.file.InvalidPathException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -171,9 +172,14 @@ public class S3MultipartUploadCommitPartRequest extends OMKeyRequest {
 
       // set the data size and location info list
       omKeyInfo.setDataSize(keyArgs.getDataSize());
+      // optimize serde cost, reduce the response size (OpenKeyTable has the ACLs already)
+      omKeyInfo = omKeyInfo.toBuilder()
+          .setAcls(Collections.emptyList())
+          .build();
       List<OmKeyLocationInfo> uncommitted = omKeyInfo.updateLocationInfoList(
           keyArgs.getKeyLocationsList().stream()
-          .map(OmKeyLocationInfo::getFromProtobuf)
+          // attempt to reduce response size (to optimize serde cost), pipeline is an optional field
+          .map(keyLocation -> OmKeyLocationInfo.getFromProtobuf(keyLocation.toBuilder().clearPipeline().build()))
           .collect(Collectors.toList()), true);
       // Set Modification time
       omKeyInfo.setModificationTime(keyArgs.getModificationTime());
