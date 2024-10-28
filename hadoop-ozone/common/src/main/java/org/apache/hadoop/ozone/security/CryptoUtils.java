@@ -12,7 +12,10 @@ import java.security.spec.KeySpec;
 /**
  * Helper class to work with encryption.
  */
-public class CryptoUtils {
+public final class CryptoUtils {
+
+  private CryptoUtils() {
+  }
 
   /**
    * Returns and array of {@code numBytes} filled with random bytes.
@@ -26,7 +29,7 @@ public class CryptoUtils {
   }
 
   /**
-   * Password derived AES 256 bits secret key
+   * Password derived AES 256 bits secret key.
    *
    * @param password
    * @param salt

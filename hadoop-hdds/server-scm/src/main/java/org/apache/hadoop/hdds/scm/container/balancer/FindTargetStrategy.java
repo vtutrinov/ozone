@@ -72,14 +72,14 @@ public interface FindTargetStrategy {
   void resetPotentialTargets(@Nonnull Collection<DatanodeDetails> targets);
 
   /**
-   * get size entering nodes
+   * Get size entering nodes.
    *
    * @return map with {@link DatanodeDetails} and entering size
    */
   Map<DatanodeDetails, Long> getSizeEnteringNodes();
 
   /**
-   * clear sizeEnteringNodes
+   * Clear sizeEnteringNodes.
    */
   void clearSizeEnteringNodes();
 }

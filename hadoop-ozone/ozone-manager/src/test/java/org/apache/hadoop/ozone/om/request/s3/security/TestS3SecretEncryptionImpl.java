@@ -10,6 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+/**
+ * Test S3SecretEncryptionImpl.
+ */
 public class TestS3SecretEncryptionImpl {
 
   @Test

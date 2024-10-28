@@ -85,11 +85,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import static org.apache.hadoop.ozone.OzoneConsts.GB;
 import static org.apache.hadoop.ozone.OzoneConsts.MB;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Tests for SCM Block Manager.
@@ -275,7 +271,7 @@ public class TestBlockManager {
     try {
       CompletableFuture
           .allOf(futureList.toArray(new CompletableFuture[0]))
-         .get();
+          .get();
     } catch (Exception e) {
       Assertions.fail("testAllocateBlockInParallel failed");
     }
@@ -284,7 +280,7 @@ public class TestBlockManager {
   @Test
   public void testBlockDistribution() throws Exception {
     int threadCount = numContainerPerOwnerInPipeline *
-            numContainerPerOwnerInPipeline;
+        numContainerPerOwnerInPipeline;
     nodeManager.setNumPipelinePerDatanode(1);
     List<ExecutorService> executors = new ArrayList<>(threadCount);
     for (int i = 0; i < threadCount; i++) {

@@ -25,7 +25,7 @@ import java.util.Base64;
  * s = Salt bytes
  * c = content bytes (encrypted content)
  */
-public class EncryptorAesGcmPassword {
+public final class EncryptorAesGcmPassword {
 
   private static final String ENCRYPT_ALGO = "AES/GCM/NoPadding";
 
@@ -34,6 +34,9 @@ public class EncryptorAesGcmPassword {
   private static final int SALT_LENGTH_BYTE = 16;
 
   private static final Charset UTF_8 = StandardCharsets.UTF_8;
+
+  private EncryptorAesGcmPassword() {
+  }
 
   /**
    * Returns a base64 encoded AES encrypted text.

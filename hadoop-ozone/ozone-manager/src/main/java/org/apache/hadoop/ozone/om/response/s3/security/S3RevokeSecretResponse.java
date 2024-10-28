@@ -55,7 +55,7 @@ public class S3RevokeSecretResponse extends OMClientResponse {
 
     if (kerberosID != null
         && getOMResponse().getStatus() == Status.OK && s3SecretManager.isBatchSupported()) {
-        s3SecretManager.batcher().deleteWithBatch(batchOperation, kerberosID);
+      s3SecretManager.batcher().deleteWithBatch(batchOperation, kerberosID);
     }
   }
 }
