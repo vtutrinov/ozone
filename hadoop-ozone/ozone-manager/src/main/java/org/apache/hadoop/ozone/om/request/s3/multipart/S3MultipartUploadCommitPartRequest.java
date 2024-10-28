@@ -170,9 +170,15 @@ public class S3MultipartUploadCommitPartRequest extends OMKeyRequest {
 
       // set the data size and location info list
       omKeyInfo.setDataSize(keyArgs.getDataSize());
+      // optimize serde cost, reduce the response size (OpenKeyTable has the ACLs already)
+      omKeyInfo.setAcls(null);
       omKeyInfo.updateLocationInfoList(keyArgs.getKeyLocationsList().stream()
-          .map(OmKeyLocationInfo::getFromProtobuf)
-          .collect(Collectors.toList()), true);
+          .map(keyLocation -> {
+            OmKeyLocationInfo omKeyLocationInfo = OmKeyLocationInfo.getFromProtobuf(keyLocation);
+            // attempt to reduce response size (to optimize serde cost), pipeline is an optional field
+            omKeyLocationInfo.setPipeline(null);
+            return omKeyLocationInfo;
+          }).collect(Collectors.toList()), true);
       // Set Modification time
       omKeyInfo.setModificationTime(keyArgs.getModificationTime());
       // Set the UpdateID to current transactionLogIndex
