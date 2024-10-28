@@ -142,7 +142,7 @@ public class VaultS3SecretStore implements S3SecretStore {
 
   private LogicalResponse callWithReAuth(RestCall action)
       throws VaultException {
-    if(!isInitialized()){
+    if (!isInitialized()) {
       auth();
     }
     LogicalResponse response = action.call();
