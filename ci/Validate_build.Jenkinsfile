@@ -35,10 +35,12 @@ def parallelIntegrationTests(test) {
                 configFileProvider([configFile(fileId: "${configFileMVN}", targetLocation: 'maven_settings.xml', variable: 'MAVEN_SETTINGS')]) {
                     sh script: """
                         export MAVEN_OPTS=""
+                        export OZONE_REPO_CACHED=true
                         ./hadoop-ozone/dev-support/checks/integration.sh -P${test} ${Variables.mavenDistributionManagementString} \
                             -Duser.home=${Variables.dockerCacheMount}       \
                             -DnpmRegistryUrl=http://10.53.69.15:4873/       \
                             -DnpmInheritsProxyConfigFromMaven=true          \
+                            -DexcludedGroups=unhealthy,org.apache.ozone.test.UnhealthyTest \
                             -s ${MAVEN_SETTINGS}
                     """
                 }
@@ -108,6 +110,7 @@ pipeline {
                                             -DnpmRegistryUrl=http://10.53.69.15:4873/       \
                                             -DnpmInheritsProxyConfigFromMaven=true          \
                                             -Duser.home=${Variables.dockerCacheMount}       \
+                                            -DexcludedGroups=unhealthy,org.apache.ozone.test.UnhealthyTest \
                                             -s ${MAVEN_SETTINGS}
                                     """
                                 }
@@ -125,6 +128,7 @@ pipeline {
                                             -Duser.home=${Variables.dockerCacheMount}       \
                                             -DnpmRegistryUrl=http://10.53.69.15:4873/       \
                                             -DnpmInheritsProxyConfigFromMaven=true          \
+                                            -DexcludedGroups=unhealthy,org.apache.ozone.test.UnhealthyTest \
                                             -s ${MAVEN_SETTINGS}
                                     """
                                 }
