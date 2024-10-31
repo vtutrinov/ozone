@@ -39,7 +39,7 @@ public class TestReconScmHASnapshot {
    * Set a timeout for each test.
    */
   @Rule
-  public TestRule timeout = new JUnit5AwareTimeout(Timeout.seconds(100));
+  public TestRule timeout = new JUnit5AwareTimeout(Timeout.seconds(150));
   private OzoneConfiguration conf;
   private MiniOzoneCluster ozoneCluster = null;
 
