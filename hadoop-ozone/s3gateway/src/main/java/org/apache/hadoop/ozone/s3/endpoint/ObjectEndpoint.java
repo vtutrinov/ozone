@@ -45,6 +45,9 @@ import static org.apache.hadoop.ozone.s3.util.S3Utils.stripQuotes;
 import static org.apache.hadoop.ozone.s3.util.S3Utils.validateSignatureHeader;
 import static org.apache.hadoop.ozone.s3.util.S3Utils.wrapInQuotes;
 
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import java.io.EOFException;
 import java.io.IOException;
@@ -57,6 +60,8 @@ import java.time.ZonedDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
@@ -79,6 +84,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdds.client.ECReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
+import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.audit.S3GAction;
 import org.apache.hadoop.ozone.client.OzoneBucket;
@@ -128,6 +134,8 @@ public class ObjectEndpoint extends ObjectOperationHandler {
   /*FOR the feature Overriding Response Header
   https://docs.aws.amazon.com/de_de/AmazonS3/latest/API/API_GetObject.html */
   private final Map<String, String> overrideQueryParameter;
+
+  private static volatile LoadingCache<Pair<String, String>, OzoneKeyDetails> keyCache;
 
   public ObjectEndpoint() {
     overrideQueryParameter = ImmutableMap.<String, String>builder()
@@ -230,6 +238,7 @@ public class ObjectEndpoint extends ObjectOperationHandler {
         context.setAction(S3GAction.COPY_OBJECT);
         CopyObjectResponse copyObjectResponse = copyObject(volume,
             bucketName, keyPath, replicationConfig, perf);
+        getKeyCache().invalidate(Pair.of(bucketName, keyPath));
         return Response.status(Status.OK).entity(copyObjectResponse).header(
             "Connection", "close").build();
       }
@@ -323,6 +332,7 @@ public class ObjectEndpoint extends ObjectOperationHandler {
       perf.appendSizeBytes(putLength);
       long opLatencyNs = getMetrics().updateCreateKeySuccessStats(startNanos);
       perf.appendOpLatencyNanos(opLatencyNs);
+      getKeyCache().invalidate(Pair.of(bucketName, keyPath));
       return Response.ok()
           .header(HttpHeaders.ETAG, wrapInQuotes(md5Hash))
           .status(HttpStatus.SC_OK)
@@ -381,7 +391,7 @@ public class ObjectEndpoint extends ObjectOperationHandler {
 
       OzoneKeyDetails keyDetails = (partNumber != 0) ?
           getClientProtocol().getS3KeyDetails(bucketName, keyPath, partNumber) :
-          getClientProtocol().getS3KeyDetails(bucketName, keyPath);
+          getOzoneKeyDetails(bucketName, keyPath);
 
       isFile(keyPath, keyDetails);
 
@@ -1185,5 +1195,41 @@ public class ObjectEndpoint extends ObjectOperationHandler {
       return bucket;
     }
 
+  }
+
+  private LoadingCache<Pair<String, String>, OzoneKeyDetails> getKeyCache() {
+    if (keyCache != null) {
+      return keyCache;
+    }
+    synchronized (this) {
+      if (keyCache == null) {
+        CacheLoader<Pair<String, String>, OzoneKeyDetails> loader = new CacheLoader<Pair<String, String>,
+            OzoneKeyDetails>() {
+          @Override
+          public OzoneKeyDetails load(Pair<String, String> key) throws Exception {
+            return getClientProtocol().getS3KeyDetails(key.getLeft(), key.getRight());
+          }
+        };
+        keyCache = CacheBuilder.newBuilder()
+            .weakValues()
+            .expireAfterAccess(getOzoneConfiguration().getTimeDuration(
+                OzoneConfigKeys.OZONE_S3G_KEY_INFO_CACHE_IDLE_LIFETIME,
+                OzoneConfigKeys.OZONE_S3G_KEY_INFO_CACHE_IDLE_LIFETIME_DEFAULT,
+                TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS
+            ).build(loader);
+      }
+      return keyCache;
+    }
+  }
+
+  private OzoneKeyDetails getOzoneKeyDetails(String bucket, String key) throws IOException {
+    try {
+      return getKeyCache().get(Pair.of(bucket, key));
+    } catch (ExecutionException e) {
+      if (e.getCause() instanceof IOException) {
+        throw (IOException) e.getCause();
+      }
+      throw new IOException(e.getCause());
+    }
   }
 }

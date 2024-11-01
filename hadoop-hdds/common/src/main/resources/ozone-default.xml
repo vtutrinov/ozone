@@ -5089,4 +5089,14 @@
     <tag>OZONE, RATIS, OM</tag>
     <description>The maximum number of events that can be pending in OM Ratis.</description>
   </property>
+  <property>
+    <name>ozone.s3g.key.info.cache.idle.lifetime</name>
+    <value>10s</value>
+    <tag>OZONE, S3GATEWAY</tag>
+    <description>
+      Cache lifetime of the ozone key details after the last request.
+      By the default a cache entry will be removed if it has been idle for 10s.
+      A key of the cache entry is a pair of bucket and the requested key path.
+    </description>
+  </property>
 </configuration>

@@ -17,6 +17,8 @@
 
 package org.apache.hadoop.ozone.client;
 
+import static org.mockito.Mockito.spy;
+
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.ozone.s3.metrics.S3GatewayMetrics;
 
@@ -29,7 +31,7 @@ public class OzoneClientStub extends OzoneClient {
   }
 
   public OzoneClientStub(ObjectStoreStub objectStoreStub) {
-    super(objectStoreStub, new ClientProtocolStub(objectStoreStub));
+    super(objectStoreStub, spy(new ClientProtocolStub(objectStoreStub)));
     S3GatewayMetrics.create(new OzoneConfiguration());
   }
 

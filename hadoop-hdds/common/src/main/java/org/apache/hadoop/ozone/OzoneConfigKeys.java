@@ -711,6 +711,10 @@ public final class OzoneConfigKeys {
   public static final String OZONE_CLIENT_ELASTIC_BYTE_BUFFER_POOL_MAX_SIZE =
       "ozone.client.elastic.byte.buffer.pool.max.size";
   public static final String OZONE_CLIENT_ELASTIC_BYTE_BUFFER_POOL_MAX_SIZE_DEFAULT = "16GB";
+  public static final String OZONE_S3G_KEY_INFO_CACHE_IDLE_LIFETIME =
+      "ozone.s3g.key.info.cache.idle.lifetime";
+
+  public static final String OZONE_S3G_KEY_INFO_CACHE_IDLE_LIFETIME_DEFAULT = "10s";
 
   /**
    * There is no need to instantiate this class.

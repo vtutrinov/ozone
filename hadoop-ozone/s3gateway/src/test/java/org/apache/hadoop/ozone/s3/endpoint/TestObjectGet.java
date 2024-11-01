@@ -37,6 +37,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
@@ -52,6 +54,7 @@ import org.apache.hadoop.ozone.client.OzoneBucket;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientStub;
 import org.apache.hadoop.ozone.client.OzoneClientTestUtils;
+import org.apache.hadoop.ozone.client.protocol.ClientProtocol;
 import org.apache.hadoop.ozone.s3.exception.OS3Exception;
 import org.apache.hadoop.ozone.s3.util.RFC1123Util;
 import org.junit.jupiter.api.BeforeEach;
@@ -82,12 +85,13 @@ public class TestObjectGet {
 
   private HttpHeaders headers;
   private ObjectEndpoint rest;
+  private OzoneClient client;
   private OzoneBucket bucket;
 
   @BeforeEach
   public void init() throws OS3Exception, IOException {
     //GIVEN
-    OzoneClient client = new OzoneClientStub();
+    client = new OzoneClientStub();
     client.getObjectStore().createS3Bucket(BUCKET_NAME);
     bucket = client.getObjectStore().getS3Bucket(BUCKET_NAME);
 
@@ -329,4 +333,29 @@ public class TestObjectGet {
     return RFC1123Util.FORMAT.format(
         instant.atZone(ZoneId.of(OzoneConsts.OZONE_TIME_ZONE)));
   }
+
+  @Test
+  public void testOMGetKeyInfoResultWillBeCachedFor10SecondsByDefault()
+      throws IOException, OS3Exception, InterruptedException {
+    // GIVEN
+    ClientProtocol omClientProxy = client.getProxy();
+
+    // WHEN
+    get(rest, BUCKET_NAME, KEY_NAME);
+    get(rest, BUCKET_NAME, KEY_NAME);
+    get(rest, BUCKET_NAME, KEY_NAME);
+
+    // THEN (expect only one call to OM despite 3 calls to rest.get)
+    verify(omClientProxy).getS3KeyDetails(BUCKET_NAME, KEY_NAME);
+
+    // AND WHEN
+    Thread.sleep(10000);
+    get(rest, BUCKET_NAME, KEY_NAME);
+    get(rest, BUCKET_NAME, KEY_NAME);
+
+    // THEN (expect the cache to be expired on 10 seconds and another call to OM will be made:
+    // sum of the calls count is 2)
+    verify(omClientProxy, times(2)).getS3KeyDetails(BUCKET_NAME, KEY_NAME);
+  }
+
 }
