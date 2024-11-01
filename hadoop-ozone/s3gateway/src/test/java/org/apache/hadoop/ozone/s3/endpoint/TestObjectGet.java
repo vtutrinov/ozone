@@ -27,6 +27,7 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
 import java.io.IOException;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ExecutionException;
 
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.ozone.client.OzoneBucket;
@@ -34,6 +35,7 @@ import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientStub;
 import org.apache.hadoop.ozone.client.io.OzoneInputStream;
 import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
+import org.apache.hadoop.ozone.client.protocol.ClientProtocol;
 import org.apache.hadoop.ozone.s3.exception.OS3Exception;
 
 import org.apache.commons.io.IOUtils;
@@ -48,6 +50,10 @@ import static org.apache.hadoop.ozone.s3.util.S3Consts.RANGE_HEADER;
 import static org.mockito.Mockito.doReturn;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Test get object.
@@ -68,6 +74,8 @@ public class TestObjectGet {
       + "filename=\"filename.jpg\"";
   public static final String CONTENT_ENCODING1 = "gzip";
   public static final String CONTENT_ENCODING2 = "compress";
+  public static final String BUCKET_NAME = "b1";
+  public static final String KEY_NAME = "key1";
 
   private HttpHeaders headers;
   private ObjectEndpoint rest;
@@ -99,7 +107,7 @@ public class TestObjectGet {
   }
 
   @Test
-  public void get() throws IOException, OS3Exception {
+  public void get() throws IOException, OS3Exception, ExecutionException {
     //WHEN
     Response response = rest.get("b1", "key1", 0, null, 0, null);
 
@@ -120,7 +128,7 @@ public class TestObjectGet {
   }
 
   @Test
-  public void inheritRequestHeader() throws IOException, OS3Exception {
+  public void inheritRequestHeader() throws IOException, OS3Exception, ExecutionException {
     setDefaultHeader();
 
     Response response = rest.get("b1", "key1", 0, null, 0, null);
@@ -140,7 +148,7 @@ public class TestObjectGet {
   }
 
   @Test
-  public void overrideResponseHeader() throws IOException, OS3Exception {
+  public void overrideResponseHeader() throws IOException, OS3Exception, ExecutionException {
     setDefaultHeader();
 
     MultivaluedHashMap<String, String> queryParameter =
@@ -173,7 +181,7 @@ public class TestObjectGet {
   }
 
   @Test
-  public void getRangeHeader() throws IOException, OS3Exception {
+  public void getRangeHeader() throws IOException, OS3Exception, ExecutionException {
     Response response;
     Mockito.when(headers.getHeaderString(RANGE_HEADER)).thenReturn("bytes=0-0");
 
@@ -192,7 +200,7 @@ public class TestObjectGet {
   }
 
   @Test
-  public void getStatusCode() throws IOException, OS3Exception {
+  public void getStatusCode() throws IOException, OS3Exception, ExecutionException {
     Response response;
     response = rest.get("b1", "key1", 0, null, 0, null);
     assertEquals(response.getStatus(),
@@ -242,4 +250,29 @@ public class TestObjectGet {
     assertEquals(NO_SUCH_KEY.getCode(), ex.getCode());
     bucket.deleteKey(keyPath);
   }
+
+  @Test
+  public void testOMGetKeyInfoResultWillBeCachedFor10SecondsByDefault()
+      throws IOException, OS3Exception, ExecutionException, InterruptedException {
+    // GIVEN
+    ClientProtocol omClientProxy = client.getProxy();
+
+    // WHEN
+    rest.get(BUCKET_NAME, KEY_NAME, 0, null, 0, null);
+    rest.get(BUCKET_NAME, KEY_NAME, 0, null, 0, null);
+    rest.get(BUCKET_NAME, KEY_NAME, 0, null, 0, null);
+
+    // THEN (expect only one call to OM despite 3 calls to rest.get)
+    verify(omClientProxy).getS3KeyDetails(BUCKET_NAME, KEY_NAME);
+
+    // AND WHEN
+    Thread.sleep(10000);
+    rest.get(BUCKET_NAME, KEY_NAME, 0, null, 0, null);
+    rest.get(BUCKET_NAME, KEY_NAME, 0, null, 0, null);
+
+    // THEN (expect the cache to be expired on 10 seconds and another call to OM will be made:
+    // sum of the calls count is 2)
+    verify(omClientProxy, times(2)).getS3KeyDetails(BUCKET_NAME, KEY_NAME);
+  }
+
 }

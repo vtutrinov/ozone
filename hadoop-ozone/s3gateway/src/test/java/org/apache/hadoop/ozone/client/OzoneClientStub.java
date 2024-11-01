@@ -19,6 +19,7 @@
  */
 package org.apache.hadoop.ozone.client;
 
+import static org.mockito.Mockito.spy;
 /**
  * In-memory OzoneClient for testing.
  */
@@ -28,7 +29,7 @@ public class OzoneClientStub extends OzoneClient {
   }
 
   public OzoneClientStub(ObjectStoreStub objectStoreStub) {
-    super(objectStoreStub, new ClientProtocolStub(objectStoreStub));
+    super(objectStoreStub, spy(new ClientProtocolStub(objectStoreStub)));
   }
 
   @Override
