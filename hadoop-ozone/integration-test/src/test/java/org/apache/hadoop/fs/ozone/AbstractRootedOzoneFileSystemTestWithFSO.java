@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.LeaseRecoverable;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.contract.ContractTestUtils;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.slf4j.Logger;
@@ -184,6 +185,7 @@ abstract class AbstractRootedOzoneFileSystemTestWithFSO extends AbstractRootedOz
   /**
    * Test the consistency of listStatusFSO with TableCache present.
    */
+  @Unhealthy("SDPOZN-1258")
   @Test
   void testListStatusFSO() throws Exception {
     // list keys batch size is 1024. Creating keys greater than the
