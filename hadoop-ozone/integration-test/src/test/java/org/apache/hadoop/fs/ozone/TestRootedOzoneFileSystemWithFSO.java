@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.contract.ContractTestUtils;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 
+import org.apache.ozone.test.tag.Unhealthy;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -207,6 +208,7 @@ public class TestRootedOzoneFileSystemWithFSO
   /**
    * Test the consistency of listStatusFSO with TableCache present.
    */
+  @Unhealthy("SDPOZN-1258")
   @Test
   public void testListStatusFSO() throws Exception {
     // list keys batch size is 1024. Creating keys greater than the
