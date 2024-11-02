@@ -7,7 +7,6 @@ import javax.lang.model.element.VariableElement
 
 Variables.componentName = "ozone"
 
-def snapshotVersion = params.isSnapshot ? "-SNAPSHOT" : ""
 configFileMVN = "maven-central"
 
 def integrationTests = [
@@ -29,21 +28,24 @@ def parallelStages = [:]
 def parallelIntegrationTests(test) {
     return {
         node('sdp') {
-            deleteDir()
-            docker.image(Variables.dockerImages["${Variables.cpuArch}"]["${Variables.componentName}"]).inside(Variables.dockerArgs.join(" ")) {
-                unstash STASH_NAME
-                configFileProvider([configFile(fileId: "${configFileMVN}", targetLocation: 'maven_settings.xml', variable: 'MAVEN_SETTINGS')]) {
-                    sh script: """
-                        export MAVEN_OPTS=""
-                        export OZONE_REPO_CACHED=true
-                        ./hadoop-ozone/dev-support/checks/integration.sh -P${test} ${Variables.mavenDistributionManagementString} \
-                            -Duser.home=${Variables.dockerCacheMount}       \
-                            -DnpmRegistryUrl=http://10.53.69.15:4873/       \
-                            -DnpmInheritsProxyConfigFromMaven=true          \
-                            -DexcludedGroups=unhealthy,org.apache.ozone.test.UnhealthyTest \
-                            -s ${MAVEN_SETTINGS}
-                    """
+            retry(3) {
+                deleteDir()
+                docker.image(Variables.dockerImages["${Variables.cpuArch}"]["${Variables.componentName}"]).inside(Variables.dockerArgs.join(" ")) {
+                    unstash STASH_NAME
+                    configFileProvider([configFile(fileId: "${configFileMVN}", targetLocation: 'maven_settings.xml', variable: 'MAVEN_SETTINGS')]) {
+                        sh script: """
+                            export MAVEN_OPTS=""
+                            export OZONE_REPO_CACHED=true
+                            ./hadoop-ozone/dev-support/checks/integration.sh -P${test} ${Variables.mavenDistributionManagementString} \
+                                -Duser.home=${Variables.dockerCacheMount}       \
+                                -DnpmRegistryUrl=http://10.53.69.15:4873/       \
+                                -DnpmInheritsProxyConfigFromMaven=true          \
+                                -DexcludedGroups=unhealthy,org.apache.ozone.test.UnhealthyTest \
+                                -s ${MAVEN_SETTINGS}
+                        """
+                    }
                 }
+                deleteDir()
             }
         }
     }
@@ -58,6 +60,7 @@ properties([])
 pipeline {
     agent { node { label "sdp" } }
     options {
+        timeout(time: 5, unit: 'HOURS')
         ansiColor("xterm")
         // convention is here: https://sbtatlas.sigma.sbrf.ru/wiki/pages/viewpage.action?pageId=75932050
         buildDiscarder logRotator(
@@ -68,6 +71,7 @@ pipeline {
         )
         durabilityHint "PERFORMANCE_OPTIMIZED"
         skipStagesAfterUnstable()
+        disableConcurrentBuilds abortPrevious: true
     }
     stages {
         stage("Prepare") {
@@ -144,6 +148,11 @@ pipeline {
                     }
                 }
             }
+        }
+    }
+    post {
+        always {
+            cleanWs()
         }
     }
 }
