@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.ozone.container.common.volume;
 
+import org.apache.hadoop.hdds.conf.ConfigurationException;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.fs.MockSpaceUsageCheckFactory;
 import org.apache.hadoop.hdds.scm.ScmConfigKeys;
@@ -31,6 +32,7 @@ import java.util.UUID;
 
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.HDDS_DATANODE_DIR_DU_RESERVED_PERCENT;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.HDDS_DATANODE_DIR_DU_RESERVED_PERCENT_DEFAULT;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * To test the reserved volume space.
@@ -152,5 +154,15 @@ public class TestReservedVolumeSpace {
     long reservedFromVolume2 = hddsVolume2.getVolumeInfo().get()
             .getReservedInBytes();
     Assertions.assertEquals(reservedFromVolume2, 0);
+  }
+
+  @Test
+  public void testInvalidConfigThrowsException() {
+    OzoneConfiguration conf = new OzoneConfiguration();
+    conf.set(ScmConfigKeys.HDDS_DATANODE_DIR_DU_RESERVED, "15GB");
+
+    assertThrows(ConfigurationException.class,
+        () -> volumeBuilder.conf(conf).build(),
+        "Reserved space should be configured in a pair");
   }
 }

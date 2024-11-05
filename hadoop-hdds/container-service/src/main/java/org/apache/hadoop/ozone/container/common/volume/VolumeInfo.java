@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.util.Collection;
 
 import org.apache.hadoop.fs.StorageType;
+import org.apache.hadoop.hdds.conf.ConfigurationException;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.conf.StorageSize;
 import org.apache.hadoop.hdds.fs.SpaceUsageCheckFactory;
@@ -158,9 +159,8 @@ public final class VolumeInfo {
     for (String reserve : reserveList) {
       String[] words = reserve.split(":");
       if (words.length < 2) {
-        LOG.error("Reserved space should config in pair, but current is {}",
-            reserve);
-        continue;
+        throw new ConfigurationException(HDDS_DATANODE_DIR_DU_RESERVED +
+            " - Reserved space should be configured in a pair, but current value is " + reserve);
       }
 
       if (words[0].trim().equals(rootDir)) {
