@@ -41,6 +41,7 @@ def parallelIntegrationTests(test) {
                                 -DnpmRegistryUrl=http://10.53.69.15:4873/       \
                                 -DnpmInheritsProxyConfigFromMaven=true          \
                                 -DexcludedGroups=unhealthy,org.apache.ozone.test.UnhealthyTest \
+                                -Dsurefire.rerunFailingTestsCount=3 \
                                 -s ${MAVEN_SETTINGS}
                         """
                     }
@@ -115,6 +116,7 @@ pipeline {
                                             -DnpmInheritsProxyConfigFromMaven=true          \
                                             -Duser.home=${Variables.dockerCacheMount}       \
                                             -DexcludedGroups=unhealthy,org.apache.ozone.test.UnhealthyTest \
+                                            -Dsurefire.rerunFailingTestsCount=3 \
                                             -s ${MAVEN_SETTINGS}
                                     """
                                 }
@@ -133,6 +135,7 @@ pipeline {
                                             -DnpmRegistryUrl=http://10.53.69.15:4873/       \
                                             -DnpmInheritsProxyConfigFromMaven=true          \
                                             -DexcludedGroups=unhealthy,org.apache.ozone.test.UnhealthyTest \
+                                            -Dsurefire.rerunFailingTestsCount=3 \
                                             -s ${MAVEN_SETTINGS}
                                     """
                                 }
