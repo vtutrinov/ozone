@@ -22,7 +22,7 @@
     </Properties>
 
     <Appenders>
-        <!-- Uncomment following section to enable logging to console appender also
+            <!-- Uncomment following section to enable logging to console appender also
         <Console name="STDOUT" target="SYSTEM_OUT">
             <PatternLayout pattern="%d{DEFAULT} | %-5level | %c{1} | %msg | %throwable{3} %n"/>
         </Console>
@@ -50,12 +50,9 @@
     <Loggers>
         <Logger name="DNAudit" level="INFO" includeLocation="true" additivity="false">
             <AppenderRef ref="RollingFileDNAudit"/>
-        </Logger>
-
-        <Root level="INFO">
             <!-- Uncomment following section to enable logging to console appender also
             <AppenderRef ref="STDOUT"/>
             -->
-        </Root>
+        </Logger>
     </Loggers>
 </Configuration>
