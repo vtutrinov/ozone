@@ -50,12 +50,9 @@
     <Loggers>
         <AsyncLogger name="S3GAudit" level="INFO" includeLocation="true" additivity="false">
             <AppenderRef ref="RollingFileS3GAudit"/>
-        </AsyncLogger>
-
-        <Root level="INFO">
             <!-- Uncomment following section to enable logging to console appender also
             <AppenderRef ref="STDOUT"/>
             -->
-        </Root>
+        </AsyncLogger>
     </Loggers>
 </Configuration>

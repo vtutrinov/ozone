@@ -44,12 +44,9 @@
     <Loggers>
         <Logger name="ContainerLog" level="INFO" additivity="false">
             <AppenderRef ref="RollingContainer"/>
-        </Logger>
-
-        <Root level="INFO">
             <!-- Uncomment following section to enable logging to console appender also
             <AppenderRef ref="STDOUT"/>
             -->
-        </Root>
+        </Logger>
     </Loggers>
 </Configuration>

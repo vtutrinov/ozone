@@ -50,12 +50,9 @@
     <Loggers>
         <AsyncLogger name="DNAudit" level="INFO" includeLocation="true" additivity="false">
             <AppenderRef ref="RollingFileDNAudit"/>
-        </AsyncLogger>
-
-        <Root level="INFO">
             <!-- Uncomment following section to enable logging to console appender also
             <AppenderRef ref="STDOUT"/>
             -->
-        </Root>
+        </AsyncLogger>
     </Loggers>
 </Configuration>
