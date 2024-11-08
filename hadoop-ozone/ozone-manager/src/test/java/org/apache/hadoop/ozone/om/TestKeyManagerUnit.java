@@ -23,12 +23,10 @@ import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -44,6 +42,9 @@ import org.apache.hadoop.hdds.protocol.StorageType;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos.ReplicationFactor;
 import org.apache.hadoop.hdds.scm.container.common.helpers.ContainerWithPipeline;
 import org.apache.hadoop.hdds.scm.container.ContainerInfo;
+import org.apache.hadoop.hdds.scm.net.InnerNode;
+import org.apache.hadoop.hdds.scm.net.InnerNodeImpl;
+import org.apache.hadoop.hdds.scm.net.NetConstants;
 import org.apache.hadoop.hdds.scm.pipeline.MockPipeline;
 import org.apache.hadoop.hdds.scm.pipeline.Pipeline;
 import org.apache.hadoop.hdds.scm.pipeline.PipelineID;
@@ -78,16 +79,11 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.Mockito;
 
 import static com.google.common.collect.Sets.newHashSet;
-import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
-import static java.util.Comparator.comparing;
-import static java.util.stream.Collectors.toList;
 import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -120,8 +116,11 @@ public class TestKeyManagerUnit {
     testDir = GenericTestUtils.getRandomizedTestDir();
     configuration.set(HddsConfigKeys.OZONE_METADATA_DIRS,
         testDir.toString());
-    containerClient = Mockito.mock(StorageContainerLocationProtocol.class);
-    blockClient = Mockito.mock(ScmBlockLocationProtocol.class);
+    containerClient = mock(StorageContainerLocationProtocol.class);
+    blockClient = mock(ScmBlockLocationProtocol.class);
+    InnerNode.Factory factory = InnerNodeImpl.FACTORY;
+    when(blockClient.getNetworkTopology()).thenReturn(
+        factory.newInnerNode("", "", null, NetConstants.ROOT_LEVEL, 1));
 
     OmTestManagers omTestManagers
         = new OmTestManagers(configuration, blockClient, containerClient);
@@ -430,7 +429,7 @@ public class TestKeyManagerUnit {
         .setNodes(Arrays.asList(dn2, dn3, dn4))
         .build();
 
-    ContainerInfo ci = Mockito.mock(ContainerInfo.class);
+    ContainerInfo ci = mock(ContainerInfo.class);
     when(ci.getContainerID()).thenReturn(1L);
 
     // Setup SCM containerClient so that 1st call returns pipeline1 and
@@ -537,7 +536,7 @@ public class TestKeyManagerUnit {
     containerIDs.add(1L);
 
     List<ContainerWithPipeline> cps = new ArrayList<>();
-    ContainerInfo ci = Mockito.mock(ContainerInfo.class);
+    ContainerInfo ci = mock(ContainerInfo.class);
     when(ci.getContainerID()).thenReturn(1L);
     cps.add(new ContainerWithPipeline(ci, pipelineTwo));
 
@@ -633,9 +632,6 @@ public class TestKeyManagerUnit {
     OMRequestTestUtils.addBucketToDB(volume, bucket, metadataManager);
 
     final Pipeline pipeline = MockPipeline.createPipeline(3);
-    final List<String> nodes = pipeline.getNodes().stream()
-        .map(DatanodeDetails::getUuidString)
-        .collect(toList());
 
     Set<Long> containerIDs = new HashSet<>();
     List<ContainerWithPipeline> containersWithPipeline = new ArrayList<>();
@@ -684,7 +680,6 @@ public class TestKeyManagerUnit {
 
     Assertions.assertEquals(10, fileStatusList.size());
     verify(containerClient).getContainerWithPipelineBatch(containerIDs);
-    verify(blockClient).sortDatanodes(nodes, client);
 
     // call list status the second time, and verify no more calls to
     // SCM.
@@ -692,67 +687,4 @@ public class TestKeyManagerUnit {
         null, Long.MAX_VALUE, client);
     verify(containerClient, times(1)).getContainerWithPipelineBatch(anySet());
   }
-
-  @ParameterizedTest
-  @ValueSource(strings = {"anyhost", ""})
-  public void sortDatanodes(String client) throws Exception {
-    // GIVEN
-    int pipelineCount = 3;
-    int keysPerPipeline = 5;
-    OmKeyInfo[] keyInfos = new OmKeyInfo[pipelineCount * keysPerPipeline];
-    List<List<String>> expectedSortDatanodesInvocations = new ArrayList<>();
-    Map<Pipeline, List<DatanodeDetails>> expectedSortedNodes = new HashMap<>();
-    int ki = 0;
-    for (int p = 0; p < pipelineCount; p++) {
-      final Pipeline pipeline = MockPipeline.createPipeline(3);
-      final List<String> nodes = pipeline.getNodes().stream()
-          .map(DatanodeDetails::getUuidString)
-          .collect(toList());
-      expectedSortDatanodesInvocations.add(nodes);
-      final List<DatanodeDetails> sortedNodes = pipeline.getNodes().stream()
-          .sorted(comparing(DatanodeDetails::getUuidString))
-          .collect(toList());
-      expectedSortedNodes.put(pipeline, sortedNodes);
-
-      when(blockClient.sortDatanodes(nodes, client))
-          .thenReturn(sortedNodes);
-
-      for (int i = 1; i <= keysPerPipeline; i++) {
-        OmKeyLocationInfo keyLocationInfo = new OmKeyLocationInfo.Builder()
-            .setBlockID(new BlockID(i, 1L))
-            .setPipeline(pipeline)
-            .setOffset(0)
-            .setLength(256000)
-            .build();
-
-        OmKeyInfo keyInfo = new OmKeyInfo.Builder()
-            .setOmKeyLocationInfos(Arrays.asList(
-                new OmKeyLocationInfoGroup(0, emptyList()),
-                new OmKeyLocationInfoGroup(1, singletonList(keyLocationInfo))))
-            .build();
-        keyInfos[ki++] = keyInfo;
-      }
-    }
-
-    // WHEN
-    keyManager.sortDatanodes(client, keyInfos);
-
-    // THEN
-    // verify all key info locations got updated
-    for (OmKeyInfo keyInfo : keyInfos) {
-      OmKeyLocationInfoGroup locations = keyInfo.getLatestVersionLocations();
-      Assertions.assertNotNull(locations);
-      for (OmKeyLocationInfo locationInfo : locations.getLocationList()) {
-        Pipeline pipeline = locationInfo.getPipeline();
-        List<DatanodeDetails> expectedOrder = expectedSortedNodes.get(pipeline);
-        Assertions.assertEquals(expectedOrder, pipeline.getNodesInOrder());
-      }
-    }
-
-    // expect one invocation per pipeline
-    for (List<String> nodes : expectedSortDatanodesInvocations) {
-      verify(blockClient).sortDatanodes(nodes, client);
-    }
-  }
-
 }
