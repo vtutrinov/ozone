@@ -702,7 +702,7 @@ public final class OzoneConfigKeys {
       OZONE_OM_NETWORK_TOPOLOGY_REFRESH_DURATION =
       "ozone.om.network.topology.refresh.duration";
   public static final String
-      OZONE_OM_NETWORK_TOPOLOGY_REFRESH_DURATION_DEFAULT = "1h";
+      OZONE_OM_NETWORK_TOPOLOGY_REFRESH_DURATION_DEFAULT = "1m";
 
   public static final String OZONE_SECURITY_CRYPTO_COMPLIANCE_MODE =
       "ozone.security.crypto.compliance.mode";

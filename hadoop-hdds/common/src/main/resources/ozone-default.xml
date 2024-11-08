@@ -4214,7 +4214,7 @@
   </property>
   <property>
     <name>ozone.om.network.topology.refresh.duration</name>
-    <value>1h</value>
+    <value>1m</value>
     <tag>SCM, OZONE, OM</tag>
     <description>The duration at which we periodically fetch the updated network
       topology cluster tree from SCM.
