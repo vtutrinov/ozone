@@ -1,5 +1,4 @@
 @Library("sdp-pipelines@sdp-develop")
-@Library("ru.sbrf.devsecops@master")
 
 import ru.sber.Variables
 
@@ -27,26 +26,29 @@ def parallelStages = [:]
 
 def parallelIntegrationTests(test) {
     return {
-        node('sdp') {
+        node('sdpozonebuilder') {
             retry(3) {
-                deleteDir()
-                docker.image(Variables.dockerImages["${Variables.cpuArch}"]["${Variables.componentName}"]).inside(Variables.dockerArgs.join(" ")) {
-                    unstash STASH_NAME
-                    configFileProvider([configFile(fileId: "${configFileMVN}", targetLocation: 'maven_settings.xml', variable: 'MAVEN_SETTINGS')]) {
-                        sh script: """
-                            export MAVEN_OPTS=""
-                            export OZONE_REPO_CACHED=true
-                            ./hadoop-ozone/dev-support/checks/integration.sh -P${test} ${Variables.mavenDistributionManagementString} \
-                                -Duser.home=${Variables.dockerCacheMount}       \
-                                -DnpmRegistryUrl=http://10.53.69.15:4873/       \
-                                -DnpmInheritsProxyConfigFromMaven=true          \
-                                -DexcludedGroups=unhealthy,org.apache.ozone.test.UnhealthyTest \
-                                -Dsurefire.rerunFailingTestsCount=3 \
-                                -s ${MAVEN_SETTINGS}
-                        """
+                try {
+                    deleteDir()
+                    docker.image(Variables.dockerImages["${Variables.cpuArch}"]["${Variables.componentName}"]).inside(Variables.dockerArgs.join(" ")) {
+                        unstash STASH_NAME
+                        configFileProvider([configFile(fileId: "${configFileMVN}", targetLocation: 'maven_settings.xml', variable: 'MAVEN_SETTINGS')]) {
+                            sh script: """
+                                export MAVEN_OPTS=""
+                                export OZONE_REPO_CACHED=true
+                                ./hadoop-ozone/dev-support/checks/integration.sh -P${test} ${Variables.mavenDistributionManagementString} \
+                                    -Duser.home=${Variables.dockerCacheMount}       \
+                                    -DnpmRegistryUrl=http://10.53.69.15:4873/       \
+                                    -DnpmInheritsProxyConfigFromMaven=true          \
+                                    -DexcludedGroups=unhealthy,org.apache.ozone.test.UnhealthyTest \
+                                    -Dsurefire.rerunFailingTestsCount=3 \
+                                    -s ${MAVEN_SETTINGS}
+                            """
+                        }
                     }
+                } finally {
+                    deleteDir()
                 }
-                deleteDir()
             }
         }
     }
@@ -59,7 +61,7 @@ integrationTests.each { test ->
 properties([])
 
 pipeline {
-    agent { node { label "sdp" } }
+    agent { node { label "sdpozonebuilder" } }
     options {
         timeout(time: 5, unit: 'HOURS')
         ansiColor("xterm")
