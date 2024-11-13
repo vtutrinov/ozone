@@ -50,10 +50,8 @@ import static org.apache.hadoop.ozone.s3.util.S3Consts.RANGE_HEADER;
 import static org.mockito.Mockito.doReturn;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Test get object.
