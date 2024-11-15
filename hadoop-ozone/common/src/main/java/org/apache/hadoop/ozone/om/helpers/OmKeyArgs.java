@@ -56,13 +56,14 @@ public final class OmKeyArgs implements Auditable {
 
   @SuppressWarnings("parameternumber")
   private OmKeyArgs(String volumeName, String bucketName, String keyName,
-      long dataSize, ReplicationConfig replicationConfig,
-      List<OmKeyLocationInfo> locationInfoList, boolean isMultipart,
-      String uploadID, int partNumber,
-      Map<String, String> metadataMap,
-      List<OzoneAcl> acls, boolean sortDatanode,
-      boolean latestVersionLocation, boolean recursive, boolean headOp,
-      boolean forceUpdateContainerCacheFromSCM) {
+                    long dataSize, ReplicationConfig replicationConfig,
+                    List<OmKeyLocationInfo> locationInfoList, boolean isMultipart,
+                    String uploadID, int multipartUploadPartNumber,
+                    Map<String, String> metadataMap,
+                    List<OzoneAcl> acls, boolean sortDatanode,
+                    boolean latestVersionLocation, boolean recursive, boolean headOp,
+                    boolean forceUpdateContainerCacheFromSCM,
+                    Integer partNumber) {
     this.volumeName = volumeName;
     this.bucketName = bucketName;
     this.keyName = keyName;
@@ -71,7 +72,7 @@ public final class OmKeyArgs implements Auditable {
     this.locationInfoList = locationInfoList;
     this.isMultipartKey = isMultipart;
     this.multipartUploadID = uploadID;
-    this.multipartUploadPartNumber = partNumber;
+    this.multipartUploadPartNumber = multipartUploadPartNumber;
     this.metadata = metadataMap;
     this.acls = acls;
     this.sortDatanodesInPipeline = sortDatanode;
@@ -348,11 +349,12 @@ public final class OmKeyArgs implements Auditable {
 
     public OmKeyArgs build() {
       return new OmKeyArgs(volumeName, bucketName, keyName, dataSize,
-          replicationConfig, locationInfoList, isMultipartKey,
-          multipartUploadID,
-          multipartUploadPartNumber, metadata, acls,
-          sortDatanodesInPipeline, latestVersionLocation, recursive, headOp,
-          forceUpdateContainerCacheFromSCM);
+              replicationConfig, locationInfoList, isMultipartKey,
+              multipartUploadID,
+              multipartUploadPartNumber, metadata, acls,
+              sortDatanodesInPipeline, latestVersionLocation, recursive, headOp,
+              forceUpdateContainerCacheFromSCM,
+              partNumber);
     }
 
   }
