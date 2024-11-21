@@ -47,6 +47,25 @@ def parallelIntegrationTests(test) {
                         }
                     }
                 } finally {
+                    sh "mv target/integration target/${test}"
+                    dir ("target") {
+                        archiveArtifacts artifacts: "${test}/**",
+                            allowEmptyArchive: true
+                    }
+
+                    patterns = [
+                        '**/surefire-reports/**/*.xml',
+                        '**/integration-test/**/*.xml',
+                    ]
+
+                    patterns.each {
+                        pattern -> anonymous: {
+                            xmlFiles = findFiles(glob: pattern)
+                            if (xmlFiles) {
+                                junit testResults: pattern, allowEmptyResults: true
+                            }
+                        }
+                    }
                     deleteDir()
                 }
             }
@@ -62,6 +81,7 @@ properties([])
 
 pipeline {
     agent { node { label "sdpozonebuilder" } }
+
     options {
         timeout(time: 5, unit: 'HOURS')
         ansiColor("xterm")
@@ -118,10 +138,17 @@ pipeline {
                                             -DnpmInheritsProxyConfigFromMaven=true          \
                                             -Duser.home=${Variables.dockerCacheMount}       \
                                             -DexcludedGroups=unhealthy,org.apache.ozone.test.UnhealthyTest \
-                                            -Dsurefire.rerunFailingTestsCount=3 \
                                             -s ${MAVEN_SETTINGS}
                                     """
                                 }
+                            }
+                        }
+                    }
+                    post {
+                        always {
+                            dir ("target") {
+                                archiveArtifacts artifacts: "checkstyle/**",
+                                    allowEmptyArchive: true
                             }
                         }
                     }
@@ -137,10 +164,17 @@ pipeline {
                                             -DnpmRegistryUrl=http://10.53.69.15:4873/       \
                                             -DnpmInheritsProxyConfigFromMaven=true          \
                                             -DexcludedGroups=unhealthy,org.apache.ozone.test.UnhealthyTest \
-                                            -Dsurefire.rerunFailingTestsCount=3 \
                                             -s ${MAVEN_SETTINGS}
                                     """
                                 }
+                            }
+                        }
+                    }
+                    post {
+                        always {
+                            dir ("target") {
+                                archiveArtifacts artifacts: "findbugs/**",
+                                    allowEmptyArchive: true
                             }
                         }
                     }
