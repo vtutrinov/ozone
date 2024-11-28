@@ -52,6 +52,7 @@ public final class OmKeyArgs implements Auditable {
   private boolean recursive;
   private boolean headOp;
   private boolean forceUpdateContainerCacheFromSCM;
+  private final Integer partNumber;
 
   @SuppressWarnings("parameternumber")
   private OmKeyArgs(String volumeName, String bucketName, String keyName,
@@ -78,6 +79,7 @@ public final class OmKeyArgs implements Auditable {
     this.recursive = recursive;
     this.headOp = headOp;
     this.forceUpdateContainerCacheFromSCM = forceUpdateContainerCacheFromSCM;
+    this.partNumber = partNumber;
   }
 
   public boolean getIsMultipartKey() {
@@ -156,6 +158,10 @@ public final class OmKeyArgs implements Auditable {
     return forceUpdateContainerCacheFromSCM;
   }
 
+  public Integer getPartNumber() {
+    return partNumber;
+  }
+
   @Override
   public Map<String, String> toAuditMap() {
     Map<String, String> auditMap = new LinkedHashMap<>();
@@ -178,7 +184,7 @@ public final class OmKeyArgs implements Auditable {
   }
 
   public OmKeyArgs.Builder toBuilder() {
-    return new OmKeyArgs.Builder()
+    OmKeyArgs.Builder builder = new OmKeyArgs.Builder()
         .setVolumeName(volumeName)
         .setBucketName(bucketName)
         .setKeyName(keyName)
@@ -194,11 +200,17 @@ public final class OmKeyArgs implements Auditable {
         .setLatestVersionLocation(latestVersionLocation)
         .setAcls(acls)
         .setForceUpdateContainerCacheFromSCM(forceUpdateContainerCacheFromSCM);
+
+    if (partNumber != null) {
+      builder.setPartNumber(partNumber);
+    }
+
+    return builder;
   }
 
   @NotNull
   public KeyArgs toProtobuf() {
-    return KeyArgs.newBuilder()
+    KeyArgs.Builder builder = KeyArgs.newBuilder()
         .setVolumeName(getVolumeName())
         .setBucketName(getBucketName())
         .setKeyName(getKeyName())
@@ -207,8 +219,11 @@ public final class OmKeyArgs implements Auditable {
         .setLatestVersionLocation(getLatestVersionLocation())
         .setHeadOp(isHeadOp())
         .setForceUpdateContainerCacheFromSCM(
-            isForceUpdateContainerCacheFromSCM())
-        .build();
+            isForceUpdateContainerCacheFromSCM());
+    if (partNumber != null) {
+      builder.setPartNumber(partNumber);
+    }
+    return builder.build();
   }
 
   /**
@@ -231,6 +246,7 @@ public final class OmKeyArgs implements Auditable {
     private boolean recursive;
     private boolean headOp;
     private boolean forceUpdateContainerCacheFromSCM;
+    private Integer partNumber;
 
     public Builder setVolumeName(String volume) {
       this.volumeName = volume;
@@ -277,8 +293,8 @@ public final class OmKeyArgs implements Auditable {
       return this;
     }
 
-    public Builder setMultipartUploadPartNumber(int partNumber) {
-      this.multipartUploadPartNumber = partNumber;
+    public Builder setMultipartUploadPartNumber(int uploadPartNumber) {
+      this.multipartUploadPartNumber = uploadPartNumber;
       return this;
     }
 
@@ -322,6 +338,11 @@ public final class OmKeyArgs implements Auditable {
 
     public Builder setForceUpdateContainerCacheFromSCM(boolean value) {
       this.forceUpdateContainerCacheFromSCM = value;
+      return this;
+    }
+
+    public Builder setPartNumber(int partNumber) {
+      this.partNumber = partNumber;
       return this;
     }
 

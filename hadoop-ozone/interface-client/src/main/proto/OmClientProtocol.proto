@@ -1024,6 +1024,8 @@ message KeyArgs {
     optional hadoop.hdds.ECReplicationConfig ecReplicationConfig = 19;
     // Force OM to update container cache location from SCL
     optional bool forceUpdateContainerCacheFromSCM = 20;
+
+    optional int32 partNumber = 24;
 }
 
 message KeyLocation {

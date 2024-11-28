@@ -40,8 +40,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -163,8 +161,8 @@ import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 import static org.apache.hadoop.ozone.om.lock.OzoneManagerLock.Resource.BUCKET_LOCK;
 import static org.apache.hadoop.ozone.security.acl.OzoneObj.ResourceType.KEY;
 import static org.apache.hadoop.util.Time.monotonicNow;
-
-import org.jetbrains.annotations.NotNull;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 
 /**
  * Implementation of keyManager.
@@ -500,6 +498,27 @@ public class KeyManagerImpl implements KeyManager {
     }
     if (args.getLatestVersionLocation()) {
       slimLocationVersion(value);
+    }
+    Integer partNumberParam = args.getPartNumber();
+    if (partNumberParam != null && partNumberParam > 0) {
+      OmKeyLocationInfoGroup latestLocationVersion = value.getLatestVersionLocations();
+      if (latestLocationVersion != null && latestLocationVersion.isMultipartKey()) {
+
+        value.setKeyLocationVersions(
+            Collections.singletonList(
+                new OmKeyLocationInfoGroup(
+                    latestLocationVersion.getVersion(),
+                    value.getCurrentlocationsPartsMap()
+                        .getOrDefault(partNumberParam, Collections.emptyList()),
+                    true
+                )
+            )
+        );
+        value.setDataSize(
+            value.getCurrentDataSizePartsMap()
+                .getOrDefault(partNumberParam, 0L)
+        );
+      }
     }
     return value;
   }
@@ -2181,7 +2200,6 @@ public class KeyManagerImpl implements KeyManager {
     }
   }
 
-  @NotNull
   private Stream<Long> extractContainerIDs(OmKeyInfo keyInfo) {
     return keyInfo.getKeyLocationVersions().stream()
         .flatMap(v -> v.getLocationList().stream())

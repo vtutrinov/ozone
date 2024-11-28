@@ -32,9 +32,10 @@ import org.apache.hadoop.fs.FileEncryptionInfo;
 import org.apache.hadoop.hdds.client.ContainerBlockID;
 import org.apache.hadoop.hdds.client.ECReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
+import org.apache.hadoop.hdds.scm.storage.BlockLocationInfo;
 import org.apache.hadoop.hdds.utils.db.Codec;
-import org.apache.hadoop.hdds.utils.db.DelegatedCodec;
 import org.apache.hadoop.hdds.utils.db.CopyObject;
+import org.apache.hadoop.hdds.utils.db.DelegatedCodec;
 import org.apache.hadoop.hdds.utils.db.Proto2Codec;
 import org.apache.hadoop.ozone.ClientVersion;
 import org.apache.hadoop.ozone.OzoneAcl;
@@ -44,9 +45,10 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.KeyInfo
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.KeyLocationList;
 import org.apache.hadoop.ozone.protocolPB.OMPBHelper;
 import org.apache.hadoop.util.Time;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.stream.Collectors;
 
 /**
  * Args for key block. The block instance for the key requested in putKey.
@@ -78,6 +80,8 @@ public final class OmKeyInfo extends WithParentObjectId
   private String keyName;
   private long dataSize;
   private List<OmKeyLocationInfoGroup> keyLocationVersions;
+  private Map<Integer, List<OmKeyLocationInfo>> currentlocationsPartsMap;
+  private Map<Integer, Long> currentDataSizePartsMap;
   private final long creationTime;
   private long modificationTime;
   private ReplicationConfig replicationConfig;
@@ -204,6 +208,17 @@ public final class OmKeyInfo extends WithParentObjectId
     this.modificationTime = Time.monotonicNow();
   }
 
+  private void refreshCurrentLocationPartsMap() {
+    this.currentlocationsPartsMap = this.keyLocationVersions.get(keyLocationVersions.size() - 1)
+        .getLocationList()
+        .stream()
+        .filter(it -> it.getPartNumber() != 0)
+        .collect(Collectors.groupingBy(OmKeyLocationInfo::getPartNumber));
+    this.currentDataSizePartsMap = this.currentlocationsPartsMap.entrySet().stream()
+        .map(it -> Pair.of(it.getKey(), it.getValue().stream().mapToLong(BlockLocationInfo::getLength).sum()))
+        .collect(Collectors.toMap(Pair::getKey, Pair::getValue));
+  }
+
   public void setFile(boolean file) {
     isFile = file;
   }
@@ -214,6 +229,14 @@ public final class OmKeyInfo extends WithParentObjectId
 
   public boolean isHsync() {
     return metadata.containsKey(OzoneConsts.HSYNC_CLIENT_ID);
+  }
+
+  public Map<Integer, List<OmKeyLocationInfo>> getCurrentlocationsPartsMap() {
+    return currentlocationsPartsMap;
+  }
+
+  public Map<Integer, Long> getCurrentDataSizePartsMap() {
+    return currentDataSizePartsMap;
   }
 
   /**
@@ -335,6 +358,7 @@ public final class OmKeyInfo extends WithParentObjectId
     if (updateTime) {
       setModificationTime(Time.now());
     }
+    refreshCurrentLocationPartsMap();
   }
 
   /**
@@ -443,6 +467,7 @@ public final class OmKeyInfo extends WithParentObjectId
         ", acls=" + acls +
         '}';
   }
+
 
   /**
    * Builder of OmKeyInfo.
