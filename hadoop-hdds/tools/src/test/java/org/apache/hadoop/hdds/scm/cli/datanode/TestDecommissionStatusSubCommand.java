@@ -241,8 +241,7 @@ public class TestDecommissionStatusSubCommand {
   @Test
   public void testNodeContainersReplicationMetrics() throws IOException {
     ScmClient scmClient = mock(ScmClient.class);
-    when(scmClient.queryNode(any(), any(), any(), any()))
-        .thenAnswer(invocation -> nodes.subList(0, 1)); // host0 decommissioning
+    when(scmClient.queryNode(any(), any(), any(), any())).thenReturn(nodes.subList(0, 1)); // host0 decommissioning
     when(scmClient.getContainersOnDecomNode(any())).thenReturn(containerOnDecom);
     when(scmClient.getMetrics(any())).thenReturn(metrics.get(1));
 
