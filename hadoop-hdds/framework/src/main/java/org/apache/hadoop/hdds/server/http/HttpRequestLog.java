@@ -19,11 +19,12 @@ package org.apache.hadoop.hdds.server.http;
 
 import java.util.HashMap;
 
-import org.apache.commons.logging.impl.Log4JLogger;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogConfigurationException;
 import org.apache.commons.logging.LogFactory;
 import org.apache.log4j.Appender;
+import org.apache.log4j.LogManager;
+import org.apache.logging.log4j.jcl.Log4jLog;
 import org.eclipse.jetty.server.AsyncRequestLogWriter;
 import org.eclipse.jetty.server.CustomRequestLog;
 import org.eclipse.jetty.server.RequestLog;
@@ -62,7 +63,7 @@ public final class HttpRequestLog {
     boolean isLog4JLogger;
 
     try {
-      isLog4JLogger = logger instanceof Log4JLogger;
+      isLog4JLogger = logger instanceof Log4jLog;
     } catch (NoClassDefFoundError err) {
       // In some dependent projects, log4j may not even be on the classpath at
       // runtime, in which case the above instanceof check will throw
@@ -71,8 +72,7 @@ public final class HttpRequestLog {
       isLog4JLogger = false;
     }
     if (isLog4JLogger) {
-      Log4JLogger httpLog4JLog = (Log4JLogger) logger;
-      org.apache.log4j.Logger httpLogger = httpLog4JLog.getLogger();
+      org.apache.log4j.Logger httpLogger = LogManager.getLogger(loggerName);
       Appender appender = null;
 
       try {
