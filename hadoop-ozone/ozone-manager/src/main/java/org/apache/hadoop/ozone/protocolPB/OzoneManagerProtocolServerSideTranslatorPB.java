@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Stopwatch;
 import org.apache.hadoop.hdds.server.OzoneProtocolMessageDispatcher;
 import org.apache.hadoop.hdds.tracing.TracingUtil;
 import org.apache.hadoop.hdds.utils.ProtocolMessageMetrics;
@@ -68,7 +69,8 @@ import org.slf4j.LoggerFactory;
  * from {@link OzoneManagerProtocolPB} to {@link OzoneManager}.
  */
 public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerProtocolPB {
-  private static final Logger LOG = LoggerFactory .getLogger(OzoneManagerProtocolServerSideTranslatorPB.class);
+  private static final Logger LOG = LoggerFactory.getLogger(OzoneManagerProtocolServerSideTranslatorPB.class);
+  private static final Logger LOG_REQUEST_TIME = LoggerFactory.getLogger("OmRequestMeasureTime");
   private static final String OM_REQUESTS_PACKAGE = "org.apache.hadoop.ozone";
 
   private final OzoneManagerRatisServer omRatisServer;
@@ -193,9 +195,14 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
       }
 
       if (!isRatisEnabled()) {
-        return submitRequestDirectlyToOM(request);
+        Stopwatch timer = Stopwatch.createStarted();
+        OMResponse omResponse = submitRequestDirectlyToOM(request);
+        LOG_REQUEST_TIME.info("Direct OM Request ({}) - {} μs", request.getCmdType(),
+            timer.elapsed(TimeUnit.MICROSECONDS));
+        return omResponse;
       }
 
+      Stopwatch ratisRequestExecutionTimer = Stopwatch.createStarted();
       if (OmUtils.isReadOnly(request)) {
         return submitReadRequestToOM(request);
       }
@@ -237,6 +244,8 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
       if (!response.getSuccess()) {
         omClientRequest.handleRequestFailure(ozoneManager);
       }
+      LOG_REQUEST_TIME.info("Ratis OM Request ({}) - {} μs", request.getCmdType(),
+          ratisRequestExecutionTimer.elapsed(TimeUnit.MICROSECONDS));
       return response;
     } finally {
       OzoneManager.setS3Auth(null);
