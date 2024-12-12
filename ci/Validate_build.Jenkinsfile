@@ -62,7 +62,7 @@ def parallelIntegrationTests(test) {
                         pattern -> anonymous: {
                             xmlFiles = findFiles(glob: pattern)
                             if (xmlFiles) {
-                                junit skipMarkingBuildUnstable: true, testResults: pattern, allowEmptyResults: true
+                                junit testResults: pattern, allowEmptyResults: true
                             }
                         }
                     }
