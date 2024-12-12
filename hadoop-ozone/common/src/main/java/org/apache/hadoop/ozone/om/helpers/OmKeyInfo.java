@@ -232,6 +232,9 @@ public final class OmKeyInfo extends WithParentObjectId
   }
 
   public Map<Integer, List<OmKeyLocationInfo>> getCurrentlocationsPartsMap() {
+    if (currentlocationsPartsMap == null) {
+      refreshCurrentLocationPartsMap();
+    }
     return currentlocationsPartsMap;
   }
 
