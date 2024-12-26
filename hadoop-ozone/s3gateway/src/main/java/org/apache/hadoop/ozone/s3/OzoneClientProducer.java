@@ -66,7 +66,7 @@ public class OzoneClientProducer {
     OzoneClient ozoneClient = null;
     try {
       ozoneClient =
-          OzoneClientCache.getOzoneClientInstance(ozoneConfiguration);
+          OzoneClientCache.getOzoneClientInstance(config);
     } catch (Exception e) {
       // For any other critical errors during object creation throw Internal
       // error.

@@ -18,8 +18,6 @@
 package org.apache.hadoop.ozone.s3.endpoint;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import javax.annotation.PostConstruct;
@@ -54,7 +52,6 @@ import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationType;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.conf.StorageUnit;
-import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.audit.S3GAction;
 import org.apache.hadoop.ozone.client.OzoneBucket;
@@ -104,7 +101,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 
 import static javax.ws.rs.core.HttpHeaders.CONTENT_LENGTH;
 import static javax.ws.rs.core.HttpHeaders.ETAG;
@@ -178,7 +174,8 @@ public class ObjectEndpoint extends EndpointBase {
   private boolean datastreamEnabled;
   private long datastreamMinLength;
 
-  private static volatile LoadingCache<Pair<String, String>, OzoneKeyDetails> keyCache;
+  @Inject
+  private volatile LoadingCache<Pair<String, String>, OzoneKeyDetails> keyDetailsCache;
 
   public ObjectEndpoint() {
     overrideQueryParameter = ImmutableMap.<String, String>builder()
@@ -426,20 +423,49 @@ public class ObjectEndpoint extends EndpointBase {
         return response;
       }
 
-      OzoneKeyDetails keyDetails = (partNumber != 0) ?
-          getClientProtocol().getS3KeyDetails(bucketName, keyPath, partNumber) :
-          getOzoneKeyDetails(bucketName, keyPath);
+      String rangeHeaderVal = headers.getHeaderString(RANGE_HEADER);
+      RangeHeader rangeHeader = null;
+
+      LOG.debug("Range header value: {}", rangeHeaderVal);
+
+      OzoneKeyDetails keyDetails;
+
+      if (partNumber != 0) {
+        // Request only single part of the multipart file.
+        keyDetails = getClientProtocol().getS3KeyDetails(bucketName, keyPath, partNumber);
+      } else if (rangeHeaderVal != null) {
+        // This is a multipart request, but Range header is used instead of part number.
+        OzoneKeyDetails cachedKeyDetails = getKeyCache().getIfPresent(Pair.of(bucketName, keyPath));
+
+        // The request is quite heavy (contains locations for all parts), we are caching it.
+        if (cachedKeyDetails == null) {
+          // No data in cache.
+          keyDetails = getOzoneKeyDetails(bucketName, keyPath);
+        } else {
+          // This request has already been cached. Check if it is still valid.
+          // This request also validates all ACLs.
+          OzoneKey ozoneKey = getClientProtocol().headS3Object(bucketName, keyPath);
+
+          if (ozoneKey != null && ozoneKey.getUpdateId() == cachedKeyDetails.getUpdateId()) {
+            // No updates to the file since it was cached, reusing the cached version.
+            keyDetails = cachedKeyDetails;
+          } else {
+            // There were updates to the file, update cached value.
+            getKeyCache().invalidate(Pair.of(bucketName, keyPath));
+
+            keyDetails = getOzoneKeyDetails(bucketName, keyPath);
+          }
+        }
+      } else {
+        // This is a single-request file.
+        keyDetails = getClientProtocol().getS3KeyDetails(bucketName, keyPath);
+      }
 
       isFile(keyPath, keyDetails);
 
       long length = keyDetails.getDataSize();
 
       LOG.debug("Data length of the key {} is {}", keyPath, length);
-
-      String rangeHeaderVal = headers.getHeaderString(RANGE_HEADER);
-      RangeHeader rangeHeader = null;
-
-      LOG.debug("range Header provided value: {}", rangeHeaderVal);
 
       if (rangeHeaderVal != null) {
         rangeHeader = RangeHeaderParserUtil.parseRangeHeader(rangeHeaderVal,
@@ -1354,28 +1380,7 @@ public class ObjectEndpoint extends EndpointBase {
   }
 
   private LoadingCache<Pair<String, String>, OzoneKeyDetails> getKeyCache() {
-    if (keyCache != null) {
-      return keyCache;
-    }
-    synchronized (this) {
-      if (keyCache == null) {
-        CacheLoader<Pair<String, String>, OzoneKeyDetails> loader = new CacheLoader<Pair<String, String>,
-            OzoneKeyDetails>() {
-          @Override
-          public OzoneKeyDetails load(Pair<String, String> key) throws Exception {
-            return getClientProtocol().getS3KeyDetails(key.getLeft(), key.getRight());
-          }
-        };
-        keyCache = CacheBuilder.newBuilder()
-            .weakValues()
-            .expireAfterAccess(ozoneConfiguration.getTimeDuration(
-                OzoneConfigKeys.OZONE_S3G_KEY_INFO_CACHE_IDLE_LIFETIME,
-                OzoneConfigKeys.OZONE_S3G_KEY_INFO_CACHE_IDLE_LIFETIME_DEFAULT,
-                TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS
-            ).build(loader);
-      }
-      return keyCache;
-    }
+    return keyDetailsCache;
   }
 
   private OzoneKeyDetails getOzoneKeyDetails(String bucket, String key) throws OMException, ExecutionException {

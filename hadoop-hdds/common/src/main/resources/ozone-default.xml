@@ -4317,7 +4317,7 @@
   </property>
   <property>
     <name>ozone.s3g.key.info.cache.idle.lifetime</name>
-    <value>10s</value>
+    <value>120s</value>
     <tag>OZONE, S3GATEWAY</tag>
     <description>
       Cache lifetime of the ozone key details after the last request.

@@ -677,7 +677,7 @@ public final class OzoneConfigKeys {
   public static final String OZONE_S3G_KEY_INFO_CACHE_IDLE_LIFETIME =
       "ozone.s3g.key.info.cache.idle.lifetime";
 
-  public static final String OZONE_S3G_KEY_INFO_CACHE_IDLE_LIFETIME_DEFAULT = "10s";
+  public static final String OZONE_S3G_KEY_INFO_CACHE_IDLE_LIFETIME_DEFAULT = "120s";
 
   /**
    * There is no need to instantiate this class.
