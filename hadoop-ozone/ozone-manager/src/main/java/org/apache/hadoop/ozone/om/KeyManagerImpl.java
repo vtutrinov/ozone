@@ -2348,8 +2348,10 @@ public class KeyManagerImpl implements KeyManager {
 
     // If operation is head, do not perform any additional steps based on flags.
     // As head operation does not need any of those details.
-    if (!args.isHeadOp()) {
-
+    if (args.isHeadOp()) {
+      // Set to empty for HEAD request to save on memory and network.
+      value.setKeyLocationVersions(Collections.emptyList());
+    } else {
       // add block token for read.
       captureLatencyNs(metrics.getGetKeyInfoGenerateBlockTokenLatencyNs(),
           () -> addBlockToken4Read(value));
@@ -2364,6 +2366,7 @@ public class KeyManagerImpl implements KeyManager {
             () -> sortDatanodes(clientAddress, value));
       }
     }
+
     return value;
   }
 

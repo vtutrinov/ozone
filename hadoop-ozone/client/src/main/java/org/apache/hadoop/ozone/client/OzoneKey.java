@@ -70,6 +70,12 @@ public class OzoneKey {
    */
   private final boolean isFile;
 
+  /**
+   * Update ID of the key. Only populated when created from a full {@link OmKeyInfo}
+   * (e.g. HEAD requests), used by S3G to validate its key details cache.
+   */
+  private long updateId;
+
   @SuppressWarnings("parameternumber")
   public OzoneKey(String volumeName, String bucketName,
       String keyName, long size, long creationTime,
@@ -213,16 +219,23 @@ public class OzoneKey {
     return isFile;
   }
 
+  @JsonIgnore
+  public long getUpdateId() {
+    return updateId;
+  }
+
   /**
    * Constructs OzoneKey from OmKeyInfo.
    *
    */
   public static OzoneKey fromKeyInfo(OmKeyInfo keyInfo) {
-    return new OzoneKey(keyInfo.getVolumeName(), keyInfo.getBucketName(),
+    OzoneKey key = new OzoneKey(keyInfo.getVolumeName(), keyInfo.getBucketName(),
         keyInfo.getKeyName(), keyInfo.getDataSize(), keyInfo.getCreationTime(),
         keyInfo.getModificationTime(), keyInfo.getReplicationConfig(),
         keyInfo.getMetadata(), keyInfo.isFile(), keyInfo.getOwnerName(),
         keyInfo.getTags());
+    key.updateId = keyInfo.getUpdateID();
+    return key;
   }
 
 }
