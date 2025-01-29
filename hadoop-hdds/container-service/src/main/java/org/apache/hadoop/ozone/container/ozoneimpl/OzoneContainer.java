@@ -35,14 +35,19 @@ import static org.apache.hadoop.ozone.container.ozoneimpl.ContainerScannerConfig
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import java.io.File;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -50,11 +55,13 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.hdds.HddsConfigKeys;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.protocol.DatanodeDetails;
 import org.apache.hadoop.hdds.protocol.DatanodeDetails.Port.Name;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.ContainerType;
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.ContainerReplicaProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.IncrementalContainerReportProto;
@@ -82,6 +89,7 @@ import org.apache.hadoop.ozone.container.common.interfaces.Handler;
 import org.apache.hadoop.ozone.container.common.interfaces.VolumeChoosingPolicy;
 import org.apache.hadoop.ozone.container.common.report.IncrementalReportSender;
 import org.apache.hadoop.ozone.container.common.statemachine.DatanodeConfiguration;
+import org.apache.hadoop.ozone.container.common.statemachine.SCMConnectionManager;
 import org.apache.hadoop.ozone.container.common.statemachine.StateContext;
 import org.apache.hadoop.ozone.container.common.transport.server.XceiverServerGrpc;
 import org.apache.hadoop.ozone.container.common.transport.server.XceiverServerSpi;
@@ -148,6 +156,8 @@ public class OzoneContainer {
   private ScheduledExecutorService dbCompactionExecutorService;
 
   private final ContainerMetrics metrics;
+
+  private final SCMConnectionManager scmConnectionManager;
   private WitnessedContainerMetadataStore witnessedContainerMetadataStore;
 
   enum InitializingStatus {
@@ -163,12 +173,30 @@ public class OzoneContainer {
    * @throws DiskOutOfSpaceException
    * @throws IOException
    */
-  @SuppressWarnings("checkstyle:methodlength")
   public OzoneContainer(HddsDatanodeService hddsDatanodeService,
       DatanodeDetails datanodeDetails, ConfigurationSource conf,
       StateContext context, CertificateClient certClient,
       SecretKeyVerifierClient secretKeyClient,
       VolumeChoosingPolicy volumeChoosingPolicy) throws IOException {
+    this(hddsDatanodeService, datanodeDetails, conf, context, certClient,
+        secretKeyClient, volumeChoosingPolicy, null);
+  }
+
+  /**
+   * Construct OzoneContainer object.
+   *
+   * @param scmConnectionManager used to check the previous state of this
+   *                             datanode on SCM before the Ratis server starts
+   *                             (irrelevant pipelines of a DEAD node are cleaned up)
+   */
+  @SuppressWarnings({"checkstyle:methodlength", "checkstyle:ParameterNumber"})
+  public OzoneContainer(HddsDatanodeService hddsDatanodeService,
+      DatanodeDetails datanodeDetails, ConfigurationSource conf,
+      StateContext context, CertificateClient certClient,
+      SecretKeyVerifierClient secretKeyClient,
+      VolumeChoosingPolicy volumeChoosingPolicy,
+      SCMConnectionManager scmConnectionManager) throws IOException {
+    this.scmConnectionManager = scmConnectionManager;
     config = conf;
     this.datanodeDetails = datanodeDetails;
     this.context = context;
@@ -234,6 +262,8 @@ public class OzoneContainer {
      * XceiverServerGrpc is the read channel
      */
     controller = new ContainerController(containerSet, handlers);
+
+    cleanUpRatisMetadataDirectory();
 
     writeChannel = XceiverServerRatis.newXceiverServerRatis(hddsDatanodeService,
         datanodeDetails, config, hddsDispatcher, controller, certClient,
@@ -756,5 +786,63 @@ public class OzoneContainer {
 
   public DiskBalancerService getDiskBalancerService() {
     return diskBalancerService;
+  }
+
+  public DatanodeDetails getDatanodeDetails() {
+    return datanodeDetails;
+  }
+
+  private void cleanUpRatisMetadataDirectory() {
+    if (scmConnectionManager != null) {
+      Collection<InetSocketAddress> scmAddressesForDatanodes;
+      try {
+        scmAddressesForDatanodes = HddsServerUtil.getSCMAddressForDatanodes(config);
+      } catch (IllegalArgumentException e) {
+        LOG.error("Failed to get SCM addresses for datanodes: {}", e.getMessage());
+        return;
+      }
+      for (InetSocketAddress scmAddress : scmAddressesForDatanodes) {
+        try {
+          scmConnectionManager.addSCMServer(scmAddress, context.getThreadNamePrefix());
+        } catch (IOException e) {
+          LOG.error("Failed to add SCM server {}", scmAddress, e);
+          return;
+        }
+        context.addEndpoint(scmAddress);
+      }
+
+      scmConnectionManager.getValues().stream()
+          .filter(endPoint -> !endPoint.isPassive())
+          .findFirst()
+          .ifPresent(rpcEndPoint -> {
+            try {
+              // Check the previous state of the datanode stored on the SCM side
+              HddsProtos.NodeState nodePreviousState = rpcEndPoint.getEndPoint()
+                  .getNodeState(datanodeDetails.getUuidString());
+
+              if (HddsProtos.NodeState.DEAD.equals(nodePreviousState)) {
+                LOG.info("The node previous state is DEAD, let's clean up the RATIS/THREE pipelines");
+                // OK, the node was previously marked as DEAD, let's clean up the
+                // RATIS/THREE pipelines (aka raft-groups)
+                this.getMetaVolumeSet().getVolumeMap().forEach((key, value) ->
+                    Arrays.stream(Objects.requireNonNull(value.getStorageDir()
+                            // don't touch the directory with volume check info
+                            .listFiles((dir, name) -> !name.equals("tmp"))))
+                        .filter(File::isDirectory) // only directories
+                        .forEach(directory -> {
+                          try {
+                            FileUtils.deleteDirectory(directory);
+                            LOG.info("Delete directory: {}", directory.getAbsolutePath());
+                          } catch (IOException e) {
+                            LOG.warn("Failed to delete directory: {}", directory);
+                          }
+                        }));
+              }
+
+            } catch (IOException e) {
+              LOG.error("Failed to get datanode previous state with SCM: {}", e.getMessage(), e);
+            }
+          });
+    }
   }
 }

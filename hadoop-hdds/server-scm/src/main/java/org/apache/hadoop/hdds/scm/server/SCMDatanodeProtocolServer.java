@@ -55,11 +55,14 @@ import java.util.concurrent.TimeoutException;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.protocol.DatanodeDetails;
+import org.apache.hadoop.hdds.protocol.DatanodeID;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.ContainerReportsProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.LayoutVersionProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.NodeReportProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.NodeStateRequestProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.NodeStateResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.PipelineReportsProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.ReconstructECContainersCommandProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.ReregisterCommandProto;
@@ -72,6 +75,8 @@ import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolPro
 import org.apache.hadoop.hdds.scm.events.SCMEvents;
 import org.apache.hadoop.hdds.scm.ha.SCMContext;
 import org.apache.hadoop.hdds.scm.ha.SCMNodeDetails;
+import org.apache.hadoop.hdds.scm.node.NodeStatus;
+import org.apache.hadoop.hdds.scm.node.states.NodeNotFoundException;
 import org.apache.hadoop.hdds.scm.server.SCMDatanodeHeartbeatDispatcher.PipelineReportFromDatanode;
 import org.apache.hadoop.hdds.scm.server.SCMDatanodeHeartbeatDispatcher.ReportFromDatanode;
 import org.apache.hadoop.hdds.server.events.EventPublisher;
@@ -267,6 +272,25 @@ public class SCMDatanodeProtocolServer implements
             buildAuditMessageForSuccess(SCMAction.REGISTER, auditMap));
       }
     }
+  }
+
+  @Override
+  public NodeStateResponseProto getNodeState(NodeStateRequestProto request) throws IOException {
+    NodeStatus nodeStatus = null;
+    try {
+      DatanodeDetails nodeByUuid = scm.getScmNodeManager()
+          .getNode(DatanodeID.fromUuidString(request.getDatanodeUUID()));
+      if (nodeByUuid != null) {
+        nodeStatus = scm.getScmNodeManager().getNodeStatus(nodeByUuid);
+      }
+    } catch (NodeNotFoundException e) {
+      LOG.warn("Node not found for UUID: {}", request.getDatanodeUUID());
+    }
+    NodeStateResponseProto.Builder builder = NodeStateResponseProto.newBuilder();
+    if (nodeStatus != null) {
+      builder.setNodeState(nodeStatus.getHealth());
+    }
+    return builder.build();
   }
 
   @VisibleForTesting

@@ -22,10 +22,13 @@ import com.google.protobuf.ServiceException;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.function.Consumer;
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos.ExtendedDatanodeDetailsProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.ContainerReportsProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.LayoutVersionProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.NodeReportProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.NodeStateRequestProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.NodeStateResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.PipelineReportsProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMDatanodeRequest;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMDatanodeRequest.Builder;
@@ -167,5 +170,18 @@ public class StorageContainerDatanodeProtocolClientSideTranslatorPB
     return submitRequest(Type.Register,
         (builder) -> builder.setRegisterRequest(req))
         .getRegisterResponse();
+  }
+
+  public HddsProtos.NodeState getNodeState(String datanodeUuid) throws IOException {
+    NodeStateRequestProto request = NodeStateRequestProto.newBuilder()
+        .setDatanodeUUID(datanodeUuid)
+        .build();
+    return getNodeState(request).getNodeState();
+  }
+
+  @Override
+  public NodeStateResponseProto getNodeState(NodeStateRequestProto request) throws IOException {
+    return submitRequest(Type.NodePreviousState, builder -> builder.setNodeStateRequest(request))
+        .getNodeStateResponse();
   }
 }

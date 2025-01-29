@@ -189,7 +189,7 @@ public class DatanodeStateMachine implements Closeable {
     constructionLock.writeLock().lock();
     try {
       container = new OzoneContainer(hddsDatanodeService, this.datanodeDetails,
-          conf, context, certClient, secretKeyClient, volumeChoosingPolicy);
+          conf, context, certClient, secretKeyClient, volumeChoosingPolicy, connectionManager);
     } finally {
       constructionLock.writeLock().unlock();
     }

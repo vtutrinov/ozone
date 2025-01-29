@@ -44,6 +44,8 @@ message SCMDatanodeRequest {
   optional SCMVersionRequestProto getVersionRequest = 3;
   optional SCMRegisterRequestProto registerRequest = 4;
   optional SCMHeartbeatRequestProto sendHeartbeatRequest = 5;
+  // SDP (HDDS-1400): SDP numbers live in the 1000+ range
+  optional NodeStateRequestProto nodeStateRequest = 1001;
 }
 
 message SCMDatanodeResponse {
@@ -60,6 +62,8 @@ message SCMDatanodeResponse {
   optional SCMVersionResponseProto getVersionResponse = 6;
   optional SCMRegisteredResponseProto registerResponse = 7;
   optional SCMHeartbeatResponseProto sendHeartbeatResponse = 8;
+  // SDP (HDDS-1400)
+  optional NodeStateResponseProto nodeStateResponse = 1001;
 
 }
 
@@ -67,11 +71,21 @@ enum Type {
   GetVersion = 1;
   Register = 2;
   SendHeartbeat = 3;
+  // SDP (HDDS-1400)
+  NodePreviousState = 1001;
 }
 
 enum Status {
   OK = 1;
   ERROR = 2;
+}
+
+message NodeStateRequestProto {
+  required string datanodeUUID = 1;
+}
+
+message NodeStateResponseProto {
+  optional NodeState nodeState = 1;
 }
 
 /**
