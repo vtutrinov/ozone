@@ -136,7 +136,7 @@ class TestSecureOzoneContainer {
 
       DatanodeDetails dn = MockDatanodeDetails.randomDatanodeDetails();
       container = new OzoneContainer(dn, conf, ContainerTestUtils
-          .getMockContext(dn, conf), caClient, secretKeyClient);
+          .getMockContext(dn, conf), caClient, secretKeyClient, null);
       //Set scmId and manually start ozone container.
       container.start(UUID.randomUUID().toString());
 

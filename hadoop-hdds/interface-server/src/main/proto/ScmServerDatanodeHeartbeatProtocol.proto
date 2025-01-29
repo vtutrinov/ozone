@@ -44,6 +44,7 @@ message SCMDatanodeRequest {
   optional SCMVersionRequestProto getVersionRequest = 3;
   optional SCMRegisterRequestProto registerRequest = 4;
   optional SCMHeartbeatRequestProto sendHeartbeatRequest = 5;
+  optional NodeStateRequestProto nodeStateRequest = 6;
 }
 
 message SCMDatanodeResponse {
@@ -60,6 +61,7 @@ message SCMDatanodeResponse {
   optional SCMVersionResponseProto getVersionResponse = 6;
   optional SCMRegisteredResponseProto registerResponse = 7;
   optional SCMHeartbeatResponseProto sendHeartbeatResponse = 8;
+  optional NodeStateResponseProto nodeStateResponse = 9;
 
 }
 
@@ -67,11 +69,20 @@ enum Type {
   GetVersion = 1;
   Register = 2;
   SendHeartbeat = 3;
+  NodePreviousState = 4;
 }
 
 enum Status {
   OK = 1;
   ERROR = 2;
+}
+
+message NodeStateRequestProto {
+  required string datanodeUUID = 1;
+}
+
+message NodeStateResponseProto {
+  optional NodeState nodeState = 1;
 }
 
 /**

@@ -211,4 +211,21 @@ public class DatanodeRatisServerConfig {
   public void setLogAppenderWaitTimeMin(long logAppenderWaitTimeMin) {
     this.logAppenderWaitTimeMin = logAppenderWaitTimeMin;
   }
+
+  @Config(key = "log.segment.cache.num.max",
+          defaultValue = "2",
+          type = ConfigType.INT,
+          tags = {OZONE, DATANODE, RATIS},
+          description = "The max number of raft log segments caching log entries")
+  private int logSegmentCacheNumMax;
+
+
+  public int getLogSegmentCacheNumMax() {
+    return logSegmentCacheNumMax;
+  }
+
+  public void setLogSegmentCacheNumMax(int logSegmentCacheNumMax) {
+    this.logSegmentCacheNumMax = logSegmentCacheNumMax;
+  }
+
 }

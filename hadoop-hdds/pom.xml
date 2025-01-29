@@ -276,6 +276,7 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
             <exclude>src/test/resources/123-dn-container.db/**</exclude>
             <exclude>src/test/resources/123.container</exclude>
             <exclude>src/main/resources/proto.lock</exclude>
+            <exclude>src/test/resources/metadata/**</exclude>
           </excludes>
         </configuration>
       </plugin>

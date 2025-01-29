@@ -18,30 +18,26 @@ package org.apache.hadoop.ozone.protocolPB;
 
 import com.google.protobuf.RpcController;
 import com.google.protobuf.ServiceException;
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos
     .ExtendedDatanodeDetailsProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.LayoutVersionProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.NodeReportProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.NodeStateRequestProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.NodeStateResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.PipelineReportsProto;
 import org.apache.hadoop.hdds.protocol.proto
     .StorageContainerDatanodeProtocolProtos.ContainerReportsProto;
 
-import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMDatanodeRequest;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMDatanodeRequest.Builder;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMDatanodeResponse;
-import org.apache.hadoop.hdds.protocol.proto
-    .StorageContainerDatanodeProtocolProtos.SCMHeartbeatRequestProto;
-import org.apache.hadoop.hdds.protocol.proto
-    .StorageContainerDatanodeProtocolProtos.SCMHeartbeatResponseProto;
-import org.apache.hadoop.hdds.protocol.proto
-    .StorageContainerDatanodeProtocolProtos.NodeReportProto;
-import org.apache.hadoop.hdds.protocol.proto
-    .StorageContainerDatanodeProtocolProtos.SCMRegisterRequestProto;
-import org.apache.hadoop.hdds.protocol.proto
-    .StorageContainerDatanodeProtocolProtos.SCMRegisteredResponseProto;
-import org.apache.hadoop.hdds.protocol.proto
-    .StorageContainerDatanodeProtocolProtos.SCMVersionRequestProto;
-import org.apache.hadoop.hdds.protocol.proto
-    .StorageContainerDatanodeProtocolProtos.SCMVersionResponseProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMDatanodeRequest;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMHeartbeatRequestProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMHeartbeatResponseProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMRegisterRequestProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMRegisteredResponseProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMVersionRequestProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMVersionResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.Type;
 import org.apache.hadoop.ipc.ProtobufHelper;
 import org.apache.hadoop.ipc.ProtocolTranslator;
@@ -50,6 +46,7 @@ import org.apache.hadoop.ozone.protocol.StorageContainerDatanodeProtocol;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
@@ -106,7 +103,7 @@ public class StorageContainerDatanodeProtocolClientSideTranslatorPB
    * Helper method to wrap the request and send the message.
    */
   private SCMDatanodeResponse submitRequest(Type type,
-      Consumer<SCMDatanodeRequest.Builder> builderConsumer) throws IOException {
+                                            Consumer<SCMDatanodeRequest.Builder> builderConsumer) throws IOException {
     final SCMDatanodeResponse response;
     try {
       Builder builder = SCMDatanodeRequest.newBuilder()
@@ -181,4 +178,19 @@ public class StorageContainerDatanodeProtocolClientSideTranslatorPB
         (builder) -> builder.setRegisterRequest(req))
         .getRegisterResponse();
   }
+
+  public HddsProtos.NodeState getNodeState(UUID datanodeUuid) throws IOException {
+    NodeStateRequestProto request = NodeStateRequestProto.newBuilder()
+            .setDatanodeUUID(datanodeUuid.toString())
+            .build();
+    return getNodeState(request).getNodeState();
+
+  }
+
+  @Override
+  public NodeStateResponseProto getNodeState(NodeStateRequestProto request) throws IOException {
+    return submitRequest(Type.NodePreviousState, builder -> builder.setNodeStateRequest(request))
+            .getNodeStateResponse();
+  }
+
 }

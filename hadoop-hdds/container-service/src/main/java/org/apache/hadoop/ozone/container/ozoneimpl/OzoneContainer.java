@@ -21,10 +21,13 @@ package org.apache.hadoop.ozone.container.ozoneimpl;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.commons.io.FileUtils;
+import org.apache.hadoop.hdds.HddsUtils;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.protocol.DatanodeDetails;
 import org.apache.hadoop.hdds.protocol.DatanodeDetails.Port.Name;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.ContainerType;
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.ContainerReplicaProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.IncrementalContainerReportProto;
@@ -44,6 +47,7 @@ import org.apache.hadoop.ozone.container.common.interfaces.ContainerDispatcher;
 import org.apache.hadoop.ozone.container.common.interfaces.Handler;
 import org.apache.hadoop.ozone.container.common.report.IncrementalReportSender;
 import org.apache.hadoop.ozone.container.common.statemachine.DatanodeConfiguration;
+import org.apache.hadoop.ozone.container.common.statemachine.SCMConnectionManager;
 import org.apache.hadoop.ozone.container.common.statemachine.StateContext;
 import org.apache.hadoop.ozone.container.common.transport.server.XceiverServerGrpc;
 import org.apache.hadoop.ozone.container.common.transport.server.XceiverServerSpi;
@@ -66,12 +70,17 @@ import org.apache.ratis.grpc.GrpcTlsConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -123,6 +132,8 @@ public class OzoneContainer {
 
   private final ContainerMetrics metrics;
 
+  private final SCMConnectionManager scmConnectionManager;
+
   enum InitializingStatus {
     UNINITIALIZED, INITIALIZING, INITIALIZED
   }
@@ -139,10 +150,12 @@ public class OzoneContainer {
   public OzoneContainer(
       DatanodeDetails datanodeDetails, ConfigurationSource conf,
       StateContext context, CertificateClient certClient,
-      SecretKeyVerifierClient secretKeyClient) throws IOException {
+      SecretKeyVerifierClient secretKeyClient,
+      SCMConnectionManager scmConnectionManager) throws IOException {
     config = conf;
     this.datanodeDetails = datanodeDetails;
     this.context = context;
+    this.scmConnectionManager = scmConnectionManager;
     this.volumeChecker = new StorageVolumeChecker(conf, new Timer(),
         datanodeDetails.threadNamePrefix());
 
@@ -203,6 +216,8 @@ public class OzoneContainer {
      * XceiverServerGrpc is the read channel
      */
     controller = new ContainerController(containerSet, handlers);
+
+    cleanUpRatisMetadataDirectory();
 
     writeChannel = XceiverServerRatis.newXceiverServerRatis(
         datanodeDetails, config, hddsDispatcher, controller, certClient,
@@ -276,7 +291,7 @@ public class OzoneContainer {
   public OzoneContainer(
       DatanodeDetails datanodeDetails, ConfigurationSource conf,
       StateContext context) throws IOException {
-    this(datanodeDetails, conf, context, null, null);
+    this(datanodeDetails, conf, context, null, null, null);
   }
 
   public GrpcTlsConfig getTlsClientConfig() {
@@ -566,6 +581,59 @@ public class OzoneContainer {
 
   public BlockDeletingService getBlockDeletingService() {
     return blockDeletingService;
+  }
+
+  public DatanodeDetails getDatanodeDetails() {
+    return datanodeDetails;
+  }
+
+  private void cleanUpRatisMetadataDirectory() throws IOException {
+    if (scmConnectionManager != null) {
+      Collection<InetSocketAddress> scmAddressesForDatanodes;
+      try {
+        scmAddressesForDatanodes = HddsUtils.getSCMAddressForDatanodes(config);
+      } catch (IllegalArgumentException e) {
+        LOG.error("Failed to get SCM addresses for datanodes: {}", e.getMessage());
+        return;
+      }
+      for (InetSocketAddress scmAddress : scmAddressesForDatanodes) {
+        scmConnectionManager.addSCMServer(scmAddress, context.getThreadNamePrefix());
+        context.addEndpoint(scmAddress);
+      }
+
+      scmConnectionManager.getValues().stream()
+          .filter(endPoint -> !endPoint.isPassive())
+          .findFirst()
+          .ifPresent(rpcEndPoint -> {
+            try {
+              // Check the previous state of the datanode stored on the SCM side
+              HddsProtos.NodeState nodePreviousState = rpcEndPoint.getEndPoint()
+                  .getNodeState(datanodeDetails.getUuid());
+
+              if (HddsProtos.NodeState.DEAD.equals(nodePreviousState)) {
+                LOG.info("The node previous state is DEAD, let's clean up the RATIS/THREE pipelines");
+                // OK, the node was previously marked as DEAD, let's clean up the
+                // RATIS/THREE pipelines (aka raft-groups)
+                this.getMetaVolumeSet().getVolumeMap().forEach((key, value) ->
+                    Arrays.stream(Objects.requireNonNull(value.getStorageDir()
+                            // don't touch the directory with volume check info
+                            .listFiles((dir, name) -> !name.equals("tmp"))))
+                        .filter(File::isDirectory) // only directories
+                        .forEach(directory -> {
+                          try {
+                            FileUtils.deleteDirectory(directory);
+                            LOG.info("Delete directory: {}", directory.getAbsolutePath());
+                          } catch (IOException e) {
+                            LOG.warn("Failed to delete directory: {}", directory);
+                          }
+                        }));
+              }
+
+            } catch (IOException e) {
+              LOG.error(String.format("Failed to get datanode previous state with SCM: %s", e.getMessage()), e);
+            }
+          });
+    }
   }
 
 }

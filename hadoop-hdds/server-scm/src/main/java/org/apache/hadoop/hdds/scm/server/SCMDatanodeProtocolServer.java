@@ -47,9 +47,13 @@ import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolPro
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMRegisteredResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMVersionRequestProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.SCMVersionResponseProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.NodeStateResponseProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerDatanodeProtocolProtos.NodeStateRequestProto;
 import org.apache.hadoop.hdds.scm.events.SCMEvents;
 import org.apache.hadoop.hdds.scm.ha.SCMContext;
 import org.apache.hadoop.hdds.scm.ha.SCMNodeDetails;
+import org.apache.hadoop.hdds.scm.node.NodeStatus;
+import org.apache.hadoop.hdds.scm.node.states.NodeNotFoundException;
 import org.apache.hadoop.hdds.scm.server.SCMDatanodeHeartbeatDispatcher.PipelineReportFromDatanode;
 import org.apache.hadoop.hdds.scm.server.SCMDatanodeHeartbeatDispatcher.ReportFromDatanode;
 import org.apache.hadoop.hdds.server.events.EventPublisher;
@@ -266,6 +270,24 @@ public class SCMDatanodeProtocolServer implements
             buildAuditMessageForSuccess(SCMAction.REGISTER, auditMap));
       }
     }
+  }
+
+  @Override
+  public NodeStateResponseProto getNodeState(NodeStateRequestProto request) throws IOException {
+    NodeStatus nodeStatus = null;
+    try {
+      DatanodeDetails nodeByUuid = scm.getScmNodeManager().getNodeByUuid(request.getDatanodeUUID());
+      if (nodeByUuid != null) {
+        nodeStatus = scm.getScmNodeManager().getNodeStatus(nodeByUuid);
+      }
+    } catch (NodeNotFoundException e) {
+      LOG.warn("Node not found for UUID: {}", request.getDatanodeUUID());
+    }
+    NodeStateResponseProto.Builder builder = NodeStateResponseProto.newBuilder();
+    if (nodeStatus != null) {
+      builder.setNodeState(nodeStatus.getHealth());
+    }
+    return builder.build();
   }
 
   @VisibleForTesting
