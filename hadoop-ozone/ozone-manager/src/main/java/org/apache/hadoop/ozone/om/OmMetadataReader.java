@@ -22,21 +22,37 @@ import static org.apache.hadoop.hdds.utils.HddsServerUtil.getRemoteUser;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_FS_LISTING_PAGE_SIZE;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_FS_LISTING_PAGE_SIZE_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_FS_LISTING_PAGE_SIZE_MAX;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_FS_MAX_LISTING_PAGE_SIZE;
+import static org.apache.hadoop.ozone.OzoneConsts.OM_SNAPSHOT_INDICATOR;
+import static org.apache.hadoop.ozone.OzoneConsts.OZONE_URI_DELIMITER;
 import static org.apache.hadoop.ozone.om.OzoneManager.getS3Auth;
 import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes;
 import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.INVALID_REQUEST;
+import static org.apache.hadoop.ozone.om.helpers.SnapshotInfo.SnapshotStatus.SNAPSHOT_ACTIVE;
 import static org.apache.hadoop.ozone.util.MetricUtil.captureLatencyNs;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.Server;
+import org.apache.hadoop.ozone.Bucket;
+import org.apache.hadoop.ozone.BucketIterator;
+import org.apache.hadoop.ozone.ContentSummary;
+import org.apache.hadoop.ozone.FileStatusIterator;
+import org.apache.hadoop.ozone.OFSPath;
 import org.apache.hadoop.ozone.OzoneAcl;
+import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.SnapshotIterator;
+import org.apache.hadoop.ozone.Volume;
+import org.apache.hadoop.ozone.VolumeIterator;
 import org.apache.hadoop.ozone.audit.AuditAction;
 import org.apache.hadoop.ozone.audit.AuditEventStatus;
 import org.apache.hadoop.ozone.audit.AuditLogger;
@@ -48,12 +64,15 @@ import org.apache.hadoop.ozone.om.helpers.BasicOmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.KeyInfoWithVolumeContext;
 import org.apache.hadoop.ozone.om.helpers.ListKeysLightResult;
 import org.apache.hadoop.ozone.om.helpers.ListKeysResult;
+import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyArgs;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.OzoneFileStatus;
 import org.apache.hadoop.ozone.om.helpers.OzoneFileStatusLight;
 import org.apache.hadoop.ozone.om.helpers.S3VolumeContext;
+import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
 import org.apache.hadoop.ozone.om.protocolPB.grpc.GrpcClientConstants;
+import org.apache.hadoop.ozone.om.snapshot.ReferenceCounted;
 import org.apache.hadoop.ozone.security.acl.IAccessAuthorizer;
 import org.apache.hadoop.ozone.security.acl.IAccessAuthorizer.ACLIdentityType;
 import org.apache.hadoop.ozone.security.acl.IAccessAuthorizer.ACLType;
@@ -63,13 +82,14 @@ import org.apache.hadoop.ozone.security.acl.OzoneObj.ResourceType;
 import org.apache.hadoop.ozone.security.acl.OzoneObj.StoreType;
 import org.apache.hadoop.ozone.security.acl.OzoneObjInfo;
 import org.apache.hadoop.ozone.security.acl.RequestContext;
+import org.apache.hadoop.ozone.snapshot.ListSnapshotResponse;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 
 /**
  * OM Metadata Reading class for the OM and Snapshot managers.
- *
+ * <p>
  * This abstraction manages all the metadata key/acl reading
  * from a rocksDb instance, for both the OM and OM snapshots.
  */
@@ -156,13 +176,13 @@ public class OmMetadataReader implements IOmMetadataReader, Auditor {
       throws IOException {
     long start = Time.monotonicNowNanos();
 
-    java.util.Optional<S3VolumeContext> s3VolumeContext =
-        java.util.Optional.empty();
+    Optional<S3VolumeContext> s3VolumeContext =
+        Optional.empty();
 
     final OmKeyArgs resolvedVolumeArgs;
     if (assumeS3Context) {
       S3VolumeContext context = ozoneManager.getS3VolumeContext(true);
-      s3VolumeContext = java.util.Optional.of(context);
+      s3VolumeContext = Optional.of(context);
       resolvedVolumeArgs = args.toBuilder()
           .setVolumeName(context.getOmVolumeArgs().getVolume())
           .build();
@@ -466,6 +486,195 @@ public class OmMetadataReader implements IOmMetadataReader, Auditor {
 
       perfMetrics.addGetObjectTaggingLatencyNs(Time.monotonicNowNanos() - start);
     }
+  }
+
+  @Override
+  public ContentSummary getContentSummary(OmKeyArgs args, String username) throws IOException {
+    Path path = new Path(args.getVolumeName() + OZONE_URI_DELIMITER
+        + args.getBucketName() + OZONE_URI_DELIMITER + args.getKeyName());
+    OFSPath ofsPath = new OFSPath(path, ozoneManager.getConfiguration());
+    String startPath = "";
+    return getContentSummary(ofsPath, startPath, username);
+  }
+
+  private ContentSummary getContentSummary(OFSPath ofsPath, String startPath, String username) throws IOException {
+    if (ofsPath.isRoot()) {
+      ContentSummary contentSummaryRoot = getContentSummaryRoot(ofsPath, startPath, username);
+      if (contentSummaryRoot == null) {
+        contentSummaryRoot = new ContentSummary.Builder().build();
+      }
+      return contentSummaryRoot.toBuilder().incDirCount().build();
+    }
+    if (ofsPath.isVolume()) {
+      ContentSummary contentSummaryVolume = getContentSummaryVolume(ofsPath, startPath, username);
+      if (contentSummaryVolume == null) {
+        contentSummaryVolume = new ContentSummary.Builder().build();
+      }
+      return contentSummaryVolume.toBuilder().incDirCount().build();
+    }
+    if (ofsPath.isSnapshotPath()) {
+      ContentSummary contentSummaryBucketSnapshot = getContentSummaryBucketSnapshot(ofsPath, ofsPath.getSnapshotName(),
+          username);
+      return contentSummaryBucketSnapshot.toBuilder().incDirCount().build();
+    }
+    boolean topologyAwareReadEnabled = ozoneManager.getConfiguration().getBoolean(
+        OzoneConfigKeys.OZONE_NETWORK_TOPOLOGY_AWARE_READ_KEY,
+        OzoneConfigKeys.OZONE_NETWORK_TOPOLOGY_AWARE_READ_DEFAULT);
+    boolean getLatestVersionLocation = ozoneManager.getConfiguration().getBoolean(
+        OzoneConfigKeys.OZONE_CLIENT_KEY_LATEST_VERSION_LOCATION,
+        OzoneConfigKeys.OZONE_CLIENT_KEY_LATEST_VERSION_LOCATION_DEFAULT);
+    OmKeyArgs args = new OmKeyArgs.Builder()
+        .setVolumeName(ofsPath.getVolumeName())
+        .setBucketName(ofsPath.getBucketName())
+        .setKeyName(ofsPath.getKeyName())
+        .setSortDatanodesInPipeline(topologyAwareReadEnabled)
+        .setLatestVersionLocation(getLatestVersionLocation)
+        .build();
+    int listSize = ozoneManager.getConfiguration().getInt(OZONE_FS_LISTING_PAGE_SIZE_MAX,
+        OZONE_FS_MAX_LISTING_PAGE_SIZE);
+    Iterator<OzoneFileStatusLight> ozoneFileStatusLights = getListStatusLight(args, startPath, listSize);
+    ContentSummary resultContentSummary = null;
+    while (ozoneFileStatusLights.hasNext()) {
+      OzoneFileStatusLight status = ozoneFileStatusLights.next();
+      ContentSummary contentSummary;
+      if (status.isDirectory()) {
+        contentSummary = getContentSummary(
+            new OFSPath(status.getKeyInfo().getVolumeName() + OZONE_URI_DELIMITER + status.getKeyInfo().getBucketName()
+                + status.getPath(), ozoneManager.getConfiguration()), "", username);
+        contentSummary = contentSummary.toBuilder().incDirCount().build();
+      } else {
+        contentSummary = new ContentSummary.Builder()
+                .length(status.getKeyInfo().getDataSize())
+                .fileCount(status.isFile() ? 1 : 0)
+                .spaceConsumed(status.getKeyInfo().getReplicatedSize())
+                .directoryCount(status.isDirectory() ? 1 : 0)
+                .build();
+      }
+      if (resultContentSummary == null) {
+        resultContentSummary = contentSummary;
+      } else {
+        resultContentSummary = resultContentSummary.combine(contentSummary);
+      }
+    }
+    return resultContentSummary;
+  }
+
+  private Iterator<OzoneFileStatusLight> getListStatusLight(OmKeyArgs keyArgs, String startPath, int listSize) {
+    return new FileStatusIterator(keyArgs, listSize, startPath,
+        (omKeyArgs, batchSize, startPathToSeek) -> {
+          try (ReferenceCounted<IOmMetadataReader> reader = ozoneManager.getReader(keyArgs)) {
+            return reader.get().listStatusLight(omKeyArgs, false, startPathToSeek, batchSize, false);
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  private ContentSummary getContentSummaryRoot(OFSPath ofsPath, String startPath, String username) throws IOException {
+    ContentSummary contentSummary = null;
+    int listSize = ozoneManager.getConfiguration().getInt(OZONE_FS_LISTING_PAGE_SIZE_MAX,
+        OZONE_FS_MAX_LISTING_PAGE_SIZE);
+    Iterator<? extends Volume> volumes = listVolumesByUser(username, null, ofsPath.getVolumeName(), listSize);
+    while (volumes.hasNext()) {
+      Volume volume = volumes.next();
+      OFSPath volumePath = new OFSPath(volume.getName() + OZONE_URI_DELIMITER, ozoneManager.getConfiguration());
+      if (contentSummary == null) {
+        contentSummary = getContentSummary(volumePath, startPath, username);
+      } else {
+        contentSummary = contentSummary.combine(getContentSummary(volumePath, startPath, username));
+      }
+    }
+    return contentSummary;
+  }
+
+  private ContentSummary getContentSummaryVolume(OFSPath ofsPath, String startPath, String username)
+      throws IOException {
+    ContentSummary contentSummary = null;
+    Iterator<? extends Bucket> buckets = listBuckets(ofsPath.getVolumeName(), null, null);
+    while (buckets.hasNext()) {
+      OmBucketInfo bucket = (OmBucketInfo) buckets.next();
+      ofsPath = new OFSPath(bucket.getVolumeName() + OZONE_URI_DELIMITER + bucket.getBucketName(),
+          ozoneManager.getConfiguration());
+      if (contentSummary == null) {
+        contentSummary = getContentSummary(ofsPath, startPath, username);
+        if (contentSummary == null) {
+          contentSummary = new ContentSummary.Builder().build();
+        }
+      } else {
+        ContentSummary contentSummary1 = getContentSummary(ofsPath, startPath, username);
+        if (contentSummary1 == null) {
+          contentSummary1 = new ContentSummary.Builder().build();
+        }
+        contentSummary = contentSummary.combine(contentSummary1);
+      }
+      contentSummary = contentSummary.toBuilder().incDirCount().build();
+    }
+    return contentSummary;
+  }
+
+  private ContentSummary getContentSummaryBucketSnapshot(OFSPath ofsPath, String prevSnapshot, String username)
+      throws IOException {
+    ContentSummary contentSummary = null;
+    Iterator<SnapshotInfo> snapshots = listSnapshots(ofsPath.getVolumeName(), ofsPath.getBucketName(),
+        prevSnapshot);
+    while (snapshots.hasNext()) {
+      SnapshotInfo snapshot = snapshots.next();
+      ofsPath = new OFSPath(snapshot.getVolumeName() + OZONE_URI_DELIMITER + snapshot.getBucketName()
+          + OZONE_URI_DELIMITER + OM_SNAPSHOT_INDICATOR + OZONE_URI_DELIMITER + snapshot.getName(),
+          ozoneManager.getConfiguration());
+      if (SNAPSHOT_ACTIVE.name().equals(snapshot.getSnapshotStatus().name())) {
+        if (contentSummary == null) {
+          contentSummary = getContentSummary(ofsPath, null, username);
+        } else {
+          contentSummary = contentSummary.combine(getContentSummary(ofsPath, null, username));
+        }
+        if (contentSummary == null) {
+          contentSummary = new ContentSummary.Builder()
+              .directoryCount(1)
+              .build();
+        } else {
+          contentSummary = contentSummary.toBuilder().incDirCount().build();
+        }
+      }
+    }
+    return contentSummary;
+  }
+
+  private Iterator<SnapshotInfo> listSnapshots(String volumeName, String bucketName, String prevSnapshot) {
+    return new SnapshotIterator<>(volumeName, bucketName, null, prevSnapshot, 1000,
+        (volumeName1, bucketName1, snapshotPrefix, prevSnapshot1, listSize1) -> {
+          try {
+            ListSnapshotResponse<SnapshotInfo> listSnapshotResponse = ozoneManager.listSnapshot(volumeName1,
+                bucketName1, snapshotPrefix, prevSnapshot1, listSize1);
+            return listSnapshotResponse.getSnapshotInfos();
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  private Iterator<? extends Bucket> listBuckets(String volumeName, String bucketPrefix, String prevBucket) {
+    int listSize = ozoneManager.getConfiguration().getInt(OZONE_FS_LISTING_PAGE_SIZE_MAX,
+        OZONE_FS_MAX_LISTING_PAGE_SIZE);
+    return new BucketIterator<>(volumeName, bucketPrefix, prevBucket, false, listSize,
+        (volumeName1, bucketPrefix1, prevBucket1, listSize1, hasSnapshot) -> {
+          try {
+            return bucketManager.listBuckets(volumeName1, prevBucket1, bucketPrefix1, listSize1,
+                hasSnapshot);
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  private Iterator<? extends Volume> listVolumesByUser(String user, String volPrefix, String prevVolume, int listSize) {
+    return new VolumeIterator<>(volPrefix, prevVolume, user, listSize, (user1, volPrefix1, prevVolume1, listSize1) -> {
+      try {
+        return ozoneManager.listVolumeByUser(user1, volPrefix1, prevVolume1, listSize1);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    });
   }
 
   /**

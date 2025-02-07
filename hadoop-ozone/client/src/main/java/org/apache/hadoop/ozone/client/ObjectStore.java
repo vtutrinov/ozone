@@ -42,6 +42,7 @@ import org.apache.hadoop.ozone.om.helpers.DeleteTenantState;
 import org.apache.hadoop.ozone.om.helpers.OmVolumeArgs;
 import org.apache.hadoop.ozone.om.helpers.S3SecretValue;
 import org.apache.hadoop.ozone.om.helpers.S3VolumeContext;
+import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
 import org.apache.hadoop.ozone.om.helpers.TenantStateList;
 import org.apache.hadoop.ozone.om.helpers.TenantUserInfoValue;
 import org.apache.hadoop.ozone.om.helpers.TenantUserList;
@@ -671,7 +672,7 @@ public class ObjectStore {
     }
 
     private void getNextListOfSnapshots(String startSnapshot) throws IOException {
-      ListSnapshotResponse response =
+      ListSnapshotResponse<SnapshotInfo> response =
           proxy.listSnapshot(volumeName, bucketName, snapshotPrefix, startSnapshot, listCacheSize);
       currentIterator = response.getSnapshotInfos().stream().map(OzoneSnapshot::fromSnapshotInfo).iterator();
       lastSnapshot = response.getLastSnapshot();

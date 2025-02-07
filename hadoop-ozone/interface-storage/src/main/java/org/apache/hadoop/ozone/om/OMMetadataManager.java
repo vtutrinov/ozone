@@ -298,7 +298,7 @@ public interface OMMetadataManager extends DBStoreHAManager {
    * @param maxListResult  max number of snapshots to return
    * @return list of snapshot
    */
-  ListSnapshotResponse listSnapshot(
+  ListSnapshotResponse<SnapshotInfo> listSnapshot(
       String volumeName, String bucketName, String snapshotPrefix,
       String prevSnapshot, int maxListResult) throws IOException;
 

@@ -15,36 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.ozone.snapshot;
-
-import java.util.List;
-import org.apache.hadoop.ozone.Snapshot;
+package org.apache.hadoop.ozone;
 
 /**
- * POJO for list snapshot info API.
+ * Interface for Bucket. Describes methods that a Bucket should implement.
  */
-public class ListSnapshotResponse<T extends Snapshot> {
-  private final List<T> snapshotInfos;
-  private final String lastSnapshot;
+public interface Bucket {
 
-  public ListSnapshotResponse(List<T> snapshotInfos, String lastSnapshot) {
-    this.snapshotInfos = snapshotInfos;
-    this.lastSnapshot = lastSnapshot;
-  }
+  String getName();
 
-  public List<T> getSnapshotInfos() {
-    return snapshotInfos;
-  }
+  String getVolumeName();
 
-  public String getLastSnapshot() {
-    return lastSnapshot;
-  }
-
-  @Override
-  public String toString() {
-    return "ListSnapshotResponse{" +
-        "snapshotInfos: '" + snapshotInfos + '\'' +
-        ", lastSnapshot: '" + lastSnapshot + '\'' +
-        '}';
-  }
 }

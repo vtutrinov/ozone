@@ -15,36 +15,50 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.ozone.snapshot;
+package org.apache.hadoop.ozone;
 
 import java.util.List;
-import org.apache.hadoop.ozone.Snapshot;
+import java.util.Map;
 
 /**
- * POJO for list snapshot info API.
+ * Interface for ozone volume. Describes methods that an ozone volume should implement.
  */
-public class ListSnapshotResponse<T extends Snapshot> {
-  private final List<T> snapshotInfos;
-  private final String lastSnapshot;
+public interface Volume {
 
-  public ListSnapshotResponse(List<T> snapshotInfos, String lastSnapshot) {
-    this.snapshotInfos = snapshotInfos;
-    this.lastSnapshot = lastSnapshot;
-  }
+  String getName();
 
-  public List<T> getSnapshotInfos() {
-    return snapshotInfos;
-  }
+  String getAdmin();
 
-  public String getLastSnapshot() {
-    return lastSnapshot;
-  }
+  String getOwner();
 
-  @Override
-  public String toString() {
-    return "ListSnapshotResponse{" +
-        "snapshotInfos: '" + snapshotInfos + '\'' +
-        ", lastSnapshot: '" + lastSnapshot + '\'' +
-        '}';
-  }
+  void setOwner(String owner);
+
+  long getQuotaInBytes();
+
+  void setQuotaInBytes(long quotaInBytes);
+
+  long getQuotaInNamespace();
+
+  void setQuotaInNamespace(long quotaInNamespace);
+
+  long getUsedNamespace();
+
+  void setUsedNamespace(long usedNamespace);
+
+  long getCreationTime();
+
+  void setCreationTime(long creationTime);
+
+  long getModificationTime();
+
+  void setModificationTime(long modificationTime);
+
+  List<OzoneAcl> getAcls();
+
+  boolean setAcls(List<OzoneAcl> acls);
+
+  Map<String, String> getMetadata();
+
+  void setMetadata(Map<String, String> metadata);
+
 }
