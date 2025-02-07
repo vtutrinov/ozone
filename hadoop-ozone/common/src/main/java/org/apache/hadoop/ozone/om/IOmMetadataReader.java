@@ -20,6 +20,7 @@ package org.apache.hadoop.ozone.om;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.helpers.KeyInfoWithVolumeContext;
@@ -172,4 +173,7 @@ public interface IOmMetadataReader {
    * @return Tags associated with the key.
    */
   Map<String, String> getObjectTagging(OmKeyArgs args) throws IOException;
+
+  ContentSummary getContentSummary(OmKeyArgs args, String username) throws IOException;
+
 }

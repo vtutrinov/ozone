@@ -277,6 +277,7 @@ public final class OmUtils {
     case GetObjectTagging:
     case GetQuotaRepairStatus:
     case StartQuotaRepair:
+    case GetContentSummary:
       return true;
     case CreateVolume:
     case SetVolumeProperty:

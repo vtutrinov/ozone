@@ -51,6 +51,7 @@ import org.apache.hadoop.hdds.tracing.TracingUtil;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ozone.ClientVersion;
+import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.helpers.BasicOmKeyInfo;
@@ -2621,6 +2622,25 @@ public final class OzoneManagerProtocolClientSideTranslatorPB
         handleError(submitRequest(omRequest)).getGetObjectTaggingResponse();
 
     return KeyValueUtil.getFromProtobuf(resp.getTagsList());
+  }
+
+  @Override
+  public ContentSummary getContentSummary(OmKeyArgs args, String username) throws IOException {
+    KeyArgs keyArgs = KeyArgs.newBuilder()
+        .setVolumeName(args.getVolumeName())
+        .setBucketName(args.getBucketName())
+        .setKeyName(args.getKeyName())
+        .build();
+    OMRequest omRequest = createOMRequest(Type.GetContentSummary)
+        .setGetContentSummaryRequest(OzoneManagerProtocolProtos.GetContentSummaryRequest.newBuilder()
+            .setKeyArgs(keyArgs).build()).build();
+    OzoneManagerProtocolProtos.GetContentSummaryResponse getContentSummaryResponse =
+        handleError(submitRequest(omRequest)).getGetContentSummaryResponse();
+    return new ContentSummary.Builder()
+        .directoryCount(getContentSummaryResponse.getDirectoryCount())
+        .fileCount(getContentSummaryResponse.getFileCount())
+        .spaceConsumed(getContentSummaryResponse.getSpaceConsumed())
+        .length(getContentSummaryResponse.getLength()).build();
   }
 
   @Override

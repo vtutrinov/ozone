@@ -60,6 +60,7 @@ import org.apache.hadoop.hdds.protocol.proto.HddsProtos.TransferLeadershipRespon
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos.UpgradeFinalizationStatus;
 import org.apache.hadoop.hdds.scm.protocolPB.OzonePBHelper;
 import org.apache.hadoop.hdds.utils.FaultInjector;
+import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.OzoneManagerPrepareState;
@@ -109,6 +110,8 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.EchoRPC
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.EchoRPCResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.FinalizeUpgradeProgressRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.FinalizeUpgradeProgressResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetContentSummaryRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetContentSummaryResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetFileStatusRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetFileStatusResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetKeyInfoRequest;
@@ -391,6 +394,10 @@ public class OzoneManagerRequestHandler implements RequestHandler {
         OzoneManagerProtocolProtos.GetObjectTaggingResponse getObjectTaggingResponse =
             getObjectTagging(request.getGetObjectTaggingRequest());
         responseBuilder.setGetObjectTaggingResponse(getObjectTaggingResponse);
+        break;
+      case GetContentSummary:
+        GetContentSummaryResponse contentSummary = getContentSummary(request.getGetContentSummaryRequest());
+        responseBuilder.setGetContentSummaryResponse(contentSummary);
         break;
       default:
         responseBuilder.setSuccess(false);
@@ -1274,6 +1281,23 @@ public class OzoneManagerRequestHandler implements RequestHandler {
     return listStatusLightResponseBuilder.build();
   }
 
+  public GetContentSummaryResponse getContentSummary(GetContentSummaryRequest getContentSummaryRequest)
+      throws IOException {
+    KeyArgs keyArgs = getContentSummaryRequest.getKeyArgs();
+    OmKeyArgs omKeyArgs = new OmKeyArgs.Builder()
+        .setKeyName(keyArgs.getKeyName())
+        .setVolumeName(keyArgs.getVolumeName())
+        .setBucketName(keyArgs.getBucketName())
+        .build();
+    ContentSummary contentSummary = impl.getContentSummary(omKeyArgs, getContentSummaryRequest.getUsername());
+    return GetContentSummaryResponse.newBuilder()
+        .setDirectoryCount(contentSummary.getDirectoryCount())
+        .setFileCount(contentSummary.getFileCount())
+        .setLength(contentSummary.getLength())
+        .setSpaceConsumed(contentSummary.getSpaceConsumed())
+        .build();
+  }
+
   @RequestFeatureValidator(
       conditions = ValidationCondition.OLDER_CLIENT_REQUESTS,
       processingPhase = RequestProcessingPhase.POST_PROCESS,
@@ -1489,7 +1513,7 @@ public class OzoneManagerRequestHandler implements RequestHandler {
   private OzoneManagerProtocolProtos.ListSnapshotResponse getSnapshots(
       OzoneManagerProtocolProtos.ListSnapshotRequest request)
       throws IOException {
-    ListSnapshotResponse implResponse = impl.listSnapshot(
+    ListSnapshotResponse<SnapshotInfo> implResponse = impl.listSnapshot(
         request.getVolumeName(), request.getBucketName(), request.getPrefix(),
         request.getPrevSnapshot(), limitListSizeInt(request.getMaxListResult()));
 

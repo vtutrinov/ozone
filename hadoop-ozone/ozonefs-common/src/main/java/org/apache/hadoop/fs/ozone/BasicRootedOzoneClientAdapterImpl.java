@@ -72,6 +72,7 @@ import org.apache.hadoop.hdds.scm.storage.ContainerProtocolCalls;
 import org.apache.hadoop.hdds.security.SecurityConfig;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OFSPath;
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
@@ -1529,5 +1530,16 @@ public class BasicRootedOzoneClientAdapterImpl
 
     return ozoneClient.getProxy().getOzoneManagerClient().setSafeMode(
         action, isChecked);
+  }
+
+  @Override
+  public ContentSummary getContentSummary(Path keyName, String username) throws IOException {
+    OFSPath ofsPath = new OFSPath(keyName, config);
+    OmKeyArgs args = new OmKeyArgs.Builder()
+        .setVolumeName(ofsPath.getVolumeName())
+        .setBucketName(ofsPath.getBucketName())
+        .setKeyName(ofsPath.getKeyName())
+        .build();
+    return ozoneClient.getProxy().getOzoneManagerClient().getContentSummary(args, username);
   }
 }

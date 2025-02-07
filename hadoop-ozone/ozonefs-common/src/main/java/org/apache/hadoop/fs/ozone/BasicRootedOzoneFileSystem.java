@@ -933,6 +933,10 @@ public class BasicRootedOzoneFileSystem extends FileSystem {
     return fileStatuses;
   }
 
+  private ContentSummary getContentSummaryInSpan(Path f) throws IOException {
+    return adapter.getContentSummary(f, getUsername()).toHadoopContentSummary();
+  }
+
   
   private List<FileStatusAdapter> listStatusAdapter(Path f, boolean lite) throws IOException {
     incrementCounter(Statistic.INVOCATION_LIST_STATUS, 1);
@@ -1566,38 +1570,6 @@ public class BasicRootedOzoneFileSystem extends FileSystem {
   public ContentSummary getContentSummary(Path f) throws IOException {
     return TracingUtil.executeInNewSpan("ofs getContentSummary",
         () -> getContentSummaryInSpan(f));
-  }
-
-  private ContentSummary getContentSummaryInSpan(Path f) throws IOException {
-    FileStatusAdapter status = getFileStatusAdapter(f);
-
-    if (status.isFile()) {
-      // f is a file
-      long length = status.getLength();
-      long spaceConsumed = status.getDiskConsumed();
-
-      return new ContentSummary.Builder().length(length).
-          fileCount(1).directoryCount(0).spaceConsumed(spaceConsumed).build();
-    }
-    // f is a directory
-    long[] summary = {0, 0, 0, 1};
-    int i = 0;
-    for (FileStatusAdapter s : listStatusAdapter(f, true)) {
-      long length = s.getLength();
-      long spaceConsumed = s.getDiskConsumed();
-      ContentSummary c = s.isDir() ? getContentSummary(s.getPath()) :
-          new ContentSummary.Builder().length(length).
-          fileCount(1).directoryCount(0).spaceConsumed(spaceConsumed).build();
-
-      summary[0] += c.getLength();
-      summary[1] += c.getSpaceConsumed();
-      summary[2] += c.getFileCount();
-      summary[3] += c.getDirectoryCount();
-    }
-
-    return new ContentSummary.Builder().length(summary[0]).
-        fileCount(summary[2]).directoryCount(summary[3]).
-        spaceConsumed(summary[1]).build();
   }
 
   @Override
