@@ -147,6 +147,7 @@ enum Type {
   ListStatusLight = 129;
   GetSnapshotInfo = 130;
   RenameSnapshot = 131;
+  GetContentSummary = 143;
 }
 
 enum SafeMode {
@@ -283,6 +284,8 @@ message OMRequest {
   optional SetSnapshotPropertyRequest       SetSnapshotPropertyRequest     = 127;
   optional SnapshotInfoRequest              SnapshotInfoRequest            = 128;
   optional RenameSnapshotRequest            RenameSnapshotRequest          = 129;
+
+  optional GetContentSummaryRequest         getContentSummaryRequest       = 143;
 }
 
 message OMResponse {
@@ -406,6 +409,7 @@ message OMResponse {
   optional SnapshotInfoResponse              SnapshotInfoResponse          = 130;
   optional OMLockDetailsProto                omLockDetails                 = 131;
   optional RenameSnapshotResponse            RenameSnapshotResponse        = 132;
+  optional GetContentSummaryResponse         getContentSummaryResponse     = 143;
 }
 
 enum Status {
@@ -2135,6 +2139,17 @@ message OMLockDetailsProto {
   optional uint64 writeLockNanos   = 4;
 }
 
+message GetContentSummaryRequest {
+  required KeyArgs keyArgs = 1;
+  optional string username = 2;
+}
+
+message GetContentSummaryResponse {
+  optional uint64 length = 1;
+  optional uint64 fileCount = 2;
+  optional uint64 directoryCount = 3;
+  optional uint64 spaceConsumed = 4;
+}
 /**
  The OM service that takes care of Ozone namespace.
 */

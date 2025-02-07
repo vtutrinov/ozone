@@ -273,6 +273,7 @@ public final class OmUtils {
     case SetSafeMode:
     case PrintCompactionLogDag:
     case GetSnapshotInfo:
+    case GetContentSummary:
       return true;
     case CreateVolume:
     case SetVolumeProperty:

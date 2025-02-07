@@ -31,6 +31,7 @@ import org.apache.hadoop.hdds.protocol.StorageType;
 import org.apache.hadoop.hdds.client.ReplicationFactor;
 import org.apache.hadoop.hdds.client.ReplicationType;
 import org.apache.hadoop.hdds.scm.client.HddsClientUtils;
+import org.apache.hadoop.ozone.Bucket;
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.client.io.OzoneDataStreamOutput;
 import org.apache.hadoop.ozone.client.io.OzoneInputStream;
@@ -69,7 +70,7 @@ import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.FILE
 /**
  * A class that encapsulates OzoneBucket.
  */
-public class OzoneBucket extends WithMetadata {
+public class OzoneBucket extends WithMetadata implements Bucket {
 
   /**
    * The proxy used for connecting to the cluster and perform
@@ -202,6 +203,7 @@ public class OzoneBucket extends WithMetadata {
    *
    * @return volumeName
    */
+  @Override
   public String getVolumeName() {
     return volumeName;
   }
@@ -211,6 +213,7 @@ public class OzoneBucket extends WithMetadata {
    *
    * @return bucketName
    */
+  @Override
   public String getName() {
     return name;
   }

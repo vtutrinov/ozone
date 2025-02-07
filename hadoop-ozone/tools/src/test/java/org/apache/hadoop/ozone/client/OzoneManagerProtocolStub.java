@@ -28,6 +28,7 @@ import org.apache.hadoop.hdds.scm.pipeline.Pipeline;
 import org.apache.hadoop.hdds.scm.pipeline.PipelineID;
 import org.apache.hadoop.hdds.security.token.OzoneBlockTokenIdentifier;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.helpers.DBUpdates;
@@ -339,6 +340,11 @@ public class OzoneManagerProtocolStub implements OzoneManagerProtocol {
   @Override
   public List<OzoneAcl> getAcl(OzoneObj obj) {
     throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @Override
+  public ContentSummary getContentSummary(OmKeyArgs args, String username) throws IOException {
+    return null;
   }
 
   @Override

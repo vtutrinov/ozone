@@ -17,6 +17,7 @@
 
 package org.apache.hadoop.ozone.om;
 
+import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.helpers.KeyInfoWithVolumeContext;
@@ -165,4 +166,6 @@ public interface IOmMetadataReader {
    * @throws IOException if there is error.
    */
   List<OzoneAcl> getAcl(OzoneObj obj) throws IOException;
+
+  ContentSummary getContentSummary(OmKeyArgs args, String username) throws IOException;
 }

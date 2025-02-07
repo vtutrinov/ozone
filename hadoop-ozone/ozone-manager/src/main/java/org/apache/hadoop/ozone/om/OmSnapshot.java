@@ -20,6 +20,7 @@ package org.apache.hadoop.ozone.om;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hdds.client.RatisReplicationConfig;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
+import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.audit.AuditLogger;
 import org.apache.hadoop.ozone.audit.AuditLoggerType;
@@ -179,6 +180,11 @@ public class OmSnapshot implements IOmMetadataReader, Closeable {
   public List<OzoneAcl> getAcl(OzoneObj obj) throws IOException {
     // TODO: [SNAPSHOT] handle denormalization
     return omMetadataReader.getAcl(normalizeOzoneObj(obj));
+  }
+
+  @Override
+  public ContentSummary getContentSummary(OmKeyArgs args, String username) throws IOException {
+    return null;
   }
 
   private OzoneObj normalizeOzoneObj(OzoneObj o) {

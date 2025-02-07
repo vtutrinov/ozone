@@ -32,6 +32,7 @@ import org.apache.hadoop.hdds.protocol.StorageType;
 import org.apache.hadoop.hdds.utils.db.Codec;
 import org.apache.hadoop.hdds.utils.db.DelegatedCodec;
 import org.apache.hadoop.hdds.utils.db.Proto2Codec;
+import org.apache.hadoop.ozone.Bucket;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.audit.Auditable;
@@ -43,7 +44,7 @@ import com.google.common.base.Preconditions;
 /**
  * A class that encapsulates Bucket Info.
  */
-public final class OmBucketInfo extends WithObjectID implements Auditable {
+public final class OmBucketInfo extends WithObjectID implements Auditable, Bucket {
   private static final Codec<OmBucketInfo> CODEC = new DelegatedCodec<>(
       Proto2Codec.get(BucketInfo.getDefaultInstance()),
       OmBucketInfo::getFromProtobuf,
@@ -177,10 +178,16 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
     this.compressionType = compressionType;
   }
 
+  @Override
+  public String getName() {
+    return bucketName;
+  }
+
   /**
    * Returns the Volume Name.
    * @return String.
    */
+  @Override
   public String getVolumeName() {
     return volumeName;
   }

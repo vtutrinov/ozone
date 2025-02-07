@@ -16,6 +16,7 @@
  */
 package org.apache.hadoop.ozone.client;
 
+import org.apache.hadoop.ozone.Snapshot;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo.SnapshotStatus;
 
@@ -24,7 +25,7 @@ import java.util.UUID;
 /**
  * A class that encapsulates OzoneSnapshot.
  */
-public class OzoneSnapshot {
+public class OzoneSnapshot implements Snapshot {
 
   private final String volumeName;
   private final String bucketName;
@@ -87,6 +88,7 @@ public class OzoneSnapshot {
    *
    * @return volumeName
    */
+  @Override
   public String getVolumeName() {
     return volumeName;
   }
@@ -96,6 +98,7 @@ public class OzoneSnapshot {
    *
    * @return bucketName
    */
+  @Override
   public String getBucketName() {
     return bucketName;
   }
@@ -105,6 +108,7 @@ public class OzoneSnapshot {
    *
    * @return name
    */
+  @Override
   public String getName() {
     return name;
   }
@@ -114,6 +118,7 @@ public class OzoneSnapshot {
    *
    * @return creationTime
    */
+  @Override
   public long getCreationTime() {
     return creationTime;
   }
@@ -132,6 +137,7 @@ public class OzoneSnapshot {
    *
    * @return snapshotID
    */
+  @Override
   public UUID getSnapshotId() {
     return snapshotId;
   }
@@ -141,6 +147,7 @@ public class OzoneSnapshot {
    *
    * @return snapshotPath
    */
+  @Override
   public String getSnapshotPath() {
     return snapshotPath;
   }
@@ -150,6 +157,7 @@ public class OzoneSnapshot {
    *
    * @return snapshotCheckpointDir
    */
+  @Override
   public String getCheckpointDir() {
     return checkpointDir;
   }
@@ -157,6 +165,7 @@ public class OzoneSnapshot {
   /**
    * @return Referenced size of the snapshot.
    */
+  @Override
   public long getReferencedSize() {
     return referencedSize;
   }
@@ -164,6 +173,7 @@ public class OzoneSnapshot {
   /**
    * @return Reference size after replication/EC of the snapshot
    */
+  @Override
   public long getReferencedReplicatedSize() {
     return referencedReplicatedSize;
   }
@@ -171,6 +181,7 @@ public class OzoneSnapshot {
   /**
    * @return Exclusive size of the snapshot.
    */
+  @Override
   public long getExclusiveSize() {
     return exclusiveSize;
   }
@@ -178,6 +189,7 @@ public class OzoneSnapshot {
   /**
    * @return Exclusive size after replication/EC of the snapshot.
    */
+  @Override
   public long getExclusiveReplicatedSize() {
     return exclusiveReplicatedSize;
   }

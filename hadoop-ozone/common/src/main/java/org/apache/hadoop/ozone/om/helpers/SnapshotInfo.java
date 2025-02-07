@@ -25,6 +25,7 @@ import org.apache.hadoop.hdds.utils.db.CopyObject;
 import org.apache.hadoop.hdds.utils.db.DelegatedCodec;
 import org.apache.hadoop.hdds.utils.db.Proto2Codec;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.Snapshot;
 import org.apache.hadoop.ozone.audit.Auditable;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.SnapshotStatusProto;
@@ -53,7 +54,7 @@ import static org.apache.hadoop.ozone.OzoneConsts.OM_KEY_PREFIX;
  * snapshot checkpoint directory, previous snapshotId
  * for the snapshot path & global amongst other necessary fields.
  */
-public final class SnapshotInfo implements Auditable, CopyObject<SnapshotInfo> {
+public final class SnapshotInfo implements Snapshot, Auditable, CopyObject<SnapshotInfo> {
   private static final Codec<SnapshotInfo> CODEC = new DelegatedCodec<>(
       Proto2Codec.get(
           OzoneManagerProtocolProtos.SnapshotInfo.getDefaultInstance()),
@@ -230,18 +231,22 @@ public final class SnapshotInfo implements Auditable, CopyObject<SnapshotInfo> {
     this.deepClean = deepClean;
   }
 
+  @Override
   public UUID getSnapshotId() {
     return snapshotId;
   }
 
+  @Override
   public String getName() {
     return name;
   }
 
+  @Override
   public String getVolumeName() {
     return volumeName;
   }
 
+  @Override
   public String getBucketName() {
     return bucketName;
   }
@@ -250,6 +255,7 @@ public final class SnapshotInfo implements Auditable, CopyObject<SnapshotInfo> {
     return snapshotStatus;
   }
 
+  @Override
   public long getCreationTime() {
     return creationTime;
   }
@@ -266,10 +272,12 @@ public final class SnapshotInfo implements Auditable, CopyObject<SnapshotInfo> {
     return globalPreviousSnapshotId;
   }
 
+  @Override
   public String getSnapshotPath() {
     return snapshotPath;
   }
 
+  @Override
   public String getCheckpointDir() {
     return checkpointDir;
   }
@@ -611,6 +619,7 @@ public final class SnapshotInfo implements Auditable, CopyObject<SnapshotInfo> {
     this.referencedSize = referencedSize;
   }
 
+  @Override
   public long getReferencedSize() {
     return referencedSize;
   }
@@ -619,6 +628,7 @@ public final class SnapshotInfo implements Auditable, CopyObject<SnapshotInfo> {
     this.referencedReplicatedSize = referencedReplicatedSize;
   }
 
+  @Override
   public long getReferencedReplicatedSize() {
     return referencedReplicatedSize;
   }
@@ -627,6 +637,7 @@ public final class SnapshotInfo implements Auditable, CopyObject<SnapshotInfo> {
     this.exclusiveSize = exclusiveSize;
   }
 
+  @Override
   public long getExclusiveSize() {
     return exclusiveSize;
   }
@@ -635,6 +646,7 @@ public final class SnapshotInfo implements Auditable, CopyObject<SnapshotInfo> {
     this.exclusiveReplicatedSize = exclusiveReplicatedSize;
   }
 
+  @Override
   public long getExclusiveReplicatedSize() {
     return exclusiveReplicatedSize;
   }

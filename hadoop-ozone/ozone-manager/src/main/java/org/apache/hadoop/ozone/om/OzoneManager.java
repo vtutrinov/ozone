@@ -134,6 +134,7 @@ import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.metrics2.util.MBeans;
+import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
@@ -4706,6 +4707,14 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
   }
 
+  @Override
+  public ContentSummary getContentSummary(OmKeyArgs args, String username) throws IOException {
+    try (ReferenceCounted<IOmMetadataReader> rcReader =
+             getReader(args)) {
+      return rcReader.get().getContentSummary(args, username);
+    }
+  }
+
   /**
    * Write down Layout version of a finalized feature to DB on finalization.
    * @param lvm OMLayoutVersionManager
@@ -4788,9 +4797,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    * Caller is responsible of closing the return value.
    * Using try-with-resources is recommended.
    * @param keyArgs OmKeyArgs
-   * @return ReferenceCounted<IOmMetadataReader, SnapshotCache>
+   * @return ReferenceCounted&lt;IOmMetadataReader, SnapshotCache&gt;
    */
-  private ReferenceCounted<IOmMetadataReader> getReader(OmKeyArgs keyArgs)
+  public ReferenceCounted<IOmMetadataReader> getReader(OmKeyArgs keyArgs)
       throws IOException {
     return omSnapshotManager.getActiveFsMetadataOrSnapshot(
         keyArgs.getVolumeName(), keyArgs.getBucketName(), keyArgs.getKeyName());
@@ -4803,7 +4812,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    * @param volumeName volume name
    * @param bucketName bucket name
    * @param key key path
-   * @return ReferenceCounted<IOmMetadataReader, SnapshotCache>
+   * @return ReferenceCounted&lt;IOmMetadataReader, SnapshotCache&gt;
    */
   private ReferenceCounted<IOmMetadataReader> getReader(
           String volumeName, String bucketName, String key) throws IOException {
@@ -4816,7 +4825,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    * Caller is responsible of closing the return value.
    * Using try-with-resources is recommended.
    * @param ozoneObj OzoneObj
-   * @return ReferenceCounted<IOmMetadataReader, SnapshotCache>
+   * @return ReferenceCounted&lt;IOmMetadataReader, SnapshotCache&gt;
    */
   private ReferenceCounted<IOmMetadataReader> getReader(OzoneObj ozoneObj)
       throws IOException {

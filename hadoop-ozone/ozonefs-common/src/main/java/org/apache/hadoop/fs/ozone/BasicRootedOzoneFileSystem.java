@@ -41,6 +41,7 @@ import org.apache.hadoop.hdds.annotation.InterfaceStability;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.conf.StorageUnit;
+import org.apache.hadoop.hdds.tracing.TracingUtil;
 import org.apache.hadoop.hdds.utils.LegacyHadoopConfigurationSource;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.ozone.OFSPath;
@@ -902,6 +903,10 @@ public class BasicRootedOzoneFileSystem extends FileSystem {
     return fileStatuses;
   }
 
+  private ContentSummary getContentSummaryInSpan(Path f) throws IOException {
+    return adapter.getContentSummary(f, getUsername()).toHadoopContentSummary();
+  }
+
   
   public List<FileStatusAdapter> listStatusAdapter(Path f) throws IOException {
     incrementCounter(Statistic.INVOCATION_LIST_STATUS, 1);
@@ -1508,35 +1513,8 @@ public class BasicRootedOzoneFileSystem extends FileSystem {
 
   @Override
   public ContentSummary getContentSummary(Path f) throws IOException {
-    FileStatusAdapter status = getFileStatusAdapter(f);
-
-    if (status.isFile()) {
-      // f is a file
-      long length = status.getLength();
-      long spaceConsumed = status.getDiskConsumed();
-
-      return new ContentSummary.Builder().length(length).
-          fileCount(1).directoryCount(0).spaceConsumed(spaceConsumed).build();
-    }
-    // f is a directory
-    long[] summary = {0, 0, 0, 1};
-    int i = 0;
-    for (FileStatusAdapter s : listStatusAdapter(f)) {
-      long length = s.getLength();
-      long spaceConsumed = s.getDiskConsumed();
-      ContentSummary c = s.isDir() ? getContentSummary(s.getPath()) :
-          new ContentSummary.Builder().length(length).
-          fileCount(1).directoryCount(0).spaceConsumed(spaceConsumed).build();
-
-      summary[0] += c.getLength();
-      summary[1] += c.getSpaceConsumed();
-      summary[2] += c.getFileCount();
-      summary[3] += c.getDirectoryCount();
-    }
-
-    return new ContentSummary.Builder().length(summary[0]).
-        fileCount(summary[2]).directoryCount(summary[3]).
-        spaceConsumed(summary[1]).build();
+    return TracingUtil.executeInNewSpan("ofs getContentSummary",
+        () -> getContentSummaryInSpan(f));
   }
 
   @Override

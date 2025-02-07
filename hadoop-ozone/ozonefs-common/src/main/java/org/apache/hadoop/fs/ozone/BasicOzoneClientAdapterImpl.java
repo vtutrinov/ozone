@@ -48,6 +48,7 @@ import org.apache.hadoop.hdds.security.SecurityConfig;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.ozone.OFSPath;
+import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.client.ObjectStore;
@@ -431,6 +432,12 @@ public class BasicOzoneClientAdapterImpl implements OzoneClientAdapter {
       }
       throw e;
     }
+  }
+
+  @Override
+  public ContentSummary getContentSummary(Path path, String username) throws IOException {
+    // TODO : Implement this method
+    return null;
   }
 
   @Override

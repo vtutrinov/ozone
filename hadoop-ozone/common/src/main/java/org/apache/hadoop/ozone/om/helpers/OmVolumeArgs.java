@@ -31,6 +31,7 @@ import org.apache.hadoop.hdds.utils.db.DelegatedCodec;
 import org.apache.hadoop.hdds.utils.db.Proto2Codec;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.Volume;
 import org.apache.hadoop.ozone.audit.Auditable;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OzoneAclInfo;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.VolumeInfo;
@@ -42,7 +43,7 @@ import com.google.common.base.Preconditions;
  * A class that encapsulates the OmVolumeArgs Args.
  */
 public final class OmVolumeArgs extends WithObjectID
-    implements CopyObject<OmVolumeArgs>, Auditable {
+    implements Volume, CopyObject<OmVolumeArgs>, Auditable {
   private static final Codec<OmVolumeArgs> CODEC = new DelegatedCodec<>(
       Proto2Codec.get(VolumeInfo.getDefaultInstance()),
       OmVolumeArgs::getFromProtobuf,
@@ -136,18 +137,22 @@ public final class OmVolumeArgs extends WithObjectID
     this.ownerName = newOwner;
   }
 
+  @Override
   public void setQuotaInBytes(long quotaInBytes) {
     this.quotaInBytes = quotaInBytes;
   }
 
+  @Override
   public void setQuotaInNamespace(long quotaInNamespace) {
     this.quotaInNamespace = quotaInNamespace;
   }
 
+  @Override
   public void setCreationTime(long time) {
     this.creationTime = time;
   }
 
+  @Override
   public void setModificationTime(long time) {
     this.modificationTime = time;
   }
@@ -156,6 +161,7 @@ public final class OmVolumeArgs extends WithObjectID
     return OzoneAclUtil.addAcl(acls, ozoneAcl);
   }
 
+  @Override
   public boolean setAcls(List<OzoneAcl> ozoneAcls) {
     return OzoneAclUtil.setAcl(acls, ozoneAcls);
   }
@@ -192,6 +198,7 @@ public final class OmVolumeArgs extends WithObjectID
    * Returns creation time.
    * @return long
    */
+  @Override
   public long getCreationTime() {
     return creationTime;
   }
@@ -200,14 +207,36 @@ public final class OmVolumeArgs extends WithObjectID
    * Returns modification time.
    * @return long
    */
+  @Override
   public long getModificationTime() {
     return modificationTime;
+  }
+
+  @Override
+  public String getName() {
+    return getVolume();
+  }
+
+  @Override
+  public String getAdmin() {
+    return getAdminName();
+  }
+
+  @Override
+  public String getOwner() {
+    return getOwnerName();
+  }
+
+  @Override
+  public void setOwner(String owner) {
+    this.ownerName = owner;
   }
 
   /**
    * Returns Quota in Bytes.
    * @return long, Quota in bytes.
    */
+  @Override
   public long getQuotaInBytes() {
     return quotaInBytes;
   }
@@ -216,10 +245,12 @@ public final class OmVolumeArgs extends WithObjectID
    * Returns Quota in counts.
    * @return long, Quota in counts.
    */
+  @Override
   public long getQuotaInNamespace() {
     return quotaInNamespace;
   }
 
+  @Override
   public List<OzoneAcl> getAcls() {
     return acls;
   }
@@ -245,8 +276,14 @@ public final class OmVolumeArgs extends WithObjectID
    * Returns used bucket namespace.
    * @return usedNamespace
    */
+  @Override
   public long getUsedNamespace() {
     return usedNamespace;
+  }
+
+  @Override
+  public void setUsedNamespace(long usedNamespace) {
+    this.usedNamespace = usedNamespace;
   }
 
   /**
