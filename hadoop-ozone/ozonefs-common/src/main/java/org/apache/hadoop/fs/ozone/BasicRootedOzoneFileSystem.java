@@ -1568,35 +1568,8 @@ public class BasicRootedOzoneFileSystem extends FileSystem {
   }
 
   private ContentSummary getContentSummaryInSpan(Path f) throws IOException {
-    FileStatusAdapter status = getFileStatusAdapter(f);
-
-    if (status.isFile()) {
-      // f is a file
-      long length = status.getLength();
-      long spaceConsumed = status.getDiskConsumed();
-
-      return new ContentSummary.Builder().length(length).
-          fileCount(1).directoryCount(0).spaceConsumed(spaceConsumed).build();
-    }
-    // f is a directory
-    long[] summary = {0, 0, 0, 1};
-    int i = 0;
-    for (FileStatusAdapter s : listStatusAdapter(f, true)) {
-      long length = s.getLength();
-      long spaceConsumed = s.getDiskConsumed();
-      ContentSummary c = s.isDir() ? getContentSummary(s.getPath()) :
-          new ContentSummary.Builder().length(length).
-          fileCount(1).directoryCount(0).spaceConsumed(spaceConsumed).build();
-
-      summary[0] += c.getLength();
-      summary[1] += c.getSpaceConsumed();
-      summary[2] += c.getFileCount();
-      summary[3] += c.getDirectoryCount();
-    }
-
-    return new ContentSummary.Builder().length(summary[0]).
-        fileCount(summary[2]).directoryCount(summary[3]).
-        spaceConsumed(summary[1]).build();
+    // SDP (SDPOZN-1455): the content summary is computed on the OM side
+    return adapter.getContentSummary(f, getUsername()).toHadoopContentSummary();
   }
 
   @Override

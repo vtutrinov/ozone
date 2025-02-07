@@ -19,13 +19,14 @@ package org.apache.hadoop.ozone.client;
 
 import java.util.Objects;
 import java.util.UUID;
+import org.apache.hadoop.ozone.Snapshot;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo.SnapshotStatus;
 
 /**
  * A class that encapsulates OzoneSnapshot.
  */
-public class OzoneSnapshot {
+public class OzoneSnapshot implements Snapshot {
 
   private final String volumeName;
   private final String bucketName;

@@ -261,6 +261,7 @@ public final class OmUtils {
     case GetObjectTagging:
     case GetQuotaRepairStatus:
     case StartQuotaRepair:
+    case GetContentSummary:
       return true;
     case CreateVolume:
     case SetVolumeProperty:
@@ -376,6 +377,7 @@ public final class OmUtils {
     case GetKeyInfo:
     case GetSnapshotInfo:
     case GetObjectTagging:
+    case GetContentSummary: // SDP (SDPOZN-1455)
       return true;
     case CreateVolume:
     case SetVolumeProperty:

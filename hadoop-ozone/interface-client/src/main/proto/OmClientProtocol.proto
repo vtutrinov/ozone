@@ -157,6 +157,9 @@ enum Type {
   GetObjectTagging = 141;
   DeleteObjectTagging = 142;
   SubmitSnapshotDiff = 143;
+
+    // SDP extensions (SDP numbers are kept in the 1000+ range)
+    GetContentSummary = 1001;
 }
 
 enum SafeMode {
@@ -309,6 +312,9 @@ message OMRequest {
   repeated SetSnapshotPropertyRequest       SetSnapshotPropertyRequests    = 143;
 
   optional SubmitSnapshotDiffRequest        submitSnapshotDiffRequest       = 144;
+
+    // SDP extensions (SDP numbers are kept in the 1000+ range)
+    optional GetContentSummaryRequest getContentSummaryRequest = 1001;
 }
 
 message OMResponse {
@@ -444,6 +450,9 @@ message OMResponse {
   optional DeleteObjectTaggingResponse       deleteObjectTaggingResponse   = 142;
 
   optional SubmitSnapshotDiffResponse        submitSnapshotDiffResponse    = 143;
+
+    // SDP extensions (SDP numbers are kept in the 1000+ range)
+    optional GetContentSummaryResponse getContentSummaryResponse = 1001;
 }
 
 enum Status {
@@ -2487,4 +2496,17 @@ service OzoneManagerService {
     // A client-to-OM RPC to send client requests to OM Ratis server
     rpc submitRequest(OMRequest)
           returns(OMResponse);
+}
+
+// SDP: server side content summary (SDPOZN-1455)
+message GetContentSummaryRequest {
+  required KeyArgs keyArgs = 1;
+  optional string username = 2;
+}
+
+message GetContentSummaryResponse {
+  optional uint64 length = 1;
+  optional uint64 fileCount = 2;
+  optional uint64 directoryCount = 3;
+  optional uint64 spaceConsumed = 4;
 }

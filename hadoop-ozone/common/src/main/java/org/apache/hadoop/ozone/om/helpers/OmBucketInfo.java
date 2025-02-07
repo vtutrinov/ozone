@@ -29,6 +29,7 @@ import org.apache.hadoop.hdds.utils.db.Codec;
 import org.apache.hadoop.hdds.utils.db.CopyObject;
 import org.apache.hadoop.hdds.utils.db.DelegatedCodec;
 import org.apache.hadoop.hdds.utils.db.Proto2Codec;
+import org.apache.hadoop.ozone.Bucket;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.audit.Auditable;
@@ -38,7 +39,7 @@ import org.apache.hadoop.ozone.protocolPB.OMPBHelper;
 /**
  * A class that encapsulates Bucket Info.
  */
-public final class OmBucketInfo extends WithObjectID implements Auditable, CopyObject<OmBucketInfo> {
+public final class OmBucketInfo extends WithObjectID implements Auditable, CopyObject<OmBucketInfo>, Bucket {
   private static final Codec<OmBucketInfo> CODEC = new DelegatedCodec<>(
       Proto2Codec.get(BucketInfo.getDefaultInstance()),
       OmBucketInfo::getFromProtobuf,
@@ -307,6 +308,11 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
 
   public String getOwner() {
     return owner;
+  }
+
+  @Override
+  public String getName() {
+    return bucketName;
   }
 
   public String getCompressionType() {

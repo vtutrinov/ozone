@@ -29,6 +29,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.apache.hadoop.hdds.client.RatisReplicationConfig;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
+import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.audit.AuditLogger;
 import org.apache.hadoop.ozone.audit.AuditLoggerType;
@@ -188,6 +189,11 @@ public class OmSnapshot implements IOmMetadataReader, Closeable {
   @Override
   public Map<String, String> getObjectTagging(OmKeyArgs args) throws IOException {
     return omMetadataReader.getObjectTagging(normalizeOmKeyArgs(args));
+  }
+
+  @Override
+  public ContentSummary getContentSummary(OmKeyArgs args, String username) throws IOException {
+    return null;
   }
 
   private OzoneObj normalizeOzoneObj(OzoneObj o) {

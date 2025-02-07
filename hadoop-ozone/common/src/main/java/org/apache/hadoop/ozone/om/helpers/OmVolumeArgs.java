@@ -31,6 +31,7 @@ import org.apache.hadoop.hdds.utils.db.DelegatedCodec;
 import org.apache.hadoop.hdds.utils.db.Proto2Codec;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.Volume;
 import org.apache.hadoop.ozone.audit.Auditable;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OzoneAclInfo;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.VolumeInfo;
@@ -40,7 +41,7 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.VolumeI
  */
 @Immutable
 public final class OmVolumeArgs extends WithObjectID
-    implements CopyObject<OmVolumeArgs> {
+    implements Volume, CopyObject<OmVolumeArgs> {
   private static final Codec<OmVolumeArgs> CODEC = new DelegatedCodec<>(
       Proto2Codec.get(VolumeInfo.getDefaultInstance()),
       OmVolumeArgs::getFromProtobuf,
@@ -97,6 +98,21 @@ public final class OmVolumeArgs extends WithObjectID
    * Returns the Admin Name.
    * @return String.
    */
+  @Override
+  public String getName() {
+    return getVolume();
+  }
+
+  @Override
+  public String getAdmin() {
+    return getAdminName();
+  }
+
+  @Override
+  public String getOwner() {
+    return getOwnerName();
+  }
+
   public String getAdminName() {
     return adminName;
   }

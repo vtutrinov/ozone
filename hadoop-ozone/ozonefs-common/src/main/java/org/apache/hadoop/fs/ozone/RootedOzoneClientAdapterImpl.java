@@ -57,4 +57,5 @@ public class RootedOzoneClientAdapterImpl
       storageStatistics.incrementCounter(objectsRead, count);
     }
   }
+
 }

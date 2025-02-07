@@ -38,6 +38,7 @@ import org.apache.hadoop.hdds.utils.db.CopyObject;
 import org.apache.hadoop.hdds.utils.db.DelegatedCodec;
 import org.apache.hadoop.hdds.utils.db.Proto2Codec;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.Snapshot;
 import org.apache.hadoop.ozone.audit.Auditable;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.SnapshotStatusProto;
@@ -50,7 +51,7 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Snapsho
  * snapshot checkpoint directory, previous snapshotId
  * for the snapshot path and global amongst other necessary fields.
  */
-public final class SnapshotInfo implements Auditable, CopyObject<SnapshotInfo> {
+public final class SnapshotInfo implements Snapshot, Auditable, CopyObject<SnapshotInfo> {
   private static final Codec<SnapshotInfo> CODEC = new DelegatedCodec<>(
       Proto2Codec.get(OzoneManagerProtocolProtos.SnapshotInfo.getDefaultInstance()),
       SnapshotInfo::getFromProtobuf,
