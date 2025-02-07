@@ -64,9 +64,9 @@ import org.apache.hadoop.ozone.protocolPB.StorageContainerDatanodeProtocolPB;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.mockito.Mockito;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Random;
@@ -233,7 +233,7 @@ public final class ContainerTestUtils {
    */
   public static ScanResult getUnhealthyScanResult() {
     return ScanResult.unhealthy(ScanResult.FailureType.CORRUPT_CHUNK,
-        new File(""),
+        Paths.get(""),
         new IOException("Fake corruption failure for testing"));
   }
 

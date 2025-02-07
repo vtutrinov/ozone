@@ -353,12 +353,21 @@ public class XceiverClientGrpc extends XceiverClientSpi {
     List<DatanodeDetails> datanodeList = null;
 
     DatanodeBlockID blockID = null;
-    if (request.getCmdType() == ContainerProtos.Type.GetBlock) {
+    switch (request.getCmdType()) {
+    case GetBlock:
       blockID = request.getGetBlock().getBlockID();
-    } else if  (request.getCmdType() == ContainerProtos.Type.ReadChunk) {
+      break;
+    case ReadChunk:
       blockID = request.getReadChunk().getBlockID();
-    } else if (request.getCmdType() == ContainerProtos.Type.GetSmallFile) {
+      break;
+    case GetSmallFile:
       blockID = request.getGetSmallFile().getBlock().getBlockID();
+      break;
+    case VerifyBlock:
+      blockID = request.getVerifyBlock().getBlockID();
+      break;
+    default:
+      break;
     }
 
     if (blockID != null) {

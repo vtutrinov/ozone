@@ -64,6 +64,7 @@ import org.apache.hadoop.hdds.scm.container.common.helpers.ContainerNotOpenExcep
 import org.apache.hadoop.hdds.scm.container.common.helpers.StorageContainerException;
 import org.apache.hadoop.hdds.scm.pipeline.Pipeline;
 import org.apache.hadoop.hdds.security.token.OzoneBlockTokenIdentifier;
+import org.apache.hadoop.hdds.tracing.TracingUtil;
 import org.apache.hadoop.ozone.common.Checksum;
 import org.apache.hadoop.ozone.common.ChecksumData;
 import org.apache.hadoop.security.token.Token;
@@ -167,45 +168,41 @@ public final class ContainerProtocolCalls  {
    * @throws IOException if there is an I/O error while performing the call
    */
   public static GetBlockResponseProto getBlock(XceiverClientSpi xceiverClient,
-      List<Validator> validators,
-      DatanodeBlockID datanodeBlockID,
-      Token<? extends TokenIdentifier> token) throws IOException {
-    GetBlockRequestProto.Builder readBlockRequest = GetBlockRequestProto
-        .newBuilder()
-        .setBlockID(datanodeBlockID);
+      List<Validator> validators, BlockID blockID, Token<? extends TokenIdentifier> token,
+      Map<DatanodeDetails, Integer> replicaIndexes) throws IOException {
     ContainerCommandRequestProto.Builder builder = ContainerCommandRequestProto
-        .newBuilder()
-        .setCmdType(Type.GetBlock)
-        .setContainerID(datanodeBlockID.getContainerID())
-        .setGetBlock(readBlockRequest);
+            .newBuilder()
+            .setCmdType(Type.GetBlock)
+            .setContainerID(blockID.getContainerID());
     if (token != null) {
       builder.setEncodedToken(token.encodeToUrlString());
     }
 
     return tryEachDatanode(xceiverClient.getPipeline(),
-        d -> getBlock(xceiverClient, validators, builder, d),
-        d -> toErrorMessage(datanodeBlockID, d));
+            d -> getBlock(xceiverClient, validators, builder, blockID, d, replicaIndexes),
+            d -> toErrorMessage(blockID, d));
   }
 
-  static String toErrorMessage(DatanodeBlockID blockId, DatanodeDetails d) {
+  static String toErrorMessage(BlockID blockId, DatanodeDetails d) {
     return String.format("Failed to get block #%s in container #%s from %s",
-        blockId.getLocalID(), blockId.getContainerID(), d);
+            blockId.getLocalID(), blockId.getContainerID(), d);
   }
 
-  public static GetBlockResponseProto getBlock(XceiverClientSpi xceiverClient,
-      DatanodeBlockID datanodeBlockID,
-      Token<? extends TokenIdentifier> token) throws IOException {
-    return getBlock(xceiverClient, getValidatorList(), datanodeBlockID, token);
+  public static GetBlockResponseProto getBlock(XceiverClientSpi xceiverClient, BlockID datanodeBlockID,
+      Token<? extends TokenIdentifier> token, Map<DatanodeDetails, Integer> replicaIndexes) throws IOException {
+    return getBlock(xceiverClient, getValidatorList(), datanodeBlockID, token, replicaIndexes);
   }
 
-  private static GetBlockResponseProto getBlock(XceiverClientSpi xceiverClient,
-      List<Validator> validators,
-      ContainerCommandRequestProto.Builder builder,
-      DatanodeDetails datanode) throws IOException {
+  private static GetBlockResponseProto getBlock(XceiverClientSpi xceiverClient, List<Validator> validators,
+      ContainerCommandRequestProto.Builder builder, BlockID blockID, DatanodeDetails datanode,
+      Map<DatanodeDetails, Integer> replicaIndexes) throws IOException {
+    DatanodeBlockID datanodeBlockID = buildDatanodeId(builder, blockID, datanode, replicaIndexes);
+    final GetBlockRequestProto.Builder readBlockRequest = GetBlockRequestProto.newBuilder()
+            .setBlockID(datanodeBlockID);
     final ContainerCommandRequestProto request = builder
-        .setDatanodeUuid(datanode.getUuidString()).build();
-    ContainerCommandResponseProto response =
-        xceiverClient.sendCommand(request, validators);
+            .setDatanodeUuid(datanode.getUuidString())
+            .setGetBlock(readBlockRequest).build();
+    ContainerCommandResponseProto response = xceiverClient.sendCommand(request, validators);
     return response.getGetBlock();
   }
 
@@ -750,4 +747,18 @@ public final class ContainerProtocolCalls  {
     return datanodeToResponseMap;
   }
 
+  private static DatanodeBlockID buildDatanodeId(ContainerCommandRequestProto.Builder builder, BlockID blockID,
+        DatanodeDetails datanode, Map<DatanodeDetails, Integer> replicaIndexes) {
+    String traceId = TracingUtil.exportCurrentSpan();
+    if (traceId != null) {
+      builder.setTraceID(traceId);
+    }
+    final DatanodeBlockID.Builder datanodeBlockID = blockID.getDatanodeBlockIDProtobufBuilder();
+    int replicaIndex = replicaIndexes.getOrDefault(datanode, 0);
+    if (replicaIndex > 0) {
+      datanodeBlockID.setReplicaIndex(replicaIndex);
+    }
+
+    return datanodeBlockID.build();
+  }
 }

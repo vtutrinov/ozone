@@ -226,15 +226,15 @@ public final class KeyValueContainerUtil {
       kvContainerData.setSchemaVersion(OzoneConsts.SCHEMA_V1);
     }
 
-    File dbFile = KeyValueContainerLocationUtil.getContainerDBFile(
+    Path dbFile = KeyValueContainerLocationUtil.getContainerDBFile(
         kvContainerData);
-    if (!dbFile.exists()) {
+    if (!Files.exists(dbFile)) {
       LOG.error("Container DB file is missing for ContainerID {}. " +
           "Skipping loading of this container.", containerID);
       // Don't further process this container, as it is missing db file.
       return;
     }
-    kvContainerData.setDbFile(dbFile);
+    kvContainerData.setDbFile(dbFile.toFile());
 
     DatanodeConfiguration dnConf =
         config.getObject(DatanodeConfiguration.class);

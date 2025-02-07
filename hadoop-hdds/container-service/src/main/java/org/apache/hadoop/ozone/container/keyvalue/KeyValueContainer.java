@@ -801,12 +801,11 @@ public class KeyValueContainer implements Container<KeyValueContainerData> {
    */
   @Override
   public File getContainerFile() {
-    return getContainerFile(containerData.getMetadataPath(),
-            containerData.getContainerID());
+    return getContainerFile(containerData.getMetadataPath(), containerData.getContainerID()).toFile();
   }
 
-  public static File getContainerFile(String metadataPath, long containerId) {
-    return new File(metadataPath,
+  public static Path getContainerFile(String metadataPath, long containerId) {
+    return Paths.get(metadataPath).resolve(
         containerId + OzoneConsts.CONTAINER_EXTENSION);
   }
 
@@ -928,7 +927,7 @@ public class KeyValueContainer implements Container<KeyValueContainerData> {
    * @return
    */
   public File getContainerDBFile() {
-    return KeyValueContainerLocationUtil.getContainerDBFile(containerData);
+    return KeyValueContainerLocationUtil.getContainerDBFile(containerData).toFile();
 
   }
 

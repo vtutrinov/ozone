@@ -21,6 +21,7 @@ import org.apache.hadoop.hdds.client.BlockID;
 import org.apache.hadoop.hdds.client.ECReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
+import org.apache.hadoop.hdds.scm.OzoneClientConfig;
 import org.apache.hadoop.hdds.scm.XceiverClientFactory;
 import org.apache.hadoop.hdds.scm.pipeline.Pipeline;
 import org.apache.hadoop.hdds.scm.storage.BlockExtendedInputStream;
@@ -31,6 +32,7 @@ import org.apache.hadoop.io.ByteBufferPool;
 import org.apache.hadoop.io.ElasticByteBufferPool;
 import org.apache.hadoop.security.token.Token;
 
+import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
@@ -44,10 +46,10 @@ public class BlockInputStreamFactoryImpl implements BlockInputStreamFactory {
   private ECBlockInputStreamFactory ecBlockStreamFactory;
 
   public static BlockInputStreamFactory getInstance(
-      ByteBufferPool byteBufferPool,
-      Supplier<ExecutorService> ecReconstructExecutorSupplier) {
+          ByteBufferPool byteBufferPool,
+          Supplier<ExecutorService> ecReconstructExecutorSupplier) {
     return new BlockInputStreamFactoryImpl(byteBufferPool,
-        ecReconstructExecutorSupplier);
+            ecReconstructExecutorSupplier);
   }
 
   public BlockInputStreamFactoryImpl() {
@@ -69,23 +71,24 @@ public class BlockInputStreamFactoryImpl implements BlockInputStreamFactory {
    * @param blockInfo The blockInfo representing the block.
    * @param pipeline The pipeline to be used for reading the block
    * @param token The block Access Token
-   * @param verifyChecksum Whether to verify checksums or not.
    * @param xceiverFactory Factory to create the xceiver in the client
    * @param refreshFunction Function to refresh the pipeline if needed
    * @return BlockExtendedInputStream of the correct type.
    */
   public BlockExtendedInputStream create(ReplicationConfig repConfig,
       BlockLocationInfo blockInfo, Pipeline pipeline,
-      Token<OzoneBlockTokenIdentifier> token, boolean verifyChecksum,
+      Token<OzoneBlockTokenIdentifier> token,
       XceiverClientFactory xceiverFactory,
-      Function<BlockID, BlockLocationInfo> refreshFunction) {
+      Function<BlockID, BlockLocationInfo> refreshFunction,
+      OzoneClientConfig config) throws IOException {
     if (repConfig.getReplicationType().equals(HddsProtos.ReplicationType.EC)) {
       return new ECBlockInputStreamProxy((ECReplicationConfig)repConfig,
-          blockInfo, verifyChecksum, xceiverFactory, refreshFunction,
-          ecBlockStreamFactory);
+          blockInfo, xceiverFactory, refreshFunction,
+          ecBlockStreamFactory, config);
     } else {
-      return new BlockInputStream(blockInfo.getBlockID(), blockInfo.getLength(),
-          pipeline, token, verifyChecksum, xceiverFactory, refreshFunction);
+      return new BlockInputStream(blockInfo,
+          pipeline, token, xceiverFactory, refreshFunction,
+          config);
     }
   }
 

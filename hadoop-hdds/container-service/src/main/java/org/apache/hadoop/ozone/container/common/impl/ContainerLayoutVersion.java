@@ -25,7 +25,6 @@ import org.apache.hadoop.hdds.client.BlockID;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.scm.ScmConfigKeys;
 import org.apache.hadoop.hdds.scm.container.common.helpers.StorageContainerException;
-import org.apache.hadoop.ozone.container.common.helpers.ChunkInfo;
 
 import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.ozone.container.common.helpers.ContainerUtils;
@@ -39,15 +38,13 @@ public enum ContainerLayoutVersion {
 
   FILE_PER_CHUNK(1, "One file per chunk") {
     @Override
-    public File getChunkFile(File chunkDir, BlockID blockID,
-        ChunkInfo info) {
-      return new File(chunkDir, info.getChunkName());
+    public File getChunkFile(File chunkDir, BlockID blockID, String chunkName) {
+      return new File(chunkDir, chunkName);
     }
   },
   FILE_PER_BLOCK(2, "One file per block") {
     @Override
-    public File getChunkFile(File chunkDir, BlockID blockID,
-        ChunkInfo info) {
+    public File getChunkFile(File chunkDir, BlockID blockID, String chunkName) {
       return new File(chunkDir, blockID.getLocalID() + ".block");
     }
   };
@@ -118,12 +115,12 @@ public enum ContainerLayoutVersion {
   }
 
   public abstract File getChunkFile(File chunkDir,
-      BlockID blockID, ChunkInfo info);
+      BlockID blockID, String chunkName);
 
   public File getChunkFile(ContainerData containerData, BlockID blockID,
-      ChunkInfo info) throws StorageContainerException {
+      String chunkName) throws StorageContainerException {
     File chunkDir = ContainerUtils.getChunkDir(containerData);
-    return getChunkFile(chunkDir, blockID, info);
+    return getChunkFile(chunkDir, blockID, chunkName);
   }
 
   @Override

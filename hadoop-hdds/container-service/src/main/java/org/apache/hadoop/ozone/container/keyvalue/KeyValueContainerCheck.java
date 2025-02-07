@@ -23,33 +23,30 @@ import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos;
 import org.apache.hadoop.hdfs.util.Canceler;
 import org.apache.hadoop.hdfs.util.DataTransferThrottler;
-import org.apache.hadoop.ozone.common.Checksum;
-import org.apache.hadoop.ozone.common.ChecksumData;
 import org.apache.hadoop.ozone.container.common.helpers.BlockData;
-import org.apache.hadoop.ozone.container.common.helpers.ChunkInfo;
 import org.apache.hadoop.ozone.container.common.helpers.ContainerUtils;
-import org.apache.hadoop.ozone.container.common.impl.ContainerLayoutVersion;
 import org.apache.hadoop.ozone.container.common.impl.ContainerDataYaml;
 import org.apache.hadoop.ozone.container.common.interfaces.BlockIterator;
 import org.apache.hadoop.ozone.container.common.interfaces.Container.ScanResult;
 import org.apache.hadoop.ozone.container.common.interfaces.DBHandle;
 import org.apache.hadoop.ozone.container.common.volume.HddsVolume;
 import org.apache.hadoop.ozone.container.keyvalue.helpers.BlockUtils;
-import org.apache.hadoop.ozone.container.keyvalue.helpers.ChunkUtils;
 import org.apache.hadoop.ozone.container.keyvalue.helpers.KeyValueContainerLocationUtil;
 
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.util.Arrays;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
-import org.apache.ratis.thirdparty.com.google.protobuf.ByteString;
+import org.apache.hadoop.ozone.container.keyvalue.scanner.BlockScanner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.hadoop.ozone.OzoneConsts.CONTAINER_DB_TYPE_ROCKSDB;
+import static org.apache.hadoop.ozone.container.common.interfaces.Container.ScanResult.FailureType.MISSING_CONTAINER_DIR;
+import static org.apache.hadoop.ozone.container.common.interfaces.Container.ScanResult.FailureType.MISSING_METADATA_DIR;
+import static org.apache.hadoop.ozone.container.common.interfaces.Container.ScanResult.unhealthy;
 
 /**
  * Class to run integrity checks on Datanode Containers.
@@ -92,26 +89,27 @@ public class KeyValueContainerCheck {
     LOG.debug("Running basic checks for container {};", containerID);
 
     try {
-      // Container directory should exist.
-      File containerDir = new File(metadataPath).getParentFile();
-      if (!containerDir.exists()) {
-        return ScanResult.unhealthy(
-            ScanResult.FailureType.MISSING_CONTAINER_DIR,
-            containerDir, new FileNotFoundException("Container directory " +
-                containerDir + " not found."));
-      }
+      if (metadataPath != null) {
+        Path metadataDir = Paths.get(metadataPath);
 
-      // Metadata directory should exist.
-      File metadataDir = new File(metadataPath);
-      if (!metadataDir.exists()) {
-        return ScanResult.unhealthy(ScanResult.FailureType.MISSING_METADATA_DIR,
-            metadataDir, new FileNotFoundException("Metadata directory " +
-                metadataDir + " not found."));
+        // Container directory should exist.
+        Path containerDir = metadataDir.getParent();
+        if (containerDir != null) {
+          if (!Files.exists(containerDir)) {
+            return unhealthy(MISSING_CONTAINER_DIR, containerDir,
+                    new FileNotFoundException("Container directory " + containerDir + " not found."));
+          }
+        }
+
+        // Metadata directory should exist.
+        if (!Files.exists(metadataDir)) {
+          return unhealthy(MISSING_METADATA_DIR, metadataDir,
+                  new FileNotFoundException("Metadata directory " + metadataDir + " not found."));
+        }
       }
 
       // Container file should be valid.
-      File containerFile = KeyValueContainer
-          .getContainerFile(metadataPath, containerID);
+      Path containerFile = KeyValueContainer.getContainerFile(metadataPath, containerID);
       try {
         loadContainerData(containerFile);
       } catch (FileNotFoundException ex) {
@@ -123,8 +121,8 @@ public class KeyValueContainerCheck {
       }
 
       // Chunks directory should exist.
-      File chunksDir = new File(onDiskContainerData.getChunksPath());
-      if (!chunksDir.exists()) {
+      Path chunksDir = Paths.get(onDiskContainerData.getChunksPath());
+      if (!Files.exists(chunksDir)) {
         return ScanResult.unhealthy(ScanResult.FailureType.MISSING_CHUNKS_DIR,
             chunksDir, new FileNotFoundException("Chunks directory " +
                 chunksDir + " not found."));
@@ -165,7 +163,7 @@ public class KeyValueContainerCheck {
     return result;
   }
 
-  private ScanResult checkContainerFile(File containerFile) {
+  private ScanResult checkContainerFile(Path containerFile) {
     /*
      * compare the values in the container file loaded from disk,
      * with the values we are expecting
@@ -228,10 +226,9 @@ public class KeyValueContainerCheck {
     Preconditions.checkState(onDiskContainerData != null,
         "invoke loadContainerData prior to calling this function");
 
-    File dbFile = KeyValueContainerLocationUtil
-        .getContainerDBFile(onDiskContainerData);
+    Path dbFile = KeyValueContainerLocationUtil.getContainerDBFile(onDiskContainerData);
 
-    if (!dbFile.exists() || !dbFile.canRead()) {
+    if (!Files.exists(dbFile) || !Files.isReadable(dbFile)) {
       String dbFileErrorMsg = "Unable to access DB File [" + dbFile.toString()
           + "] for Container [" + containerID + "] metadata path ["
           + metadataPath + "]";
@@ -239,13 +236,15 @@ public class KeyValueContainerCheck {
           dbFile, new IOException(dbFileErrorMsg));
     }
 
-    onDiskContainerData.setDbFile(dbFile);
+    onDiskContainerData.setDbFile(dbFile.toFile());
 
     try {
       try (DBHandle db = BlockUtils.getDB(onDiskContainerData, checkConfig);
           BlockIterator<BlockData> kvIter = db.getStore().getBlockIterator(
               onDiskContainerData.getContainerID(),
               onDiskContainerData.getUnprefixedKeyFilter())) {
+
+        BlockScanner blockScanner = new BlockScanner(onDiskContainerData, throttler, canceler);
 
         while (kvIter.hasNext()) {
           BlockData block = kvIter.nextBlock();
@@ -256,7 +255,7 @@ public class KeyValueContainerCheck {
           // Here try optimistically and retry with the container lock to
           // make sure reading the latest record. If the record is just removed,
           // the block should be skipped to scan.
-          ScanResult result = scanBlock(block, throttler, canceler);
+          ScanResult result = blockScanner.scanBlock(block);
           if (!result.isHealthy()) {
             if (result.getFailureType() ==
                 ScanResult.FailureType.MISSING_CHUNK_FILE) {
@@ -320,119 +319,8 @@ public class KeyValueContainerCheck {
     }
   }
 
-  private ScanResult scanBlock(BlockData block, DataTransferThrottler throttler,
-      Canceler canceler) {
-    ContainerLayoutVersion layout = onDiskContainerData.getLayoutVersion();
-
-    for (ContainerProtos.ChunkInfo chunk : block.getChunks()) {
-      File chunkFile;
-      try {
-        chunkFile = layout.getChunkFile(onDiskContainerData,
-            block.getBlockID(), ChunkInfo.getFromProtoBuf(chunk));
-      } catch (IOException ex) {
-        return ScanResult.unhealthy(
-            ScanResult.FailureType.MISSING_CHUNK_FILE,
-            new File(onDiskContainerData.getChunksPath()), ex);
-      }
-
-      if (!chunkFile.exists()) {
-        // In EC, client may write empty putBlock in padding block nodes.
-        // So, we need to make sure, chunk length > 0, before declaring
-        // the missing chunk file.
-        if (block.getChunks().size() > 0 && block
-            .getChunks().get(0).getLen() > 0) {
-          return ScanResult.unhealthy(ScanResult.FailureType.MISSING_CHUNK_FILE,
-              chunkFile, new IOException("Missing chunk file " +
-                  chunkFile.getAbsolutePath()));
-        }
-      } else if (chunk.getChecksumData().getType()
-          != ContainerProtos.ChecksumType.NONE) {
-        ScanResult result = verifyChecksum(block, chunk, chunkFile, layout,
-            throttler, canceler);
-        if (!result.isHealthy()) {
-          return result;
-        }
-      }
-    }
-
-    return ScanResult.healthy();
-  }
-
-  private static ScanResult verifyChecksum(BlockData block,
-      ContainerProtos.ChunkInfo chunk, File chunkFile,
-      ContainerLayoutVersion layout,
-      DataTransferThrottler throttler, Canceler canceler) {
-    ChecksumData checksumData =
-        ChecksumData.getFromProtoBuf(chunk.getChecksumData());
-    int checksumCount = checksumData.getChecksums().size();
-    int bytesPerChecksum = checksumData.getBytesPerChecksum();
-    Checksum cal = new Checksum(checksumData.getChecksumType(),
-        bytesPerChecksum);
-    ByteBuffer buffer = ByteBuffer.allocate(bytesPerChecksum);
-    long bytesRead = 0;
-    try (FileChannel channel = FileChannel.open(chunkFile.toPath(),
-        ChunkUtils.READ_OPTIONS, ChunkUtils.NO_ATTRIBUTES)) {
-      if (layout == ContainerLayoutVersion.FILE_PER_BLOCK) {
-        channel.position(chunk.getOffset());
-      }
-      for (int i = 0; i < checksumCount; i++) {
-        // limit last read for FILE_PER_BLOCK, to avoid reading next chunk
-        if (layout == ContainerLayoutVersion.FILE_PER_BLOCK &&
-            i == checksumCount - 1 &&
-            chunk.getLen() % bytesPerChecksum != 0) {
-          buffer.limit((int) (chunk.getLen() % bytesPerChecksum));
-        }
-
-        int v = channel.read(buffer);
-        if (v == -1) {
-          break;
-        }
-        bytesRead += v;
-        buffer.flip();
-
-        throttler.throttle(v, canceler);
-
-        ByteString expected = checksumData.getChecksums().get(i);
-        ByteString actual = cal.computeChecksum(buffer)
-            .getChecksums().get(0);
-        if (!expected.equals(actual)) {
-          String message = String
-              .format("Inconsistent read for chunk=%s" +
-                  " checksum item %d" +
-                  " expected checksum %s" +
-                  " actual checksum %s" +
-                  " for block %s",
-                  ChunkInfo.getFromProtoBuf(chunk),
-                  i,
-                  Arrays.toString(expected.toByteArray()),
-                  Arrays.toString(actual.toByteArray()),
-                  block.getBlockID());
-          return ScanResult.unhealthy(
-              ScanResult.FailureType.CORRUPT_CHUNK, chunkFile,
-              new IOException(message));
-        }
-      }
-      if (bytesRead != chunk.getLen()) {
-        String message = String
-            .format("Inconsistent read for chunk=%s expected length=%d"
-                    + " actual length=%d for block %s",
-                chunk.getChunkName(),
-                chunk.getLen(), bytesRead, block.getBlockID());
-        return ScanResult.unhealthy(
-            ScanResult.FailureType.INCONSISTENT_CHUNK_LENGTH, chunkFile,
-            new IOException(message));
-      }
-    } catch (IOException ex) {
-      return ScanResult.unhealthy(
-          ScanResult.FailureType.MISSING_CHUNK_FILE, chunkFile, ex);
-    }
-
-    return ScanResult.healthy();
-  }
-
-  private void loadContainerData(File containerFile) throws IOException {
-    onDiskContainerData = (KeyValueContainerData) ContainerDataYaml
-        .readContainerFile(containerFile);
+  private void loadContainerData(Path containerFile) throws IOException {
+    onDiskContainerData = (KeyValueContainerData) ContainerDataYaml.readContainerFile(containerFile.toFile());
     onDiskContainerData.setVolume(volume);
   }
 }

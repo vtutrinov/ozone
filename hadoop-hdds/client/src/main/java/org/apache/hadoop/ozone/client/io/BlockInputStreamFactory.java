@@ -19,6 +19,7 @@ package org.apache.hadoop.ozone.client.io;
 
 import org.apache.hadoop.hdds.client.BlockID;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
+import org.apache.hadoop.hdds.scm.OzoneClientConfig;
 import org.apache.hadoop.hdds.scm.XceiverClientFactory;
 import org.apache.hadoop.hdds.scm.pipeline.Pipeline;
 import org.apache.hadoop.hdds.scm.storage.BlockExtendedInputStream;
@@ -26,6 +27,7 @@ import org.apache.hadoop.hdds.scm.storage.BlockLocationInfo;
 import org.apache.hadoop.hdds.security.token.OzoneBlockTokenIdentifier;
 import org.apache.hadoop.security.token.Token;
 
+import java.io.IOException;
 import java.util.function.Function;
 
 /**
@@ -41,15 +43,15 @@ public interface BlockInputStreamFactory {
    * @param blockInfo The blockInfo representing the block.
    * @param pipeline The pipeline to be used for reading the block
    * @param token The block Access Token
-   * @param verifyChecksum Whether to verify checksums or not.
    * @param xceiverFactory Factory to create the xceiver in the client
    * @param refreshFunction Function to refresh the block location if needed
    * @return BlockExtendedInputStream of the correct type.
    */
   BlockExtendedInputStream create(ReplicationConfig repConfig,
       BlockLocationInfo blockInfo, Pipeline pipeline,
-      Token<OzoneBlockTokenIdentifier> token, boolean verifyChecksum,
-       XceiverClientFactory xceiverFactory,
-       Function<BlockID, BlockLocationInfo> refreshFunction);
+      Token<OzoneBlockTokenIdentifier> token,
+      XceiverClientFactory xceiverFactory,
+      Function<BlockID, BlockLocationInfo> refreshFunction,
+      OzoneClientConfig config) throws IOException;
 
 }

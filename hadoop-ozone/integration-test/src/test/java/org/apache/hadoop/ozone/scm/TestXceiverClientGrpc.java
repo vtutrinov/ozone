@@ -202,11 +202,11 @@ public class TestXceiverClientGrpc {
   private void invokeXceiverClientGetBlock(XceiverClientSpi client)
       throws IOException {
     ContainerProtocolCalls.getBlock(client,
-        ContainerProtos.DatanodeBlockID.newBuilder()
-            .setContainerID(1)
-            .setLocalID(1)
-            .setBlockCommitSequenceId(1)
-            .build(), null);
+            BlockID.getFromProtobuf(ContainerProtos.DatanodeBlockID.newBuilder()
+                .setContainerID(1)
+                .setLocalID(1)
+                .setBlockCommitSequenceId(1)
+                .build()), null, client.getPipeline().getReplicaIndexes());
   }
 
   private void invokeXceiverClientReadChunk(XceiverClientSpi client)

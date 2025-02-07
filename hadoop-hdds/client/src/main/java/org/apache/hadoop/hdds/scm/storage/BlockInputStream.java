@@ -32,10 +32,12 @@ import com.google.common.base.Preconditions;
 import org.apache.hadoop.hdds.client.BlockID;
 import org.apache.hadoop.hdds.client.StandaloneReplicationConfig;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.ContainerCommandResponseProto;
+import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.BlockData;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.ChunkInfo;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.DatanodeBlockID;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.GetBlockResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
+import org.apache.hadoop.hdds.scm.OzoneClientConfig;
 import org.apache.hadoop.hdds.scm.XceiverClientFactory;
 import org.apache.hadoop.hdds.scm.XceiverClientSpi;
 import org.apache.hadoop.hdds.scm.XceiverClientSpi.Validator;
@@ -66,7 +68,8 @@ public class BlockInputStream extends BlockExtendedInputStream {
       LoggerFactory.getLogger(BlockInputStream.class);
 
   private final BlockID blockID;
-  private final long length;
+  private long length;
+  private final BlockLocationInfo blockInfo;
   private final AtomicReference<Pipeline> pipelineRef =
       new AtomicReference<>();
   private final AtomicReference<Token<OzoneBlockTokenIdentifier>> tokenRef =
@@ -76,8 +79,7 @@ public class BlockInputStream extends BlockExtendedInputStream {
   private XceiverClientSpi xceiverClient;
   private boolean initialized = false;
   // TODO: do we need to change retrypolicy based on exception.
-  private final RetryPolicy retryPolicy =
-      HddsClientUtils.createRetryPolicy(3, TimeUnit.SECONDS.toMillis(1));
+  private final RetryPolicy retryPolicy;
   private int retries;
 
   // List of ChunkInputStreams, one for each chunk in the block
@@ -111,27 +113,36 @@ public class BlockInputStream extends BlockExtendedInputStream {
 
   private final Function<BlockID, BlockLocationInfo> refreshFunction;
 
-  public BlockInputStream(BlockID blockId, long blockLen, Pipeline pipeline,
-      Token<OzoneBlockTokenIdentifier> token, boolean verifyChecksum,
-      XceiverClientFactory xceiverClientFactory,
-      Function<BlockID, BlockLocationInfo> refreshFunction) {
-    this.blockID = blockId;
-    this.length = blockLen;
+  public BlockInputStream(
+          BlockLocationInfo blockInfo,
+          Pipeline pipeline,
+          Token<OzoneBlockTokenIdentifier> token,
+          XceiverClientFactory xceiverClientFactory,
+          Function<BlockID, BlockLocationInfo> refreshFunction,
+          OzoneClientConfig config) throws IOException {
+    this.blockInfo = blockInfo;
+    this.blockID = blockInfo.getBlockID();
+    this.length = blockInfo.getLength();
     setPipeline(pipeline);
     tokenRef.set(token);
-    this.verifyChecksum = verifyChecksum;
+    this.verifyChecksum = config.isChecksumVerify();
     this.xceiverClientFactory = xceiverClientFactory;
     this.refreshFunction = refreshFunction;
+    this.retryPolicy =
+        HddsClientUtils.createRetryPolicy(config.getMaxReadRetryCount(),
+            TimeUnit.SECONDS.toMillis(config.getReadRetryInterval()));
   }
 
+  // only for unit tests
   public BlockInputStream(BlockID blockId, long blockLen, Pipeline pipeline,
                           Token<OzoneBlockTokenIdentifier> token,
-                          boolean verifyChecksum,
-                          XceiverClientFactory xceiverClientFactory
-  ) {
-    this(blockId, blockLen, pipeline, token, verifyChecksum,
-        xceiverClientFactory, null);
+                          XceiverClientFactory xceiverClientFactory,
+                          OzoneClientConfig config
+  ) throws IOException {
+    this(new BlockLocationInfo(new BlockLocationInfo.Builder().setBlockID(blockId).setLength(blockLen)),
+            pipeline, token, xceiverClientFactory, null, config);
   }
+
   /**
    * Initialize the BlockInputStream. Get the BlockData (list of chunks) from
    * the Container and create the ChunkInputStreams for each Chunk in the Block.
@@ -143,11 +154,18 @@ public class BlockInputStream extends BlockExtendedInputStream {
       return;
     }
 
+    BlockData blockData = null;
     List<ChunkInfo> chunks = null;
     IOException catchEx = null;
     do {
       try {
-        chunks = getChunkInfoList();
+        blockData = getBlockData();
+        chunks = blockData.getChunksList();
+        if (blockInfo != null && blockInfo.isUnderConstruction()) {
+          // use the block length from DN if block is under construction.
+          length = blockData.getSize();
+          LOG.debug("Updated block length to {} for block {}", length, blockID);
+        }
         break;
         // If we get a StorageContainerException or an IOException due to
         // datanodes are not reachable, refresh to get the latest pipeline
@@ -226,40 +244,31 @@ public class BlockInputStream extends BlockExtendedInputStream {
 
   /**
    * Send RPC call to get the block info from the container.
-   * @return List of chunks in this block.
+   * @return BlockData.
    */
-  protected List<ChunkInfo> getChunkInfoList() throws IOException {
+  protected BlockData getBlockData() throws IOException {
     acquireClient();
     try {
-      return getChunkInfoListUsingClient();
+      return getBlockDataUsingClient();
     } finally {
       releaseClient();
     }
   }
 
-  @VisibleForTesting
-  protected List<ChunkInfo> getChunkInfoListUsingClient() throws IOException {
-    final Pipeline pipeline = xceiverClient.getPipeline();
-
+  /**
+   * Send RPC call to get the block info from the container.
+   * @return BlockData.
+   */
+  protected BlockData getBlockDataUsingClient() throws IOException {
+    Pipeline pipeline = pipelineRef.get();
     if (LOG.isDebugEnabled()) {
-      LOG.debug("Initializing BlockInputStream for get key to access {}",
-          blockID.getContainerID());
-    }
-
-    DatanodeBlockID.Builder blkIDBuilder =
-        DatanodeBlockID.newBuilder().setContainerID(blockID.getContainerID())
-            .setLocalID(blockID.getLocalID())
-            .setBlockCommitSequenceId(blockID.getBlockCommitSequenceId());
-
-    int replicaIndex = pipeline.getReplicaIndex(pipeline.getClosestNode());
-    if (replicaIndex > 0) {
-      blkIDBuilder.setReplicaIndex(replicaIndex);
+      LOG.debug("Initializing BlockInputStream for get key to access block {}",
+              blockID);
     }
 
     GetBlockResponseProto response = ContainerProtocolCalls.getBlock(
-        xceiverClient, VALIDATORS, blkIDBuilder.build(), tokenRef.get());
-
-    return response.getBlockData().getChunksList();
+            xceiverClient, VALIDATORS, blockID, tokenRef.get(), pipeline.getReplicaIndexes());
+    return response.getBlockData();
   }
 
   private void setPipeline(Pipeline pipeline) {

@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import jakarta.annotation.Nullable;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.FileChecksum;
@@ -190,9 +191,8 @@ public final class OmKeyInfo extends WithParentObjectId
   }
 
 
-  public synchronized OmKeyLocationInfoGroup getLatestVersionLocations() {
-    return keyLocationVersions.size() == 0 ? null :
-        keyLocationVersions.get(keyLocationVersions.size() - 1);
+  public @Nullable synchronized OmKeyLocationInfoGroup getLatestVersionLocations() {
+    return keyLocationVersions.isEmpty() ? null : keyLocationVersions.get(keyLocationVersions.size() - 1);
   }
 
   public List<OmKeyLocationInfoGroup> getKeyLocationVersions() {

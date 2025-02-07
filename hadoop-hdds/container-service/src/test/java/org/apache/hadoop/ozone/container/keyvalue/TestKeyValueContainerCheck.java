@@ -23,7 +23,6 @@ import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos;
 import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.apache.hadoop.ozone.container.common.helpers.BlockData;
-import org.apache.hadoop.ozone.container.common.helpers.ChunkInfo;
 import org.apache.hadoop.ozone.container.common.interfaces.BlockIterator;
 import org.apache.hadoop.ozone.container.common.interfaces.DBHandle;
 import org.apache.hadoop.ozone.container.keyvalue.helpers.BlockUtils;
@@ -34,6 +33,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
 import java.io.RandomAccessFile;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -108,9 +108,8 @@ public class TestKeyValueContainerCheck
         new KeyValueContainerCheck(containerData.getMetadataPath(), conf,
             containerID, containerData.getVolume(), container);
 
-    File dbFile = KeyValueContainerLocationUtil
-        .getContainerDBFile(containerData);
-    containerData.setDbFile(dbFile);
+    Path dbFile = KeyValueContainerLocationUtil.getContainerDBFile(containerData);
+    containerData.setDbFile(dbFile.toFile());
     try (DBHandle ignored = BlockUtils.getDB(containerData, conf);
         BlockIterator<BlockData> kvIter =
                 ignored.getStore().getBlockIterator(containerID)) {
@@ -118,9 +117,7 @@ public class TestKeyValueContainerCheck
       assertFalse(block.getChunks().isEmpty());
       ContainerProtos.ChunkInfo c = block.getChunks().get(0);
       BlockID blockID = block.getBlockID();
-      ChunkInfo chunkInfo = ChunkInfo.getFromProtoBuf(c);
-      File chunkFile = getChunkLayout()
-          .getChunkFile(containerData, blockID, chunkInfo);
+      File chunkFile = getChunkLayout().getChunkFile(containerData, blockID, c.getChunkName());
       long length = chunkFile.length();
       assertTrue(length > 0);
       // forcefully truncate the file to induce failure.

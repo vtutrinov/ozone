@@ -21,6 +21,7 @@ import org.apache.hadoop.hdds.client.BlockID;
 import org.apache.hadoop.hdds.client.ECReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.protocol.DatanodeDetails;
+import org.apache.hadoop.hdds.scm.OzoneClientConfig;
 import org.apache.hadoop.hdds.scm.XceiverClientFactory;
 import org.apache.hadoop.hdds.scm.storage.BlockExtendedInputStream;
 import org.apache.hadoop.hdds.scm.storage.BlockLocationInfo;
@@ -42,15 +43,15 @@ public final class ECBlockInputStreamFactoryImpl implements
   private final Supplier<ExecutorService> ecReconstructExecutorSupplier;
 
   public static ECBlockInputStreamFactory getInstance(
-      BlockInputStreamFactory streamFactory, ByteBufferPool byteBufferPool,
-      Supplier<ExecutorService> ecReconstructExecutorSupplier) {
+          BlockInputStreamFactory streamFactory, ByteBufferPool byteBufferPool,
+          Supplier<ExecutorService> ecReconstructExecutorSupplier) {
     return new ECBlockInputStreamFactoryImpl(streamFactory, byteBufferPool,
-        ecReconstructExecutorSupplier);
+            ecReconstructExecutorSupplier);
   }
 
   private ECBlockInputStreamFactoryImpl(BlockInputStreamFactory streamFactory,
-      ByteBufferPool byteBufferPool,
-      Supplier<ExecutorService> ecReconstructExecutorSupplier) {
+                                        ByteBufferPool byteBufferPool,
+                                        Supplier<ExecutorService> ecReconstructExecutorSupplier) {
     this.byteBufferPool = byteBufferPool;
     this.inputStreamFactory = streamFactory;
     this.ecReconstructExecutorSupplier = ecReconstructExecutorSupplier;
@@ -67,23 +68,23 @@ public final class ECBlockInputStreamFactoryImpl implements
    *                        know are bad and should not be used.
    * @param repConfig The replication Config
    * @param blockInfo The blockInfo representing the block.
-   * @param verifyChecksum Whether to verify checksums or not.
    * @param xceiverFactory Factory to create the xceiver in the client
    * @param refreshFunction Function to refresh the pipeline if needed
    * @return BlockExtendedInputStream of the correct type.
    */
   public BlockExtendedInputStream create(boolean missingLocations,
       List<DatanodeDetails> failedLocations, ReplicationConfig repConfig,
-      BlockLocationInfo blockInfo, boolean verifyChecksum,
+      BlockLocationInfo blockInfo,
       XceiverClientFactory xceiverFactory,
-      Function<BlockID, BlockLocationInfo> refreshFunction) {
+      Function<BlockID, BlockLocationInfo> refreshFunction,
+      OzoneClientConfig config) {
     if (missingLocations) {
       // We create the reconstruction reader
       ECBlockReconstructedStripeInputStream sis =
           new ECBlockReconstructedStripeInputStream(
-              (ECReplicationConfig)repConfig, blockInfo, verifyChecksum,
-              xceiverFactory, refreshFunction, inputStreamFactory,
-              byteBufferPool, ecReconstructExecutorSupplier.get());
+                  (ECReplicationConfig)repConfig, blockInfo,
+                  xceiverFactory, refreshFunction, inputStreamFactory,
+                  byteBufferPool, ecReconstructExecutorSupplier.get(), config);
       if (failedLocations != null) {
         sis.addFailedDatanodes(failedLocations);
       }
@@ -92,7 +93,8 @@ public final class ECBlockInputStreamFactoryImpl implements
     } else {
       // Otherwise create the more efficient non-reconstruction reader
       return new ECBlockInputStream((ECReplicationConfig)repConfig, blockInfo,
-          verifyChecksum, xceiverFactory, refreshFunction, inputStreamFactory);
+          xceiverFactory, refreshFunction, inputStreamFactory,
+          config);
     }
   }
 

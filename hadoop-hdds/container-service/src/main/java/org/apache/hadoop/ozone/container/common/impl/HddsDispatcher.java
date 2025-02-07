@@ -68,8 +68,8 @@ import org.apache.ratis.thirdparty.com.google.protobuf.ProtocolMessageEnum;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -370,7 +370,7 @@ public class HddsDispatcher implements ContainerDispatcher, Auditor {
           //  container instead.
           handler.markContainerUnhealthy(container,
               ScanResult.unhealthy(ScanResult.FailureType.WRITE_FAILURE,
-                  new File(container.getContainerData().getContainerPath()),
+                  Paths.get(container.getContainerData().getContainerPath()),
                   new StorageContainerException(result)));
           LOG.info("Marked Container UNHEALTHY, ContainerID: {}", containerID);
         } catch (IOException ioe) {
@@ -771,6 +771,7 @@ public class HddsDispatcher implements ContainerDispatcher, Auditor {
     case CloseContainer   : return DNAction.CLOSE_CONTAINER;
     case GetCommittedBlockLength : return DNAction.GET_COMMITTED_BLOCK_LENGTH;
     case StreamInit       : return DNAction.STREAM_INIT;
+    case VerifyBlock      : return DNAction.VERIFY_BLOCK;
     default :
       LOG.debug("Invalid command type - {}", cmdType);
       return null;
@@ -785,123 +786,91 @@ public class HddsDispatcher implements ContainerDispatcher, Auditor {
     switch (cmdType) {
     case CreateContainer:
       auditParams.put("containerID", containerID);
-      auditParams.put("containerType",
-          msg.getCreateContainer().getContainerType().toString());
+      auditParams.put("containerType", msg.getCreateContainer().getContainerType().toString());
       return auditParams;
-
     case ReadContainer:
+    case CloseContainer:
       auditParams.put("containerID", containerID);
       return auditParams;
-
     case UpdateContainer:
       auditParams.put("containerID", containerID);
-      auditParams.put("forceUpdate",
-          String.valueOf(msg.getUpdateContainer().getForceUpdate()));
+      auditParams.put("forceUpdate", String.valueOf(msg.getUpdateContainer().getForceUpdate()));
       return auditParams;
-
     case DeleteContainer:
       auditParams.put("containerID", containerID);
-      auditParams.put("forceDelete",
-          String.valueOf(msg.getDeleteContainer().getForceDelete()));
+      auditParams.put("forceDelete", String.valueOf(msg.getDeleteContainer().getForceDelete()));
       return auditParams;
-
     case ListContainer:
       auditParams.put("startContainerID", containerID);
-      auditParams.put("count",
-          String.valueOf(msg.getListContainer().getCount()));
+      auditParams.put("count", String.valueOf(msg.getListContainer().getCount()));
       return auditParams;
-
     case PutBlock:
       try {
         auditParams.put("blockData",
-            BlockData.getFromProtoBuf(msg.getPutBlock().getBlockData())
-                .toString());
+            BlockData.getFromProtoBuf(msg.getPutBlock().getBlockData()).toString());
       } catch (IOException ex) {
         if (LOG.isTraceEnabled()) {
-          LOG.trace("Encountered error parsing BlockData from protobuf: "
-              + ex.getMessage());
+          LOG.trace("Encountered error parsing BlockData from protobuf: " + ex.getMessage());
         }
         return null;
       }
       return auditParams;
-
     case GetBlock:
-      auditParams.put("blockData",
-          BlockID.getFromProtobuf(msg.getGetBlock().getBlockID()).toString());
+      auditParams.put("blockData", BlockID.getFromProtobuf(msg.getGetBlock().getBlockID()).toString());
       return auditParams;
-
     case DeleteBlock:
       auditParams.put("blockData",
-          BlockID.getFromProtobuf(msg.getDeleteBlock().getBlockID())
-              .toString());
+          BlockID.getFromProtobuf(msg.getDeleteBlock().getBlockID()).toString());
       return auditParams;
-
     case ListBlock:
-      auditParams.put("startLocalID",
-          String.valueOf(msg.getListBlock().getStartLocalID()));
+      auditParams.put("startLocalID", String.valueOf(msg.getListBlock().getStartLocalID()));
       auditParams.put("count", String.valueOf(msg.getListBlock().getCount()));
       return auditParams;
-
     case ReadChunk:
-      auditParams.put("blockData",
-          BlockID.getFromProtobuf(msg.getReadChunk().getBlockID()).toString());
+      auditParams.put("blockData", BlockID.getFromProtobuf(msg.getReadChunk().getBlockID()).toString());
       return auditParams;
-
     case DeleteChunk:
       auditParams.put("blockData",
-          BlockID.getFromProtobuf(msg.getDeleteChunk().getBlockID())
-              .toString());
+          BlockID.getFromProtobuf(msg.getDeleteChunk().getBlockID()).toString());
       return auditParams;
-
     case WriteChunk:
       auditParams.put("blockData",
-          BlockID.getFromProtobuf(msg.getWriteChunk().getBlockID())
-              .toString());
+          BlockID.getFromProtobuf(msg.getWriteChunk().getBlockID()).toString());
       return auditParams;
-
     case ListChunk:
       auditParams.put("blockData",
           BlockID.getFromProtobuf(msg.getListChunk().getBlockID()).toString());
       auditParams.put("prevChunkName", msg.getListChunk().getPrevChunkName());
       auditParams.put("count", String.valueOf(msg.getListChunk().getCount()));
       return auditParams;
-
-    case CompactChunk: return null; //CompactChunk operation
-
+    case CompactChunk:
+      return null; //CompactChunk operation
     case PutSmallFile:
       try {
         auditParams.put("blockData",
-            BlockData.getFromProtoBuf(msg.getPutSmallFile()
-                .getBlock().getBlockData()).toString());
+            BlockData.getFromProtoBuf(msg.getPutSmallFile().getBlock().getBlockData()).toString());
       } catch (IOException ex) {
         if (LOG.isTraceEnabled()) {
-          LOG.trace("Encountered error parsing BlockData from protobuf: "
-              + ex.getMessage());
+          LOG.trace("Encountered error parsing BlockData from protobuf: " + ex.getMessage());
         }
       }
       return auditParams;
-
     case GetSmallFile:
       auditParams.put("blockData",
-          BlockID.getFromProtobuf(msg.getGetSmallFile().getBlock().getBlockID())
-              .toString());
+          BlockID.getFromProtobuf(msg.getGetSmallFile().getBlock().getBlockID()).toString());
       return auditParams;
-
-    case CloseContainer:
-      auditParams.put("containerID", containerID);
-      return auditParams;
-
     case GetCommittedBlockLength:
       auditParams.put("blockData",
-          BlockID.getFromProtobuf(msg.getGetCommittedBlockLength().getBlockID())
-              .toString());
+          BlockID.getFromProtobuf(msg.getGetCommittedBlockLength().getBlockID()).toString());
       return auditParams;
-
-    default :
+    case VerifyBlock:
+      auditParams.put("verifyBlock",
+              BlockID.getFromProtobuf(msg.getVerifyBlock().getBlockID()).toString());
+      return auditParams;
+    default:
       LOG.debug("Invalid command type - {}", cmdType);
       return null;
     }
-
   }
 
 }

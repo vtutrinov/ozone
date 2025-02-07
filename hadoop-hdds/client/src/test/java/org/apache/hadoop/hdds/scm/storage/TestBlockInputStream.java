@@ -21,9 +21,12 @@ package org.apache.hadoop.hdds.scm.storage;
 import com.google.common.primitives.Bytes;
 import org.apache.hadoop.hdds.client.BlockID;
 import org.apache.hadoop.hdds.client.ContainerBlockID;
+import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.protocol.DatanodeDetails;
+import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.ChecksumType;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.ChunkInfo;
+import org.apache.hadoop.hdds.scm.OzoneClientConfig;
 import org.apache.hadoop.hdds.scm.XceiverClientFactory;
 import org.apache.hadoop.hdds.scm.XceiverClientSpi;
 import org.apache.hadoop.hdds.scm.container.common.helpers.StorageContainerException;
@@ -88,6 +91,7 @@ public class TestBlockInputStream {
   private Map<String, byte[]> chunkDataMap;
 
   private Function<BlockID, BlockLocationInfo> refreshFunction;
+  private OzoneConfiguration conf = new OzoneConfiguration();
 
   @BeforeEach
   @SuppressWarnings("unchecked")
@@ -96,10 +100,12 @@ public class TestBlockInputStream {
     BlockID blockID = new BlockID(new ContainerBlockID(1, 1));
     checksum = new Checksum(ChecksumType.NONE, CHUNK_SIZE);
     createChunkList(5);
+    OzoneClientConfig clientConfig = conf.getObject(OzoneClientConfig.class);
+    clientConfig.setChecksumVerify(false);
 
     Pipeline pipeline = MockPipeline.createSingleNodePipeline();
     blockStream = new DummyBlockInputStream(blockID, blockSize, pipeline, null,
-        false, null, refreshFunction, chunks, chunkDataMap);
+        null, refreshFunction, chunks, chunkDataMap, clientConfig);
   }
 
   /**
@@ -264,11 +270,14 @@ public class TestBlockInputStream {
     BlockID blockID = new BlockID(new ContainerBlockID(1, 1));
     AtomicBoolean isRefreshed = new AtomicBoolean();
     createChunkList(5);
+    OzoneClientConfig clientConfig = conf.getObject(OzoneClientConfig.class);
+    clientConfig.setChecksumVerify(false);
 
     try (BlockInputStream blockInputStreamWithRetry =
              new DummyBlockInputStreamWithRetry(blockID, blockSize,
                  MockPipeline.createSingleNodePipeline(), null,
-                 false, null, chunks, chunkDataMap, isRefreshed, null)) {
+                 null, chunks, chunkDataMap, isRefreshed, null,
+                 clientConfig)) {
       assertFalse(isRefreshed.get());
       seekAndVerify(50);
       byte[] b = new byte[200];
@@ -351,9 +360,11 @@ public class TestBlockInputStream {
   }
 
   private BlockInputStream createSubject(BlockID blockID, Pipeline pipeline,
-      ChunkInputStream stream) {
-    return new DummyBlockInputStream(blockID, blockSize, pipeline, null, false,
-        null, refreshFunction, chunks, null) {
+      ChunkInputStream stream) throws IOException {
+    OzoneClientConfig clientConfig = conf.getObject(OzoneClientConfig.class);
+    clientConfig.setChecksumVerify(false);
+    return new DummyBlockInputStream(blockID, blockSize, pipeline, null,
+        null, refreshFunction, chunks, null, clientConfig) {
       @Override
       protected ChunkInputStream createChunkInputStream(ChunkInfo chunkInfo) {
         return stream;
@@ -411,16 +422,22 @@ public class TestBlockInputStream {
         .thenReturn(blockLocationInfo);
     when(blockLocationInfo.getPipeline()).thenReturn(newPipeline);
 
-    BlockInputStream subject = new BlockInputStream(blockID, blockSize,
-        pipeline, null, false, clientFactory, refreshFunction) {
-      @Override
-      protected List<ChunkInfo> getChunkInfoListUsingClient() {
-        return chunks;
-      }
+    OzoneClientConfig clientConfig = conf.getObject(OzoneClientConfig.class);
 
+    BlockInputStream subject = new BlockInputStream(
+            new BlockLocationInfo(new BlockLocationInfo.Builder().setBlockID(blockID).setLength(blockSize)),
+            pipeline, null, clientFactory, refreshFunction,
+            clientConfig) {
       @Override
       protected ChunkInputStream createChunkInputStream(ChunkInfo chunkInfo) {
         return stream;
+      }
+
+      @Override
+      protected ContainerProtos.BlockData getBlockDataUsingClient() throws IOException {
+        BlockID blockID = getBlockID();
+        ContainerProtos.DatanodeBlockID datanodeBlockID = blockID.getDatanodeBlockIDProtobuf();
+        return ContainerProtos.BlockData.newBuilder().addAllChunks(chunks).setBlockID(datanodeBlockID).build();
       }
     };
 

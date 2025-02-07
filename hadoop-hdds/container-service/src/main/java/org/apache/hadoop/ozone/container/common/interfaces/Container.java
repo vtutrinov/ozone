@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Map;
 
@@ -63,12 +64,12 @@ public interface Container<CONTAINERDATA extends ContainerData> extends RwLock {
     }
 
     private final boolean healthy;
-    private final File unhealthyFile;
+    private final Path unhealthyFile;
     private final FailureType failureType;
     private final Throwable exception;
 
     private ScanResult(boolean healthy, FailureType failureType,
-        File unhealthyFile, Throwable exception) {
+        Path unhealthyFile, Throwable exception) {
       this.healthy = healthy;
       this.unhealthyFile = unhealthyFile;
       this.failureType = failureType;
@@ -79,7 +80,7 @@ public interface Container<CONTAINERDATA extends ContainerData> extends RwLock {
       return new ScanResult(true, null, null, null);
     }
 
-    public static ScanResult unhealthy(FailureType type, File failingFile,
+    public static ScanResult unhealthy(FailureType type, Path failingFile,
         Throwable exception) {
       return new ScanResult(false, type, failingFile, exception);
     }
@@ -88,7 +89,7 @@ public interface Container<CONTAINERDATA extends ContainerData> extends RwLock {
       return healthy;
     }
 
-    public File getUnhealthyFile() {
+    public Path getUnhealthyFile() {
       return unhealthyFile;
     }
 
