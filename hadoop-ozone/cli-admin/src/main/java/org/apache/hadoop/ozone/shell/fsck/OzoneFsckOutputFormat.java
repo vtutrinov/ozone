@@ -15,41 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.ozone.audit;
+package org.apache.hadoop.ozone.shell.fsck;
 
 /**
- * Enum to define Audit Action types for Datanode.
+ * Presents available options for the output format of the Ozone File System Check (fscheck) operation.
  */
-public enum DNAction implements AuditAction {
+public enum OzoneFsckOutputFormat {
+  PLAIN_TEXT,
+  JSON,
+  XML;
 
-  CREATE_CONTAINER,
-  READ_CONTAINER,
-  UPDATE_CONTAINER,
-  DELETE_CONTAINER,
-  LIST_CONTAINER,
-  PUT_BLOCK,
-  GET_BLOCK,
-  DELETE_BLOCK,
-  LIST_BLOCK,
-  READ_CHUNK,
-  DELETE_CHUNK,
-  WRITE_CHUNK,
-  LIST_CHUNK,
-  COMPACT_CHUNK,
-  PUT_SMALL_FILE,
-  GET_SMALL_FILE,
-  CLOSE_CONTAINER,
-  GET_COMMITTED_BLOCK_LENGTH,
-  STREAM_INIT,
-  FINALIZE_BLOCK,
-  ECHO,
-  GET_CONTAINER_CHECKSUM_INFO,
-  READ_BLOCK,
-  VERIFY_BLOCK;
-
-  @Override
-  public String getAction() {
-    return this.toString();
+  /** Returns a default option for the output format of the Ozone File System Check (fscheck) operation. */
+  public static OzoneFsckOutputFormat getDefault() {
+    return JSON;
   }
-
 }

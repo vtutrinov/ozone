@@ -15,41 +15,36 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.ozone.audit;
+package org.apache.hadoop.ozone.shell.fsck;
+
+import jakarta.annotation.Nullable;
 
 /**
- * Enum to define Audit Action types for Datanode.
+ * Represents a prefix path in the Ozone File System Check (fscheck) operation.
+ * This class encapsulates the volume, bucket, and key that are used in fscheck operation in Ozone.
  */
-public enum DNAction implements AuditAction {
+public final class OzoneFsckPathPrefix {
+  private final @Nullable String volume;
 
-  CREATE_CONTAINER,
-  READ_CONTAINER,
-  UPDATE_CONTAINER,
-  DELETE_CONTAINER,
-  LIST_CONTAINER,
-  PUT_BLOCK,
-  GET_BLOCK,
-  DELETE_BLOCK,
-  LIST_BLOCK,
-  READ_CHUNK,
-  DELETE_CHUNK,
-  WRITE_CHUNK,
-  LIST_CHUNK,
-  COMPACT_CHUNK,
-  PUT_SMALL_FILE,
-  GET_SMALL_FILE,
-  CLOSE_CONTAINER,
-  GET_COMMITTED_BLOCK_LENGTH,
-  STREAM_INIT,
-  FINALIZE_BLOCK,
-  ECHO,
-  GET_CONTAINER_CHECKSUM_INFO,
-  READ_BLOCK,
-  VERIFY_BLOCK;
+  private final @Nullable String bucket;
 
-  @Override
-  public String getAction() {
-    return this.toString();
+  private final @Nullable String key;
+
+  OzoneFsckPathPrefix(@Nullable String volume, @Nullable String bucket, @Nullable String key) {
+    this.volume = volume;
+    this.bucket = bucket;
+    this.key = key;
   }
 
+  @Nullable String volume() {
+    return volume;
+  }
+
+  @Nullable String bucket() {
+    return bucket;
+  }
+
+  @Nullable String key() {
+    return key;
+  }
 }

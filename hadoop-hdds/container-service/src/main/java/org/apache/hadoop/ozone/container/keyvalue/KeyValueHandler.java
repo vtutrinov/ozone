@@ -35,8 +35,10 @@ import static org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.Res
 import static org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.Result.IO_EXCEPTION;
 import static org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.Result.MALFORMED_REQUEST;
 import static org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.Result.PUT_SMALL_FILE_ERROR;
+import static org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.Result.SUCCESS;
 import static org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.Result.UNCLOSED_CONTAINER_IO;
 import static org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.Result.UNSUPPORTED_REQUEST;
+import static org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.Type.VerifyBlock;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_CHUNK_SIZE_DEFAULT;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_CHUNK_SIZE_KEY;
 import static org.apache.hadoop.hdds.scm.protocolPB.ContainerCommandResponseBuilders.getBlockDataResponse;
@@ -111,6 +113,7 @@ import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.KeyValue;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.PutSmallFileRequestProto;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.ReadBlockRequestProto;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.Type;
+import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.VerifyBlockResponseProto;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.WriteChunkRequestProto;
 import org.apache.hadoop.hdds.scm.ByteStringConversion;
 import org.apache.hadoop.hdds.scm.OzoneClientConfig;
@@ -144,6 +147,7 @@ import org.apache.hadoop.ozone.container.common.helpers.ChunkInfo;
 import org.apache.hadoop.ozone.container.common.helpers.ContainerMetrics;
 import org.apache.hadoop.ozone.container.common.helpers.ContainerUtils;
 import org.apache.hadoop.ozone.container.common.impl.ContainerData;
+import org.apache.hadoop.ozone.container.common.impl.ContainerDataYaml;
 import org.apache.hadoop.ozone.container.common.impl.ContainerLayoutVersion;
 import org.apache.hadoop.ozone.container.common.impl.ContainerSet;
 import org.apache.hadoop.ozone.container.common.interfaces.BlockIterator;
@@ -167,6 +171,7 @@ import org.apache.hadoop.ozone.container.keyvalue.impl.BlockManagerImpl;
 import org.apache.hadoop.ozone.container.keyvalue.impl.ChunkManagerFactory;
 import org.apache.hadoop.ozone.container.keyvalue.interfaces.BlockManager;
 import org.apache.hadoop.ozone.container.keyvalue.interfaces.ChunkManager;
+import org.apache.hadoop.ozone.container.keyvalue.scanner.BlockScanner;
 import org.apache.hadoop.ozone.container.upgrade.VersionedDatanodeFeatures;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Time;
@@ -371,6 +376,8 @@ public class KeyValueHandler extends Handler {
       return handler.handleEcho(request, kvContainer);
     case GetContainerChecksumInfo:
       return handler.handleGetContainerChecksumInfo(request, kvContainer);
+    case VerifyBlock:
+      return handler.handleVerifyBlock(request, kvContainer);
     default:
       return null;
     }
@@ -753,6 +760,64 @@ public class KeyValueHandler extends Handler {
   ContainerCommandResponseProto handleEcho(
       ContainerCommandRequestProto request, KeyValueContainer kvContainer) {
     return getEchoResponse(request);
+  }
+
+  /**
+   * Handles the SDP VerifyBlock request (ozone admin fscheck): checks the chunk files
+   * and checksums of a single block replica.
+   */
+  ContainerCommandResponseProto handleVerifyBlock(ContainerCommandRequestProto request,
+      KeyValueContainer kvContainer) {
+    if (!request.hasVerifyBlock()) {
+      LOG.debug("Malformed Verify Block request. trace ID: {}", request.getTraceID());
+      return malformedRequest(request);
+    }
+
+    BlockID blockID = BlockID.getFromProtobuf(request.getVerifyBlock().getBlockID());
+    try {
+      BlockUtils.verifyReplicaIdx(kvContainer, blockID);
+    } catch (IOException e) {
+      return verifyBlockResult(request, VerifyBlockResponseProto.Reason.CORRUPT_CONTAINER_FILE);
+    }
+
+    BlockData block;
+    try {
+      block = BlockData.getFromProtoBuf(blockManager.getBlock(kvContainer, blockID).getProtoBufMessage());
+    } catch (IOException e) {
+      return verifyBlockResult(request, VerifyBlockResponseProto.Reason.CORRUPT_CONTAINER_FILE);
+    }
+
+    KeyValueContainerData onDiskContainerData;
+    File containerFile = kvContainer.getContainerFile();
+    HddsVolume volume = kvContainer.getContainerData().getVolume();
+    try {
+      onDiskContainerData = (KeyValueContainerData) ContainerDataYaml.readContainerFile(containerFile);
+      onDiskContainerData.setVolume(volume);
+    } catch (FileNotFoundException ex) {
+      return verifyBlockResult(request, VerifyBlockResponseProto.Reason.MISSING_CONTAINER_FILE);
+    } catch (IOException ex) {
+      return verifyBlockResult(request, VerifyBlockResponseProto.Reason.CORRUPT_CONTAINER_FILE);
+    }
+
+    return verifyBlockResult(request, new BlockScanner(onDiskContainerData).scanBlock(block));
+  }
+
+  /**
+   * @param reason {@code null} for a healthy block, the failure reason otherwise
+   */
+  private static ContainerCommandResponseProto verifyBlockResult(ContainerCommandRequestProto request,
+      VerifyBlockResponseProto.Reason reason) {
+    VerifyBlockResponseProto.Builder verifyBlockResponse = VerifyBlockResponseProto.newBuilder()
+        .setValid(reason == null);
+    if (reason != null) {
+      verifyBlockResponse.setReason(reason);
+    }
+    return ContainerCommandResponseProto.newBuilder()
+        .setCmdType(VerifyBlock)
+        .setTraceID(request.getTraceID())
+        .setResult(reason == null ? SUCCESS : CHUNK_FILE_INCONSISTENCY)
+        .setVerifyBlock(verifyBlockResponse)
+        .build();
   }
 
   ContainerCommandResponseProto handleGetContainerChecksumInfo(

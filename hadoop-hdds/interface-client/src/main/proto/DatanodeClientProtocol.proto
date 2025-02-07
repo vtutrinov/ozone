@@ -88,6 +88,10 @@ enum Type {
   GetContainerChecksumInfo = 23;
   // Allows us to read a block
   ReadBlock = 24;
+
+  // SDP extension (ozone admin fscheck): verify a block replica on a datanode.
+  // SDP-specific numbers are kept in the 1000+ range to avoid clashes with upstream.
+  VerifyBlock = 1001;
 }
 
 
@@ -199,6 +203,8 @@ message ContainerCommandRequestProto {
   optional   EchoRequestProto echo = 26;
   optional   GetContainerChecksumInfoRequestProto getContainerChecksumInfo = 27;
   optional   ReadBlockRequestProto readBlock = 28;
+
+  optional   VerifyBlockRequestProto verifyBlock = 1001;
 }
 
 message ContainerCommandResponseProto {
@@ -232,6 +238,8 @@ message ContainerCommandResponseProto {
   optional   EchoResponseProto echo = 23;
   optional   GetContainerChecksumInfoResponseProto getContainerChecksumInfo = 24;
   optional   ReadBlockResponseProto readBlock = 25;
+
+  optional   VerifyBlockResponseProto verifyBlock = 1001;
 }
 
 message ContainerDataProto {
@@ -593,4 +601,26 @@ service IntraDatanodeProtocolService {
 message ContainerCreateInfo {
     required ContainerDataProto.State state = 1;
     optional int32 replicaIndex = 2 [default = -1];
+}
+
+message VerifyBlockRequestProto {
+  required DatanodeBlockID blockID = 1;
+}
+
+message VerifyBlockResponseProto {
+  enum Reason {
+    MISSING_CONTAINER_DIR = 1;
+    MISSING_METADATA_DIR = 2;
+    MISSING_CONTAINER_FILE = 3;
+    MISSING_CHUNKS_DIR = 4;
+    MISSING_CHUNK_FILE = 5;
+    CORRUPT_CONTAINER_FILE = 6;
+    CORRUPT_CHUNK = 7;
+    INCONSISTENT_CHUNK_LENGTH = 8;
+    INACCESSIBLE_DB = 9;
+    WRITE_FAILURE = 10;
+    DELETED_CONTAINER = 11;
+  }
+  required bool valid = 1;
+  optional Reason reason = 2;
 }

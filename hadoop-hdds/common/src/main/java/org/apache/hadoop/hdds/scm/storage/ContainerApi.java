@@ -15,41 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.ozone.audit;
+package org.apache.hadoop.hdds.scm.storage;
+
+import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.VerifyBlockResponseProto;
 
 /**
- * Enum to define Audit Action types for Datanode.
+ * Interface for communication with a datanode.
+ * Provides methods to perform any protocol calls by Container clients on a single datanode.
  */
-public enum DNAction implements AuditAction {
-
-  CREATE_CONTAINER,
-  READ_CONTAINER,
-  UPDATE_CONTAINER,
-  DELETE_CONTAINER,
-  LIST_CONTAINER,
-  PUT_BLOCK,
-  GET_BLOCK,
-  DELETE_BLOCK,
-  LIST_BLOCK,
-  READ_CHUNK,
-  DELETE_CHUNK,
-  WRITE_CHUNK,
-  LIST_CHUNK,
-  COMPACT_CHUNK,
-  PUT_SMALL_FILE,
-  GET_SMALL_FILE,
-  CLOSE_CONTAINER,
-  GET_COMMITTED_BLOCK_LENGTH,
-  STREAM_INIT,
-  FINALIZE_BLOCK,
-  ECHO,
-  GET_CONTAINER_CHECKSUM_INFO,
-  READ_BLOCK,
-  VERIFY_BLOCK;
-
-  @Override
-  public String getAction() {
-    return this.toString();
-  }
-
+public interface ContainerApi extends AutoCloseable {
+    /**
+     * Verifies the integrity and validity of a block within the container.
+     *
+     * @return a VerifyBlockResponseProto object containing the result of the block verification operation.
+     */
+  VerifyBlockResponseProto verifyBlock();
 }

@@ -927,12 +927,14 @@ public class HddsDispatcher implements ContainerDispatcher, Auditor {
     case Echo             : return DNAction.ECHO;
     case GetContainerChecksumInfo: return DNAction.GET_CONTAINER_CHECKSUM_INFO;
     case ReadBlock        : return DNAction.READ_BLOCK;
+    case VerifyBlock      : return DNAction.VERIFY_BLOCK;
     default :
       LOG.debug("Invalid command type - {}", cmdType);
       return null;
     }
   }
 
+  @SuppressWarnings("checkstyle:methodlength")
   private static Map<String, String> getAuditParams(
       ContainerCommandRequestProto msg, DispatcherContext dispatcherContext) {
     Map<String, String> auditParams = new TreeMap<>();
@@ -1072,6 +1074,11 @@ public class HddsDispatcher implements ContainerDispatcher, Auditor {
       auditParams.put("blockData",
           BlockID.getFromProtobuf(msg.getFinalizeBlock().getBlockID())
               .toString());
+      return auditParams;
+
+    case VerifyBlock:
+      auditParams.put("verifyBlock",
+          BlockID.getFromProtobuf(msg.getVerifyBlock().getBlockID()).toString());
       return auditParams;
 
     default :

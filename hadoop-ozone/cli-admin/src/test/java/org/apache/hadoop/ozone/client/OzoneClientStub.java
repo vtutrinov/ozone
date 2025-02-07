@@ -15,41 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.ozone.audit;
+package org.apache.hadoop.ozone.client;
+
+import org.apache.hadoop.ozone.client.protocol.ClientProtocol;
 
 /**
- * Enum to define Audit Action types for Datanode.
+ * In-memory OzoneClient for testing.
  */
-public enum DNAction implements AuditAction {
-
-  CREATE_CONTAINER,
-  READ_CONTAINER,
-  UPDATE_CONTAINER,
-  DELETE_CONTAINER,
-  LIST_CONTAINER,
-  PUT_BLOCK,
-  GET_BLOCK,
-  DELETE_BLOCK,
-  LIST_BLOCK,
-  READ_CHUNK,
-  DELETE_CHUNK,
-  WRITE_CHUNK,
-  LIST_CHUNK,
-  COMPACT_CHUNK,
-  PUT_SMALL_FILE,
-  GET_SMALL_FILE,
-  CLOSE_CONTAINER,
-  GET_COMMITTED_BLOCK_LENGTH,
-  STREAM_INIT,
-  FINALIZE_BLOCK,
-  ECHO,
-  GET_CONTAINER_CHECKSUM_INFO,
-  READ_BLOCK,
-  VERIFY_BLOCK;
-
-  @Override
-  public String getAction() {
-    return this.toString();
+public class OzoneClientStub extends OzoneClient {
+  public OzoneClientStub(ObjectStoreStub objectStoreStub, ClientProtocol clientProtocol) {
+    super(objectStoreStub, clientProtocol);
   }
 
+  @Override
+  public void close() {
+    //NOOP.
+  }
 }

@@ -468,6 +468,8 @@ public class XceiverClientGrpc extends XceiverClientSpi {
       blockID = request.getGetSmallFile().getBlock().getBlockID();
     } else if (request.getCmdType() == ContainerProtos.Type.ReadBlock) {
       blockID = request.getReadBlock().getBlockID();
+    } else if (request.getCmdType() == ContainerProtos.Type.VerifyBlock) {
+      blockID = request.getVerifyBlock().getBlockID();
     }
     return blockID;
   }
