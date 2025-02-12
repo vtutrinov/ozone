@@ -41,6 +41,7 @@ import org.apache.hadoop.ozone.client.OzoneBucket;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneKey;
 import org.apache.hadoop.ozone.client.OzoneVolume;
+import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.helpers.KeyInfoWithVolumeContext;
 import org.apache.hadoop.ozone.om.helpers.OmKeyArgs;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
@@ -249,7 +250,16 @@ public class OzoneFsckHandler implements AutoCloseable {
   private void scanKey(OzoneKey key) throws IOException {
     OmKeyArgs keyArgs = createKeyArgs(key);
 
-    KeyInfoWithVolumeContext keyInfoWithContext = omClient.getKeyInfo(keyArgs, false);
+    KeyInfoWithVolumeContext keyInfoWithContext;
+    try {
+      keyInfoWithContext = omClient.getKeyInfo(keyArgs, false);
+    } catch (OMException omException) {
+      if (omException.getResult().equals(OMException.ResultCodes.PERMISSION_DENIED)) {
+        return;
+      } else {
+        throw omException;
+      }
+    }
 
     OmKeyInfo keyInfo = keyInfoWithContext.getKeyInfo();
 
