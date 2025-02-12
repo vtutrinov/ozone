@@ -57,7 +57,7 @@ class JsonOzoneFsckWriterTest {
         "  \"path\" : \"/vol1/buck1/key1\",\n" +
         "  \"size\" : \"1 KB\",\n" +
         "  \"type\" : \"DIRECTORY\"\n" +
-        "} ]";
+        "} ]\n";
 
     assertEquals(expectedJson, output);
   }
@@ -83,7 +83,7 @@ class JsonOzoneFsckWriterTest {
         "  \"size\" : \"2 KB\",\n" +
         "  \"type\" : \"DIRECTORY\",\n" +
         "  \"state\" : \"NO_BLOCKS\"\n" +
-        "} ]";
+        "} ]\n";
 
     assertEquals(expectedJson, output);
   }
@@ -164,7 +164,7 @@ class JsonOzoneFsckWriterTest {
         "    \"sequence_id\" : 42\n" +
         "  },\n" +
         "  \"chunks\" : [ \"chunk1\" ]\n" +
-        "} ]";
+        "} ]\n";
 
     assertEquals(expectedJson, output);
   }

@@ -82,7 +82,10 @@ public abstract class AbstractJacksonOzoneFsckWriter implements OzoneFsckWriter 
       generator.writeArrayFieldStart("damaged_blocks");
 
       for (BlockID blockID : damagedBlocks) {
-        generator.writeString(blockID.toString());
+        generator.writeStartObject();
+        generator.writeNumberField("containerID", blockID.getContainerBlockID().getContainerID());
+        generator.writeNumberField("localID", blockID.getContainerBlockID().getLocalID());
+        generator.writeEndObject();
       }
       generator.writeEndArray();
     }
@@ -145,6 +148,7 @@ public abstract class AbstractJacksonOzoneFsckWriter implements OzoneFsckWriter 
   public void close() throws IOException {
     if (closed.compareAndSet(false, true)) {
       generator.writeEndArray();
+      generator.writeRaw("\n");
       generator.close();
     }
   }

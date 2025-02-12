@@ -70,10 +70,11 @@ public class PlainTextOzoneFsckWriter implements OzoneFsckWriter {
   public void writeDamagedBlocks(Set<BlockID> damagedBlocks) throws IOException {
     if (!damagedBlocks.isEmpty()) {
       sectionSeparator();
-      printLine(String.format("Key state: %s", DAMAGED_BLOCKS));
+      printLine("Key state: %s", DAMAGED_BLOCKS);
       printLine("Damaged blocks:");
       for (BlockID blockID : damagedBlocks) {
-        printLine("  %s", blockID.getContainerBlockID());
+        printLine("  containerID: %d", blockID.getContainerBlockID().getContainerID());
+        printLine("  localID: %s", blockID.getContainerBlockID().getLocalID());
       }
     }
   }

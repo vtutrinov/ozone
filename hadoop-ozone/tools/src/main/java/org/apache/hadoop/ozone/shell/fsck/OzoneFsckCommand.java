@@ -72,7 +72,8 @@ import java.nio.file.Paths;
 public class OzoneFsckCommand extends Handler implements SubcommandWithParent {
 
   @CommandLine.Option(names = {"--volume-prefix"},
-      description = "Specifies the prefix for volumes that should be included in the check")
+      description = "Specifies the prefix for volumes that should be included in the check",
+      required = true)
   private String volumePrefix;
 
   @CommandLine.Option(names = {"--bucket-prefix"},
