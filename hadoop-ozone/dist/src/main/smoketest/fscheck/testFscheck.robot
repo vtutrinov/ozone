@@ -145,7 +145,7 @@ Delete Chunks
 
 Run FSCheck Damaged Keys
     [Arguments]    ${num_keys}
-    ${result}=    Execute    ozone admin fscheck --verbosity-level KEY --output-format=PLAIN_TEXT
+    ${result}=    Execute    ozone admin fscheck --volume-prefix=volume1 --verbosity-level KEY --output-format=PLAIN_TEXT
     ${lines}=    Split To Lines    ${result}
     ${damaged_keys}=    Evaluate    [line for line in ${lines} if 'Key state: DAMAGED_BLOCKS' in line]
     ${damaged_count}=    Get Length    ${damaged_keys}
@@ -153,20 +153,20 @@ Run FSCheck Damaged Keys
 
 Run FSCheck With Delete
     Log    Running fscheck with delete option...
-    Execute And Ignore Error    ozone admin fscheck --delete --verbosity-level KEY --output-format=PLAIN_TEXT
+    Execute And Ignore Error    ozone admin fscheck --volume-prefix=volume1 --delete --verbosity-level KEY --output-format=PLAIN_TEXT
     ${result}=    Execute    ozone sh key list ${TEST_VOLUME}/${TEST_BUCKET}
     Should Not Contain    ${result}    key
 
 Run FSCheck With Output
     Log    Running fscheck with output
-    Execute And Ignore Error    ozone admin fscheck --healthy-keys --output-format=PLAIN_TEXT --output=/tmp/file.txt
+    Execute And Ignore Error    ozone admin fscheck --volume-prefix=volume1 --healthy-keys --output-format=PLAIN_TEXT --output=/tmp/file.txt
     ${file_content}=    Get File    file.txt
     Should Contain    ${file_content}    key
 
 Run FSCheck With Verbose Key
     [Arguments]    ${num_keys}
     Log    Running fscheck with verbose option for keys
-    ${result}=    Execute    ozone admin fscheck --healthy-keys --verbosity-level=KEY --output-format=PLAIN_TEXT
+    ${result}=    Execute    ozone admin fscheck --volume-prefix=volume1 --healthy-keys --verbosity-level=KEY --output-format=PLAIN_TEXT
     Should Contain    ${result}    Key Information:
     ${keys}=    Evaluate    ${num_keys} + 1
     FOR    ${i}    IN RANGE    1    ${keys}
@@ -176,7 +176,7 @@ Run FSCheck With Verbose Key
 Run FSCheck With Verbose Chunk
     [Arguments]    ${num_keys}
     Log    Running fscheck with verbose option for chunks
-    ${result}=    Execute    ozone admin fscheck --healthy-keys --verbosity-level=CHUNK --output-format=PLAIN_TEXT
+    ${result}=    Execute    ozone admin fscheck --volume-prefix=volume1 --healthy-keys --verbosity-level=CHUNK --output-format=PLAIN_TEXT
     ${keys}=    Evaluate    ${num_keys} + 1
     FOR    ${i}    IN RANGE    1    ${keys}
         Should Contain    ${result}    ${TEST_VOLUME}/${TEST_BUCKET}/key${i}
@@ -185,17 +185,17 @@ Run FSCheck With Verbose Chunk
 
 Run FSCheck With Verbose Block
     Log    Running fscheck with verbose option for blocks
-    ${result}=    Execute    ozone admin fscheck --healthy-keys --verbosity-level=BLOCK --output-format=PLAIN_TEXT
+    ${result}=    Execute    ozone admin fscheck --volume-prefix=volume1 --healthy-keys --verbosity-level=BLOCK --output-format=PLAIN_TEXT
     Should Contain    ${result}    Block commit sequence id:
 
 Run FSCheck With Verbose Container
     Log    Running fscheck with verbose option for containers
-    ${result}=    Execute    ozone admin fscheck --healthy-keys --verbosity-level=CONTAINER --output-format=PLAIN_TEXT
+    ${result}=    Execute    ozone admin fscheck --volume-prefix=volume1 --healthy-keys --verbosity-level=CONTAINER --output-format=PLAIN_TEXT
     Should Contain    ${result}    Container
 
 Run FSCheck With Delete Option
     Log    Running fscheck with delete option
-    ${check}=    Execute    ozone admin fscheck --delete --verbosity-level=KEY --output-format=PLAIN_TEXT
+    ${check}=    Execute    ozone admin fscheck --volume-prefix=volume1 --delete --verbosity-level=KEY --output-format=PLAIN_TEXT
     Should Contain    ${check}    Key state: DAMAGED_BLOCKS
     ${result}=    Execute    ozone sh key list /${TEST_VOLUME}/${TEST_BUCKET}
     Should Contain    ${result}    [ ]
