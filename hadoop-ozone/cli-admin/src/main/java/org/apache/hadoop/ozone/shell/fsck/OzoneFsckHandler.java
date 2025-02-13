@@ -18,6 +18,23 @@
 
 package org.apache.hadoop.ozone.shell.fsck;
 
+import static org.apache.hadoop.hdds.protocol.proto.HddsProtos.ReplicationFactor.ONE;
+import static org.apache.hadoop.hdds.protocol.proto.HddsProtos.ReplicationType.STAND_ALONE;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.client.StandaloneReplicationConfig;
 import org.apache.hadoop.hdds.protocol.DatanodeDetails;
@@ -41,7 +58,6 @@ import org.apache.hadoop.ozone.client.OzoneBucket;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneKey;
 import org.apache.hadoop.ozone.client.OzoneVolume;
-import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.helpers.KeyInfoWithVolumeContext;
 import org.apache.hadoop.ozone.om.helpers.OmKeyArgs;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
@@ -50,24 +66,6 @@ import org.apache.hadoop.ozone.om.helpers.OmKeyLocationInfoGroup;
 import org.apache.hadoop.ozone.om.protocol.OzoneManagerProtocol;
 import org.apache.hadoop.ozone.shell.fsck.writer.OzoneFsckWriter;
 import org.apache.hadoop.security.token.Token;
-
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.HashSet;
-
-import static org.apache.hadoop.hdds.protocol.proto.HddsProtos.ReplicationFactor.ONE;
-import static org.apache.hadoop.hdds.protocol.proto.HddsProtos.ReplicationType.STAND_ALONE;
 
 /**
  * OzoneFsckHandler is responsible for checking the integrity of keys in an Ozone filesystem.
@@ -250,16 +248,7 @@ public class OzoneFsckHandler implements AutoCloseable {
   private void scanKey(OzoneKey key) throws IOException {
     OmKeyArgs keyArgs = createKeyArgs(key);
 
-    KeyInfoWithVolumeContext keyInfoWithContext;
-    try {
-      keyInfoWithContext = omClient.getKeyInfo(keyArgs, false);
-    } catch (OMException omException) {
-      if (omException.getResult().equals(OMException.ResultCodes.PERMISSION_DENIED)) {
-        return;
-      } else {
-        throw omException;
-      }
-    }
+    KeyInfoWithVolumeContext keyInfoWithContext = omClient.getKeyInfo(keyArgs, false);
 
     OmKeyInfo keyInfo = keyInfoWithContext.getKeyInfo();
 
