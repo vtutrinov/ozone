@@ -30,5 +30,9 @@ class TestOzoneFsckCommandInvalidArgs {
     cmdLine.execute(args);
     String actualErr = errContent.toString();
     assertTrue(actualErr.contains("Missing required option: '--volume-prefix=<volumePrefix>'"));
+    assertTrue(actualErr.contains("Usage: fscheck [-hV] [--delete] [--healthy-keys]"));
+    assertTrue(actualErr.contains("--bucket-prefix=<bucketPrefix>\n" +
+            "                          Specifies the prefix for buckets that should be\n" +
+            "                            included in the check"));
   }
 }
