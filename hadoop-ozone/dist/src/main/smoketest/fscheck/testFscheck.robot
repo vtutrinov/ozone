@@ -13,6 +13,52 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Expected output damaged keys:
+#
+# JSON:
+# [ {
+#   "name" : "vol1/bucket1/key1",
+#   "path" : "-9223372036854775808/key1",
+#   "size" : "1 MB",
+#   "type" : "FILE",
+#   "state" : "DAMAGED_BLOCKS",
+#   "damaged_blocks" : [ {
+#     "containerID" : 1,
+#     "localID" : 115816896921600001
+#   } ]
+# } ]
+#
+# Plain Text:
+# ============
+# Key Information:
+#   Name: vol1/bucket1/key1
+#   Path: -9223372036854775808/key1
+#   Size: 1 MB
+#   Type: FILE
+# ------------
+# Key state: DAMAGED_BLOCKS
+# Damaged blocks:
+#   containerID: 1
+#   localID: 115816896921600001
+#
+# Expected output healthy keys:
+#
+# JSON:
+# [ {
+#   "name" : "volume1/bucket1/key1",
+#   "path" : "-9223372036854775808/key1",
+#   "size" : "1 MB",
+#   "type" : "FILE"
+# } ]
+#
+# Plain Text:
+# ============
+# Key Information:
+#   Name: vol1/bucket1/key1
+#   Path: -9223372036854775808/key1
+#   Size: 1 MB
+#   Type: FILE
+
 *** Settings ***
 Library             OperatingSystem
 Library             String
@@ -32,7 +78,6 @@ Test FSCheck Healthy Key
     Run FSCheck With Verbose Chunk                  1
     Run FSCheck With Verbose Block
     Run FSCheck With Verbose Container
-    Verify Healthy Key Output
     Delete Chunks                                   1
     [Teardown]    Cleanup Ozone Test Environment    1
 
@@ -49,7 +94,6 @@ Test FSCheck Healthy And Unhealthy Key
     [Setup]    Setup Ozone Test Environment         2
     Corrupt Chunks                                  1
     Run FSCheck Damaged Keys                        1
-    Verify Corrupted Key Output
     Delete Chunks                                   1
     [Teardown]    Cleanup Ozone Test Environment    2
 
@@ -201,54 +245,3 @@ Run FSCheck With Delete Option
     Should Contain    ${check}    Key state: DAMAGED_BLOCKS
     ${result}=    Execute    ozone sh key list /${TEST_VOLUME}/${TEST_BUCKET}
     Should Contain    ${result}    [ ]
-
-Verify Healthy Key Output
-    ${result}=    Execute    ozone sh fscheck --volume-prefix=volume1 --healthy-keys --verbosity-level=KEY --output-format=JSON
-    ${expected_output_json}=    Set Variable
-    ...  [ {
-    ...      "name" : "volume1/bucket1/key1",
-    ...      "path" : "-9223372036854775808/key1",
-    ...      "size" : "1 MB",
-    ...      "type" : "FILE"
-    ...  } ]
-    ${expected_output_plain_text}=    Set Variable
-    ...  ============
-    ...  Key Information:
-    ...    Name: vol1/bucket1/key1
-    ...    Path: -9223372036854775808/key1
-    ...    Size: 1 MB
-    ...    Type: FILE
-    Should Contain    ${result}    volume1/bucket1/key1
-    Should Contain    ${result}    "size" : "1 MB"
-    Should Contain    ${result}    "type" : "FILE"
-
-Verify Corrupted Key Output
-    ${result}=    Execute    ozone sh fscheck --volume-prefix=volume1 --verbosity-level=KEY --output-format=JSON
-    ${expected_output_json}=    Set Variable
-    ...  [ {
-    ...    "name" : "vol1/bucket1/key1",
-    ...    "path" : "-9223372036854775808/key1",
-    ...    "size" : "1 MB",
-    ...    "type" : "FILE",
-    ...    "state" : "DAMAGED_BLOCKS",
-    ...    "damaged_blocks" : [ {
-    ...      "containerID" : 1,
-    ...      "localID" : 115816896921600001
-    ...    } ]
-    ...  } ]
-    ${expected_output_plain_text}=    Set Variable
-    ...    ============
-    ...    Key Information:
-    ...      Name: vol1/bucket1/key1
-    ...      Path: -9223372036854775808/key1
-    ...      Size: 1 MB
-    ...      Type: FILE
-    ...    ------------
-    ...    Key state: DAMAGED_BLOCKS
-    ...    Damaged blocks:
-    ...      containerID: 1
-    ...      localID: 115816896921600001
-    Should Contain    ${result}    volume1/bucket1/key1
-    Should Contain    ${result}    "size" : "1 MB"
-    Should Contain    ${result}    "type" : "FILE"
-    Should Contain    ${result}    "state" : "DAMAGED_BLOCKS"
