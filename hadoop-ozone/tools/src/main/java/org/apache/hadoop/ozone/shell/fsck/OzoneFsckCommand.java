@@ -20,6 +20,7 @@ package org.apache.hadoop.ozone.shell.fsck;
 
 import jakarta.annotation.Nullable;
 import org.apache.hadoop.hdds.cli.HddsVersionProvider;
+import org.apache.hadoop.hdds.cli.OzoneAdmin;
 import org.apache.hadoop.hdds.cli.SubcommandWithParent;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.scm.cli.ContainerOperationClient;
@@ -27,8 +28,6 @@ import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientException;
 import org.apache.hadoop.ozone.shell.Handler;
 import org.apache.hadoop.ozone.shell.OzoneAddress;
-import org.apache.hadoop.ozone.shell.OzoneShell;
-import org.apache.hadoop.ozone.shell.Shell;
 import org.apache.hadoop.ozone.shell.fsck.writer.JsonOzoneFsckWriter;
 import org.apache.hadoop.ozone.shell.fsck.writer.OzoneFsckWriter;
 import org.apache.hadoop.ozone.shell.fsck.writer.PlainTextOzoneFsckWriter;
@@ -120,16 +119,16 @@ public class OzoneFsckCommand extends Handler implements SubcommandWithParent {
   private String checkpoint;
 
   @CommandLine.ParentCommand
-  private Shell shell;
+  private OzoneAdmin admin;
 
   @Override
   public boolean isVerbose() {
-    return shell.isVerbose();
+    return admin.isVerbose();
   }
 
   @Override
   public OzoneConfiguration createOzoneConfiguration() {
-    return shell.createOzoneConfiguration();
+    return admin.createOzoneConfiguration();
   }
 
   @Override
@@ -201,6 +200,6 @@ public class OzoneFsckCommand extends Handler implements SubcommandWithParent {
   }
   @Override
   public Class<?> getParentType() {
-    return OzoneShell.class;
+    return OzoneAdmin.class;
   }
 }

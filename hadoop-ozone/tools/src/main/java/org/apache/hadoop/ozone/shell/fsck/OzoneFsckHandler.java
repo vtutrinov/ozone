@@ -250,16 +250,7 @@ public class OzoneFsckHandler implements AutoCloseable {
   private void scanKey(OzoneKey key) throws IOException {
     OmKeyArgs keyArgs = createKeyArgs(key);
 
-    KeyInfoWithVolumeContext keyInfoWithContext;
-    try {
-      keyInfoWithContext = omClient.getKeyInfo(keyArgs, false);
-    } catch (OMException omException) {
-      if (omException.getResult().equals(OMException.ResultCodes.PERMISSION_DENIED)) {
-        return;
-      } else {
-        throw omException;
-      }
-    }
+    KeyInfoWithVolumeContext keyInfoWithContext = omClient.getKeyInfo(keyArgs, false);
 
     OmKeyInfo keyInfo = keyInfoWithContext.getKeyInfo();
 
