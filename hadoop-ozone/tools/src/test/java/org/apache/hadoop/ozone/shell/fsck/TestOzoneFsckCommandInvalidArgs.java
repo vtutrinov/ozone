@@ -7,6 +7,7 @@ import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.util.stream.Stream;
 
 import static org.apache.ratis.util.Preconditions.assertTrue;
@@ -16,23 +17,29 @@ class TestOzoneFsckCommandInvalidArgs {
 
   private static Stream<Arguments> invalidArgs() {
     return Stream.of(
-      arguments((Object) new String[]{}),
+            arguments((Object) new String[]{}),
             arguments((Object) new String[]{"--bucket-prefix=bucket"})
     );
   }
 
   @ParameterizedTest
   @MethodSource("invalidArgs")
-  void testFsckInvalidArgs(String[] args) {
+  void testFsckInvalidArgs(String[] args) throws Exception {
     ByteArrayOutputStream errContent = new ByteArrayOutputStream();
-    System.setErr(new PrintStream(errContent));
-    CommandLine cmdLine = new CommandLine(new OzoneFsckCommand());
-    cmdLine.execute(args);
-    String actualErr = errContent.toString();
-    assertTrue(actualErr.contains("Missing required option: '--volume-prefix=<volumePrefix>'"));
-    assertTrue(actualErr.contains("Usage: fscheck [-hV] [--delete] [--healthy-keys]"));
-    assertTrue(actualErr.contains("--bucket-prefix=<bucketPrefix>\n" +
-            "                          Specifies the prefix for buckets that should be\n" +
-            "                            included in the check"));
+    PrintStream originalErr = System.err;
+    try {
+      System.setErr(new PrintStream(errContent, true, StandardCharsets.UTF_8.name()));
+      CommandLine cmdLine = new CommandLine(new OzoneFsckCommand());
+      cmdLine.execute(args);
+
+      String actualErr = errContent.toString(StandardCharsets.UTF_8.name());
+      assertTrue(actualErr.contains("Missing required option: '--volume-prefix=<volumePrefix>'"));
+      assertTrue(actualErr.contains("Usage: fscheck [-hV] [--delete] [--healthy-keys]"));
+      assertTrue(actualErr.contains("--bucket-prefix=<bucketPrefix>\n" +
+              "                          Specifies the prefix for buckets that should be\n" +
+              "                            included in the check"));
+    } finally {
+      System.setErr(originalErr);
+    }
   }
 }
