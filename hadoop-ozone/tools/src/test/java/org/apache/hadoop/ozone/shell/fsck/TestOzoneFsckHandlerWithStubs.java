@@ -69,35 +69,6 @@ class TestOzoneFsckHandlerWithStubs {
   }
 
   @Test
-  void testFsckPrintHealthyKeys() throws IOException {
-    Path tempCheckpoint = Files.createTempFile("checkpoint", ".txt");
-    OzoneFsckVerboseSettings verboseSettings = OzoneFsckVerboseSettings.builder()
-            .printHealthyKeys(true)
-            .level(OzoneFsckVerbosityLevel.KEY)
-            .build();
-
-    OzoneFsckHandler handler = new OzoneFsckHandler(
-            new OzoneFsckPathPrefix(null, null, null),
-            writerMock,
-            verboseSettings,
-            false,
-            clientStub,
-            containerOperationStub,
-            tempCheckpoint.toString()
-    );
-    handler.scan();
-
-    verify(writerMock, times(1)).writeCorruptedKey(
-            argThat((OmKeyInfo k) -> CORRUPTED_KEY.equals(k.getKeyName()))
-    );
-
-    verify(writerMock, times(1)).writeKeyInfo(
-            argThat((OmKeyInfo k) -> HEALTHY_KEY.equals(k.getKeyName())),
-            any()
-    );
-  }
-
-  @Test
   void testFsckPrintCorruptedKeys() throws IOException {
     Path tempCheckpoint = Files.createTempFile("checkpoint", ".txt");
     OzoneFsckVerboseSettings verboseSettings = OzoneFsckVerboseSettings.builder()

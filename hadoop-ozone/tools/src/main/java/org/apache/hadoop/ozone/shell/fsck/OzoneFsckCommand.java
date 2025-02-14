@@ -88,10 +88,6 @@ public class OzoneFsckCommand extends Handler implements SubcommandWithParent {
       description = "Deletes the corrupted keys")
   private boolean delete;
 
-  @CommandLine.Option(names = {"--healthy-keys"},
-      description = "Specifies whether to display information about good and healthy keys")
-  private boolean keys;
-
   @CommandLine.Option(names = {"--verbosity-level"},
       defaultValue = "KEY",
       description = "Controls a verbosity of the presented output."
@@ -137,7 +133,7 @@ public class OzoneFsckCommand extends Handler implements SubcommandWithParent {
     OzoneFsckPathPrefix pathPrefix = new OzoneFsckPathPrefix(volumePrefix, bucketPrefix, keyPrefix);
 
     OzoneFsckVerboseSettings verboseSettings = OzoneFsckVerboseSettings.builder()
-        .printHealthyKeys(keys)
+        .printHealthyKeys(false)
         .level(verbose)
         .build();
 

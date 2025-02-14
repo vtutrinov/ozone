@@ -33,7 +33,7 @@ class OzoneFsckVerboseSettingsTest {
   void testVerboseSettingsParsing(String level, boolean printHealthyKeys, boolean expectedPrintContainers,
       boolean expectedPrintBlocks, boolean expectedPrintChunks) {
     OzoneFsckVerboseSettings settings = OzoneFsckVerboseSettings.builder()
-        .printHealthyKeys(printHealthyKeys)
+        .printHealthyKeys(false)
         .level(OzoneFsckVerbosityLevel.valueOf(level))
         .build();
 
@@ -57,10 +57,10 @@ class OzoneFsckVerboseSettingsTest {
   private static Stream<Arguments> verboseSettingsVariants() {
     return Stream.of(
         arguments("KEY", false, false, false, false),
-        arguments("KEY", true, false, false, false),
-        arguments("CONTAINER", true, true, false, false),
-        arguments("BLOCK", true, true, true, false),
-        arguments("CHUNK", true, true, true, true)
+        arguments("KEY", false, false, false, false),
+        arguments("CONTAINER", false, true, false, false),
+        arguments("BLOCK", false, true, true, false),
+        arguments("CHUNK", false, true, true, true)
     );
   }
 }
