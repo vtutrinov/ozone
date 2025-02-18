@@ -42,7 +42,6 @@ import org.apache.hadoop.hdds.scm.pipeline.Pipeline;
 import org.apache.hadoop.hdds.security.SecurityConfig;
 import org.apache.hadoop.hdds.security.x509.certificate.client.CertificateClient;
 import org.apache.hadoop.hdds.security.x509.certificate.client.DNCertificateClient;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.RatisTestHelper;
 import org.apache.hadoop.ozone.container.ContainerTestHelper;
@@ -62,6 +61,7 @@ import org.apache.hadoop.ozone.container.common.volume.StorageVolume;
 import org.apache.hadoop.ozone.container.common.volume.VolumeSet;
 import org.apache.hadoop.ozone.container.ozoneimpl.ContainerController;
 import org.apache.ozone.test.GenericTestUtils;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 
 import com.google.common.collect.Maps;
 
@@ -91,7 +91,7 @@ public class TestContainerServer {
 
   @BeforeAll
   public static void setup() {
-    DefaultMetricsSystem.setMiniClusterMode(true);
+    OzoneMetricsSystem.setMiniClusterMode(true);
     CONF.set(HddsConfigKeys.HDDS_METADATA_DIR_NAME, TEST_DIR);
     DatanodeDetails dn = MockDatanodeDetails.randomDatanodeDetails();
     caClient = new DNCertificateClient(new SecurityConfig(CONF), null,

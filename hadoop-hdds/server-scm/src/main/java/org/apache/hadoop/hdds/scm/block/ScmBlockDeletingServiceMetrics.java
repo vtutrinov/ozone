@@ -22,7 +22,8 @@ package org.apache.hadoop.hdds.scm.block;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
+
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 
 /**
@@ -81,7 +82,7 @@ public final class ScmBlockDeletingServiceMetrics {
 
   public static ScmBlockDeletingServiceMetrics create() {
     if (instance == null) {
-      MetricsSystem ms = DefaultMetricsSystem.instance();
+      MetricsSystem ms = OzoneMetricsSystem.instance();
       instance = ms.register(SOURCE_NAME, "SCMBlockDeletingService",
           new ScmBlockDeletingServiceMetrics());
     }
@@ -94,7 +95,7 @@ public final class ScmBlockDeletingServiceMetrics {
    */
   public static void unRegister() {
     instance = null;
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     ms.unregisterSource(SOURCE_NAME);
   }
 

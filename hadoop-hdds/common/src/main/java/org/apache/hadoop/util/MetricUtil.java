@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.util;
 
-import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.ozone.metrics.OzoneMutableRate;
 import org.apache.ratis.util.function.CheckedRunnable;
 import org.apache.ratis.util.function.CheckedSupplier;
 
@@ -32,7 +32,7 @@ public final class MetricUtil {
   }
 
   public static <T, E extends Exception> T captureLatencyNs(
-      MutableRate metric,
+      OzoneMutableRate metric,
       CheckedSupplier<T, E> block) throws E {
     long start = Time.monotonicNowNanos();
     try {
@@ -43,7 +43,7 @@ public final class MetricUtil {
   }
 
   public static <E extends IOException> void captureLatencyNs(
-      MutableRate metric,
+      OzoneMutableRate metric,
       CheckedRunnable<E> block) throws IOException {
     long start = Time.monotonicNowNanos();
     try {

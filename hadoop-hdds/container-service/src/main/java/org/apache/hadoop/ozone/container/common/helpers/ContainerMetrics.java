@@ -25,11 +25,11 @@ import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableQuantiles;
-import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.ozone.metrics.OzoneMutableRate;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 
 /**
  *
@@ -55,7 +55,7 @@ public class ContainerMetrics {
 
   private MutableCounterLong[] numOpsArray;
   private MutableCounterLong[] opsBytesArray;
-  private MutableRate[] opsLatency;
+  private OzoneMutableRate[] opsLatency;
   private MutableQuantiles[][] opsLatQuantiles;
   private MetricsRegistry registry = null;
 
@@ -64,7 +64,7 @@ public class ContainerMetrics {
     final int len = intervals.length;
     this.numOpsArray = new MutableCounterLong[numEnumEntries];
     this.opsBytesArray = new MutableCounterLong[numEnumEntries];
-    this.opsLatency = new MutableRate[numEnumEntries];
+    this.opsLatency = new OzoneMutableRate[numEnumEntries];
     this.opsLatQuantiles = new MutableQuantiles[numEnumEntries][len];
     this.registry = new MetricsRegistry("StorageContainerMetrics");
     for (int i = 0; i < numEnumEntries; i++) {
@@ -76,7 +76,7 @@ public class ContainerMetrics {
           "bytes" + ContainerProtos.Type.forNumber(i + 1),
           "bytes used by " + ContainerProtos.Type.forNumber(i + 1) + "op",
           (long) 0);
-      opsLatency[i] = registry.newRate(
+      opsLatency[i] = OzoneMetricsSystem.registerNewMutableRate(registry,
           "latency" + ContainerProtos.Type.forNumber(i + 1),
           ContainerProtos.Type.forNumber(i + 1) + " op");
 
@@ -91,7 +91,7 @@ public class ContainerMetrics {
   }
 
   public static ContainerMetrics create(ConfigurationSource conf) {
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     // Percentile measurement is off by default, by watching no intervals
     int[] intervals =
         conf.getInts(DFSConfigKeysLegacy.DFS_METRICS_PERCENTILES_INTERVALS_KEY);
@@ -101,7 +101,7 @@ public class ContainerMetrics {
   }
 
   public static void remove() {
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     ms.unregisterSource(STORAGE_CONTAINER_METRICS);
   }
 

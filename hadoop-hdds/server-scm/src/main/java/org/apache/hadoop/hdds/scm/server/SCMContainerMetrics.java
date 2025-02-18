@@ -32,7 +32,7 @@ import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metrics;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.ozone.OzoneConsts;
 
@@ -52,13 +52,13 @@ public class SCMContainerMetrics implements MetricsSource {
   }
 
   public static SCMContainerMetrics create(SCMMXBean scmmxBean) {
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     return ms.register(SOURCE, "Storage " +
         "Container Manager Metrics", new SCMContainerMetrics(scmmxBean));
   }
 
   public void unRegister() {
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     ms.unregisterSource(SOURCE);
   }
 

@@ -23,10 +23,10 @@ import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
-import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
+import org.apache.hadoop.ozone.metrics.OzoneMutableRate;
 
 /**
  * The client metrics for the Storage Container protocol.
@@ -43,7 +43,7 @@ public class XceiverClientMetrics {
   private @Metric MutableCounterLong ecReconstructionFailsTotal;
   private MutableCounterLong[] pendingOpsArray;
   private MutableCounterLong[] opsArray;
-  private MutableRate[] containerOpsLatency;
+  private OzoneMutableRate[] containerOpsLatency;
   private MetricsRegistry registry;
 
   public XceiverClientMetrics() {
@@ -56,28 +56,26 @@ public class XceiverClientMetrics {
 
     this.pendingOpsArray = new MutableCounterLong[numEnumEntries];
     this.opsArray = new MutableCounterLong[numEnumEntries];
-    this.containerOpsLatency = new MutableRate[numEnumEntries];
+    this.containerOpsLatency = new OzoneMutableRate[numEnumEntries];
     for (int i = 0; i < numEnumEntries; i++) {
       pendingOpsArray[i] = registry.newCounter(
-          "numPending" + ContainerProtos.Type.forNumber(i + 1),
-          "number of pending" + ContainerProtos.Type.forNumber(i + 1) + " ops",
-          (long) 0);
-      opsArray[i] = registry
-          .newCounter("opCount" + ContainerProtos.Type.forNumber(i + 1),
-              "number of" + ContainerProtos.Type.forNumber(i + 1) + " ops",
+              "numPending" + ContainerProtos.Type.forNumber(i + 1),
+              "number of pending" + ContainerProtos.Type.forNumber(i + 1) + " ops",
               (long) 0);
-
-      containerOpsLatency[i] = registry.newRate(
-          ContainerProtos.Type.forNumber(i + 1) + "Latency",
-          "latency of " + ContainerProtos.Type.forNumber(i + 1)
-          + " ops");
+      opsArray[i] = registry
+              .newCounter("opCount" + ContainerProtos.Type.forNumber(i + 1),
+                      "number of" + ContainerProtos.Type.forNumber(i + 1) + " ops",
+                      (long) 0);
+      containerOpsLatency[i] = OzoneMetricsSystem.registerNewMutableRate(
+              registry,
+              ContainerProtos.Type.forNumber(i + 1) + "Latency",
+              "latency of " + ContainerProtos.Type.forNumber(i + 1) + " ops");
     }
   }
 
   public static XceiverClientMetrics create() {
-    DefaultMetricsSystem.initialize(SOURCE_NAME);
-    MetricsSystem ms = DefaultMetricsSystem.instance();
-    return ms.register(SOURCE_NAME, "Storage Container Client Metrics",
+    OzoneMetricsSystem.initialize(SOURCE_NAME);
+    return OzoneMetricsSystem.register(SOURCE_NAME, "Storage Container Client Metrics",
         new XceiverClientMetrics());
   }
 
@@ -126,7 +124,7 @@ public class XceiverClientMetrics {
   }
 
   public void unRegister() {
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     ms.unregisterSource(SOURCE_NAME);
   }
 }

@@ -20,25 +20,25 @@ import com.google.common.base.CaseFormat;
 import org.apache.hadoop.hdds.client.ReplicationType;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.scm.container.ReplicationManagerReport;
+import org.apache.hadoop.hdds.scm.container.ReplicationManagerReport.HealthState;
 import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsInfo;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
-import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
+import org.apache.hadoop.ozone.metrics.OzoneMutableRate;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.apache.hadoop.hdds.protocol.proto.HddsProtos.LifeCycleState;
-import org.apache.hadoop.hdds.scm.container.ReplicationManagerReport.HealthState;
 
 /**
  * Class contains metrics related to ReplicationManager.
@@ -142,10 +142,10 @@ public final class ReplicationManagerMetrics implements MetricsSource {
   private MutableCounterLong deletionBytesCompletedTotal;
 
   @Metric("Time elapsed for replication")
-  private MutableRate replicationTime;
+  private OzoneMutableRate replicationTime;
 
   @Metric("Time elapsed for deletion")
-  private MutableRate deletionTime;
+  private OzoneMutableRate deletionTime;
 
   @Metric("Number of inflight replication skipped" +
       " due to the configured limit.")
@@ -236,9 +236,9 @@ public final class ReplicationManagerMetrics implements MetricsSource {
 
   public static ReplicationManagerMetrics create(ReplicationManager manager) {
     ReplicationManagerMetrics replicationManagerMetrics = (ReplicationManagerMetrics)
-        DefaultMetricsSystem.instance().getSource(METRICS_SOURCE_NAME);
+        OzoneMetricsSystem.instance().getSource(METRICS_SOURCE_NAME);
     if (replicationManagerMetrics == null) {
-      return DefaultMetricsSystem.instance().register(METRICS_SOURCE_NAME,
+      return OzoneMetricsSystem.instance().register(METRICS_SOURCE_NAME,
           "SCM Replication manager (closed container replication) related "
               + "metrics",
           new ReplicationManagerMetrics(manager));
@@ -320,7 +320,7 @@ public final class ReplicationManagerMetrics implements MetricsSource {
   }
 
   public void unRegister() {
-    DefaultMetricsSystem.instance().unregisterSource(METRICS_SOURCE_NAME);
+    OzoneMetricsSystem.instance().unregisterSource(METRICS_SOURCE_NAME);
   }
 
   public void incrReplicationCmdsSentTotal() {

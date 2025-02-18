@@ -20,7 +20,7 @@ package org.apache.hadoop.hdds.scm.safemode;
 
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 
 /**
@@ -48,7 +48,7 @@ public class SafeModeMetrics {
       currentPipelinesWithAtleastOneReplicaReportedCount;
 
   public static SafeModeMetrics create() {
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     return ms.register(SOURCE_NAME,
         "SCM Safemode Metrics",
         new SafeModeMetrics());
@@ -105,7 +105,7 @@ public class SafeModeMetrics {
 
 
   public void unRegister() {
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     ms.unregisterSource(SOURCE_NAME);
   }
 }

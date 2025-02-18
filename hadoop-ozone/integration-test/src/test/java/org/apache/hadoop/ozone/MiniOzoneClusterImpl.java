@@ -68,7 +68,6 @@ import org.apache.hadoop.hdds.utils.IOUtils;
 import org.apache.hadoop.hdds.utils.db.CodecBuffer;
 import org.apache.hadoop.hdds.utils.db.CodecTestUtil;
 import org.apache.hadoop.hdds.utils.db.managed.ManagedRocksObjectMetrics;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.common.Storage.StorageState;
@@ -83,6 +82,7 @@ import org.apache.hadoop.ozone.recon.ConfigurationProvider;
 import org.apache.hadoop.ozone.recon.ReconServer;
 import org.apache.hadoop.security.authentication.client.AuthenticationException;
 import org.apache.ozone.test.GenericTestUtils;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 
 import org.apache.commons.io.FileUtils;
 import static org.apache.hadoop.hdds.HddsConfigKeys.HDDS_HEARTBEAT_INTERVAL;
@@ -453,7 +453,7 @@ public class MiniOzoneClusterImpl implements MiniOzoneCluster {
       stop();
       FileUtils.deleteDirectory(baseDir);
       ContainerCache.getInstance(conf).shutdownCache();
-      DefaultMetricsSystem.shutdown();
+      OzoneMetricsSystem.shutdown();
       ManagedRocksObjectMetrics.INSTANCE.assertNoLeaks();
     } catch (Exception e) {
       LOG.error("Exception while shutting down the cluster.", e);
@@ -587,7 +587,7 @@ public class MiniOzoneClusterImpl implements MiniOzoneCluster {
 
     @Override
     public MiniOzoneCluster build() throws IOException {
-      DefaultMetricsSystem.setMiniClusterMode(true);
+      OzoneMetricsSystem.setMiniClusterMode(true);
       DatanodeStoreCache.setMiniClusterMode();
       initializeConfiguration();
       StorageContainerManager scm = null;

@@ -23,10 +23,10 @@ import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
-import org.apache.hadoop.metrics2.lib.MutableCounterLong;
-import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
+import org.apache.hadoop.metrics2.lib.MutableCounterLong;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
+import org.apache.hadoop.ozone.metrics.OzoneMutableRate;
 import org.apache.ratis.protocol.RaftGroupId;
 
 /**
@@ -38,6 +38,7 @@ public class CSMMetrics {
   public static final String SOURCE_NAME =
       CSMMetrics.class.getSimpleName();
 
+  private final MetricsRegistry registry;
   // ratis op metrics metrics
   private @Metric MutableCounterLong numWriteStateMachineOps;
   private @Metric MutableCounterLong numQueryStateMachineOps;
@@ -46,10 +47,8 @@ public class CSMMetrics {
   private @Metric MutableCounterLong numBytesWrittenCount;
   private @Metric MutableCounterLong numBytesCommittedCount;
 
-  private @Metric MutableRate transactionLatencyMs;
-  private MutableRate[] opsLatencyMs;
-  private MetricsRegistry registry = null;
-
+  private @Metric OzoneMutableRate transactionLatencyMs;
+  private final OzoneMutableRate[] opsLatencyMs;
   // Failure Metrics
   private @Metric MutableCounterLong numWriteStateMachineFails;
   private @Metric MutableCounterLong numWriteDataFails;
@@ -63,22 +62,23 @@ public class CSMMetrics {
   private @Metric MutableCounterLong numDataCacheHit;
   private @Metric MutableCounterLong numEvictedCacheCount;
 
-  private @Metric MutableRate applyTransactionNs;
-  private @Metric MutableRate writeStateMachineDataNs;
+  private @Metric OzoneMutableRate applyTransactionNs;
+  private @Metric OzoneMutableRate writeStateMachineDataNs;
 
   public CSMMetrics() {
     int numCmdTypes = ContainerProtos.Type.values().length;
-    this.opsLatencyMs = new MutableRate[numCmdTypes];
+    this.opsLatencyMs = new OzoneMutableRate[numCmdTypes];
     this.registry = new MetricsRegistry(CSMMetrics.class.getSimpleName());
     for (int i = 0; i < numCmdTypes; i++) {
-      opsLatencyMs[i] = registry.newRate(
-          ContainerProtos.Type.forNumber(i + 1).toString() + "Ms",
-          ContainerProtos.Type.forNumber(i + 1) + " op");
+      opsLatencyMs[i] = OzoneMetricsSystem.registerNewMutableRate(
+              registry,
+              ContainerProtos.Type.forNumber(i + 1).toString() + "Ms",
+              ContainerProtos.Type.forNumber(i + 1) + " op");
     }
   }
 
   public static CSMMetrics create(RaftGroupId gid) {
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     return ms.register(SOURCE_NAME + gid.toString(),
         "Container State Machine",
         new CSMMetrics());
@@ -192,7 +192,7 @@ public class CSMMetrics {
     return numBytesCommittedCount.value();
   }
 
-  public MutableRate getApplyTransactionLatencyNs() {
+  public OzoneMutableRate getApplyTransactionLatencyNs() {
     return applyTransactionNs;
   }
 
@@ -230,7 +230,7 @@ public class CSMMetrics {
   }
 
   public void unRegister() {
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     ms.unregisterSource(SOURCE_NAME);
   }
 }

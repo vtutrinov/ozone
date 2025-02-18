@@ -248,6 +248,10 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
       <version>${io.grpc.version}</version>
       <scope>compile</scope>
     </dependency>
+    <dependency>
+      <groupId>org.awaitility</groupId>
+      <artifactId>awaitility</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

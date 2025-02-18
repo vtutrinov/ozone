@@ -18,11 +18,10 @@
 
 package org.apache.hadoop.ozone.container.common.volume;
 
-import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 
 /**
  * This class is used to track Volume Info stats for each HDDS Volume.
@@ -46,13 +45,11 @@ public class VolumeInfoMetrics {
   }
 
   public void init() {
-    MetricsSystem ms = DefaultMetricsSystem.instance();
-    ms.register(metricsSourceName, "Volume Info Statistics", this);
+    OzoneMetricsSystem.register(metricsSourceName, "Volume Info Statistics", this);
   }
 
   public void unregister() {
-    MetricsSystem ms = DefaultMetricsSystem.instance();
-    ms.unregisterSource(metricsSourceName);
+    OzoneMetricsSystem.unregisterSource(metricsSourceName);
   }
 
   @Metric("Metric to return the Storage Type")

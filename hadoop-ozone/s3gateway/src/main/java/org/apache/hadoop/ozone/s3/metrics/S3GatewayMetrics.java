@@ -24,10 +24,10 @@ import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
-import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.ozone.metrics.OzoneMutableRate;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.util.Time;
 
@@ -95,150 +95,150 @@ public final class S3GatewayMetrics implements MetricsSource {
 
   @Metric(about = "Latency for successfully retrieving an S3 bucket in " +
       "nanoseconds")
-  private MutableRate getBucketSuccessLatencyNs;
+  private OzoneMutableRate getBucketSuccessLatencyNs;
 
   @Metric(about = "Latency for failing to retrieve an S3 bucket in nanoseconds")
-  private MutableRate getBucketFailureLatencyNs;
+  private OzoneMutableRate getBucketFailureLatencyNs;
 
   @Metric(about = "Latency for successfully creating an S3 bucket in " +
       "nanoseconds")
-  private MutableRate createBucketSuccessLatencyNs;
+  private OzoneMutableRate createBucketSuccessLatencyNs;
 
   @Metric(about = "Latency for failing to create an S3 bucket in nanoseconds")
-  private MutableRate createBucketFailureLatencyNs;
+  private OzoneMutableRate createBucketFailureLatencyNs;
 
   @Metric(about = "Latency for successfully checking the existence of an " +
       "S3 bucket in nanoseconds")
-  private MutableRate headBucketSuccessLatencyNs;
+  private OzoneMutableRate headBucketSuccessLatencyNs;
 
   @Metric(about = "Latency for successfully deleting an S3 bucket in " +
       "nanoseconds")
-  private MutableRate deleteBucketSuccessLatencyNs;
+  private OzoneMutableRate deleteBucketSuccessLatencyNs;
 
   @Metric(about = "Latency for failing to delete an S3 bucket in nanoseconds")
-  private MutableRate deleteBucketFailureLatencyNs;
+  private OzoneMutableRate deleteBucketFailureLatencyNs;
 
   @Metric(about = "Latency for successfully retrieving an S3 bucket ACL " +
       "in nanoseconds")
-  private MutableRate getAclSuccessLatencyNs;
+  private OzoneMutableRate getAclSuccessLatencyNs;
 
   @Metric(about = "Latency for failing to retrieve an S3 bucket ACL " +
       "in nanoseconds")
-  private MutableRate getAclFailureLatencyNs;
+  private OzoneMutableRate getAclFailureLatencyNs;
 
   @Metric(about = "Latency for successfully setting an S3 bucket ACL " +
       "in nanoseconds")
-  private MutableRate putAclSuccessLatencyNs;
+  private OzoneMutableRate putAclSuccessLatencyNs;
 
   @Metric(about = "Latency for failing to set an S3 bucket ACL " +
       "in nanoseconds")
-  private MutableRate putAclFailureLatencyNs;
+  private OzoneMutableRate putAclFailureLatencyNs;
 
   @Metric(about = "Latency for successfully listing multipart uploads " +
       "in nanoseconds")
-  private MutableRate listMultipartUploadsSuccessLatencyNs;
+  private OzoneMutableRate listMultipartUploadsSuccessLatencyNs;
 
   @Metric(about = "Latency for failing to list multipart uploads " +
       "in nanoseconds")
-  private MutableRate listMultipartUploadsFailureLatencyNs;
+  private OzoneMutableRate listMultipartUploadsFailureLatencyNs;
 
   // RootEndpoint
 
   @Metric(about = "Latency for successfully listing S3 buckets " +
       "in nanoseconds")
-  private MutableRate listS3BucketsSuccessLatencyNs;
+  private OzoneMutableRate listS3BucketsSuccessLatencyNs;
 
   @Metric(about = "Latency for failing to list S3 buckets " +
       "in nanoseconds")
-  private MutableRate listS3BucketsFailureLatencyNs;
+  private OzoneMutableRate listS3BucketsFailureLatencyNs;
 
   // ObjectEndpoint
 
   @Metric(about = "Latency for successfully creating a multipart object key " +
       "in nanoseconds")
-  private MutableRate createMultipartKeySuccessLatencyNs;
+  private OzoneMutableRate createMultipartKeySuccessLatencyNs;
 
   @Metric(about = "Latency for failing to create a multipart object key in " +
       "nanoseconds")
-  private MutableRate createMultipartKeyFailureLatencyNs;
+  private OzoneMutableRate createMultipartKeyFailureLatencyNs;
 
   @Metric(about = "Latency for successfully copying an S3 object in " +
       "nanoseconds")
-  private MutableRate copyObjectSuccessLatencyNs;
+  private OzoneMutableRate copyObjectSuccessLatencyNs;
 
   @Metric(about = "Latency for failing to copy an S3 object in nanoseconds")
-  private MutableRate copyObjectFailureLatencyNs;
+  private OzoneMutableRate copyObjectFailureLatencyNs;
 
   @Metric(about = "Latency for successfully creating an S3 object key in " +
       "nanoseconds")
-  private MutableRate createKeySuccessLatencyNs;
+  private OzoneMutableRate createKeySuccessLatencyNs;
 
   @Metric(about = "Latency for failing to create an S3 object key in " +
       "nanoseconds")
-  private MutableRate createKeyFailureLatencyNs;
+  private OzoneMutableRate createKeyFailureLatencyNs;
 
   @Metric(about = "Latency for successfully listing parts of a multipart " +
       "upload in nanoseconds")
-  private MutableRate listPartsSuccessLatencyNs;
+  private OzoneMutableRate listPartsSuccessLatencyNs;
 
   @Metric(about = "Latency for failing to list parts of a multipart upload " +
       "in nanoseconds")
-  private MutableRate listPartsFailureLatencyNs;
+  private OzoneMutableRate listPartsFailureLatencyNs;
 
   @Metric(about = "Latency for successfully retrieving an S3 object in " +
       "nanoseconds")
-  private MutableRate getKeySuccessLatencyNs;
+  private OzoneMutableRate getKeySuccessLatencyNs;
 
   @Metric(about = "Latency for failing to retrieve an S3 object in nanoseconds")
-  private MutableRate getKeyFailureLatencyNs;
+  private OzoneMutableRate getKeyFailureLatencyNs;
 
   @Metric(about = "Latency for successfully retrieving metadata for an S3 " +
       "object in nanoseconds")
-  private MutableRate headKeySuccessLatencyNs;
+  private OzoneMutableRate headKeySuccessLatencyNs;
 
   @Metric(about = "Latency for failing to retrieve metadata for an S3 object " +
       "in nanoseconds")
-  private MutableRate headKeyFailureLatencyNs;
+  private OzoneMutableRate headKeyFailureLatencyNs;
 
   @Metric(about = "Latency for successfully initiating a multipart upload in " +
       "nanoseconds")
-  private MutableRate initMultipartUploadSuccessLatencyNs;
+  private OzoneMutableRate initMultipartUploadSuccessLatencyNs;
 
   @Metric(about = "Latency for failing to initiate a multipart upload in " +
       "nanoseconds")
-  private MutableRate initMultipartUploadFailureLatencyNs;
+  private OzoneMutableRate initMultipartUploadFailureLatencyNs;
 
   @Metric(about = "Latency for successfully completing a multipart upload in " +
       "nanoseconds")
-  private MutableRate completeMultipartUploadSuccessLatencyNs;
+  private OzoneMutableRate completeMultipartUploadSuccessLatencyNs;
 
   @Metric(about = "Latency for failing to complete a multipart upload in " +
       "nanoseconds")
-  private MutableRate completeMultipartUploadFailureLatencyNs;
+  private OzoneMutableRate completeMultipartUploadFailureLatencyNs;
 
   @Metric(about = "Latency for successfully aborting a multipart upload in " +
       "nanoseconds")
-  private MutableRate abortMultipartUploadSuccessLatencyNs;
+  private OzoneMutableRate abortMultipartUploadSuccessLatencyNs;
 
   @Metric(about = "Latency for failing to abort a multipart upload in " +
       "nanoseconds")
-  private MutableRate abortMultipartUploadFailureLatencyNs;
+  private OzoneMutableRate abortMultipartUploadFailureLatencyNs;
 
   @Metric(about = "Latency for successfully deleting an S3 object in " +
       "nanoseconds")
-  private MutableRate deleteKeySuccessLatencyNs;
+  private OzoneMutableRate deleteKeySuccessLatencyNs;
 
   @Metric(about = "Latency for failing to delete an S3 object in nanoseconds")
-  private MutableRate deleteKeyFailureLatencyNs;
+  private OzoneMutableRate deleteKeyFailureLatencyNs;
 
   @Metric(about = "Latency for put metadata of an key in nanoseconds")
-  private MutableRate putKeyMetadataLatencyNs;
+  private OzoneMutableRate putKeyMetadataLatencyNs;
 
   @Metric(about = "Latency for get metadata of an key in nanoseconds")
-  private MutableRate getKeyMetadataLatencyNs;
+  private OzoneMutableRate getKeyMetadataLatencyNs;
 
   @Metric(about = "Latency for copy metadata of an key in nanoseconds")
-  private MutableRate copyKeyMetadataLatencyNs;
+  private OzoneMutableRate copyKeyMetadataLatencyNs;
 
   /**
    * Private constructor.
@@ -256,7 +256,7 @@ public final class S3GatewayMetrics implements MetricsSource {
     if (instance != null) {
       return instance;
     }
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     instance = ms.register(SOURCE_NAME, "S3 Gateway Metrics",
         new S3GatewayMetrics());
     return instance;
@@ -267,7 +267,7 @@ public final class S3GatewayMetrics implements MetricsSource {
    */
   public static void unRegister() {
     instance = null;
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     ms.unregisterSource(SOURCE_NAME);
   }
 
@@ -719,7 +719,7 @@ public final class S3GatewayMetrics implements MetricsSource {
     return listS3BucketsFailure.value();
   }
 
-  private long updateAndGetStats(MutableRate metric, long startNanos) {
+  private long updateAndGetStats(OzoneMutableRate metric, long startNanos) {
     long value = Time.monotonicNowNanos() - startNanos;
     metric.add(value);
     return value;

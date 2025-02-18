@@ -22,7 +22,7 @@ package org.apache.hadoop.hdds.scm.security;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 
@@ -53,13 +53,13 @@ public final class RootCARotationMetrics {
    * @return {@link RootCARotationMetrics}
    */
   public static RootCARotationMetrics create() {
-    MetricsSystem metricsSystem = DefaultMetricsSystem.instance();
+    MetricsSystem metricsSystem = OzoneMetricsSystem.instance();
     return metricsSystem.register(NAME, "Root CA Rotation Metrics",
         new RootCARotationMetrics(metricsSystem));
   }
 
   public void unRegister() {
-    MetricsSystem metricsSystem = DefaultMetricsSystem.instance();
+    MetricsSystem metricsSystem = OzoneMetricsSystem.instance();
     metricsSystem.unregisterSource(NAME);
   }
 

@@ -81,11 +81,11 @@ import org.apache.hadoop.hdds.utils.HAUtils;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.Server;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.minikdc.MiniKdc;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.common.Storage;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OMStorage;
 import org.apache.hadoop.ozone.om.OzoneManager;
@@ -245,7 +245,7 @@ final class TestSecureOzoneCluster {
           InetAddress.getLocalHost().getCanonicalHostName() + ":1202");
       conf.setBoolean(ScmConfigKeys.OZONE_SCM_HA_ENABLE_KEY, false);
 
-      DefaultMetricsSystem.setMiniClusterMode(true);
+      OzoneMetricsSystem.setMiniClusterMode(true);
       ExitUtils.disableSystemExit();
       final String path = tempDir.getAbsolutePath();
       omMetaDirPath = Paths.get(path, "om-meta");
