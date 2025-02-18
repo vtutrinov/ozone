@@ -18,12 +18,14 @@
 package org.apache.hadoop.ozone.util;
 
 import java.io.Closeable;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
-import org.apache.hadoop.metrics2.lib.MutableQuantiles;
-import org.apache.hadoop.metrics2.lib.MutableStat;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
+import org.apache.hadoop.ozone.metrics.OzoneMutableQuantiles;
+import org.apache.hadoop.ozone.metrics.OzoneMutableStat;
 
 /**
  * The {@code PerformanceMetrics} class encapsulates a collection of related
@@ -32,8 +34,9 @@ import org.apache.hadoop.metrics2.lib.MutableStat;
  * snapshot their values for reporting.
  */
 public class PerformanceMetrics implements Closeable {
-  private final MutableStat stat;
-  private final List<MutableQuantiles> quantiles;
+  // SDP (SDPOZN-350): lock-free stat/quantiles to reduce contention on hot paths
+  private final OzoneMutableStat stat;
+  private final List<OzoneMutableQuantiles> quantiles;
   private final MutableMinMax minMax;
 
   /**
@@ -70,14 +73,20 @@ public class PerformanceMetrics implements Closeable {
   public PerformanceMetrics(
       MetricsRegistry registry, String name, String description,
       String sampleName, String valueName, int[] intervals) {
-    stat = registry.newStat(name, description, sampleName, valueName, false);
-    quantiles = MetricUtil.createQuantiles(registry, name, description, sampleName, valueName, intervals);
+    stat = OzoneMetricsSystem.registerNewMutableStat(registry, name, description, sampleName, valueName, false);
+    quantiles = new ArrayList<>();
+    if (intervals != null) {
+      for (int interval : intervals) {
+        quantiles.add(OzoneMetricsSystem.registerNewMutableQuantiles(registry, name + interval + "s",
+            description, sampleName, valueName, interval));
+      }
+    }
     minMax = new MutableMinMax(registry, name, description, valueName);
   }
 
   @Override
   public void close() {
-    MetricUtil.stop(quantiles);
+    quantiles.forEach(OzoneMutableQuantiles::stop);
   }
 
   /**

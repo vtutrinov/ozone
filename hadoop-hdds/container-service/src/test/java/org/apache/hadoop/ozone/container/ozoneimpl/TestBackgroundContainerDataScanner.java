@@ -56,7 +56,6 @@ import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.utils.db.Table;
 import org.apache.hadoop.hdfs.util.Canceler;
 import org.apache.hadoop.hdfs.util.DataTransferThrottler;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.ozone.container.checksum.ContainerMerkleTreeWriter;
 import org.apache.hadoop.ozone.container.common.impl.ContainerData;
 import org.apache.hadoop.ozone.container.common.interfaces.Container;
@@ -65,6 +64,7 @@ import org.apache.hadoop.ozone.container.common.utils.StorageVolumeUtil;
 import org.apache.hadoop.ozone.container.metadata.DatanodeSchemaThreeDBDefinition;
 import org.apache.hadoop.ozone.container.metadata.DatanodeStoreSchemaThreeImpl;
 import org.apache.hadoop.ozone.container.ozoneimpl.ContainerScanError.FailureType;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 import org.apache.ozone.test.GenericTestUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -132,12 +132,12 @@ public class TestBackgroundContainerDataScanner extends
   @Override
   public void testScannerMetricsUnregisters() {
     String name = scanner.getMetrics().getName();
-    assertNotNull(DefaultMetricsSystem.instance().getSource(name));
+    assertNotNull(OzoneMetricsSystem.instance().getSource(name));
 
     scanner.shutdown();
     scanner.run();
     
-    assertNull(DefaultMetricsSystem.instance().getSource(name));
+    assertNull(OzoneMetricsSystem.instance().getSource(name));
   }
 
   @Test

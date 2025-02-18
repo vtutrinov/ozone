@@ -20,10 +20,10 @@ package org.apache.hadoop.ozone.container.common.helpers;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.ozone.container.common.impl.BlockDeletingService;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 
 /**
  * Metrics related to Block Deleting Service running on Datanode.
@@ -89,7 +89,7 @@ public final class BlockDeletingServiceMetrics {
 
   public static synchronized BlockDeletingServiceMetrics create() {
     if (instance == null) {
-      MetricsSystem ms = DefaultMetricsSystem.instance();
+      MetricsSystem ms = OzoneMetricsSystem.instance();
       instance = ms.register(SOURCE_NAME, "BlockDeletingService",
           new BlockDeletingServiceMetrics());
     }
@@ -102,7 +102,7 @@ public final class BlockDeletingServiceMetrics {
    */
   public static synchronized void unRegister() {
     instance = null;
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     ms.unregisterSource(SOURCE_NAME);
   }
 

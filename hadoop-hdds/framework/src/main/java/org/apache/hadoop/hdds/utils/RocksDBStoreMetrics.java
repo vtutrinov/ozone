@@ -30,8 +30,8 @@ import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.MetricsSystem;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.Interns;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 import org.rocksdb.HistogramData;
 import org.rocksdb.HistogramType;
 import org.rocksdb.LiveFileMetaData;
@@ -127,7 +127,7 @@ public class RocksDBStoreMetrics implements MetricsSource {
       RocksDatabase db, String contextName) {
     RocksDBStoreMetrics metrics = new RocksDBStoreMetrics(
         statistics, db, contextName);
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     MetricsSource metricsSource = ms.getSource(metrics.contextName);
     if (metricsSource != null) {
       return (RocksDBStoreMetrics) metricsSource;
@@ -137,7 +137,7 @@ public class RocksDBStoreMetrics implements MetricsSource {
   }
 
   public void unregister() {
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     ms.unregisterSource(this.contextName);
   }
 

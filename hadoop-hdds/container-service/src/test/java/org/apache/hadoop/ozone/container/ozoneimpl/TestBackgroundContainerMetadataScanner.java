@@ -47,11 +47,11 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.hdfs.util.Canceler;
 import org.apache.hadoop.hdfs.util.DataTransferThrottler;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.ozone.container.common.interfaces.Container;
 import org.apache.hadoop.ozone.container.common.interfaces.ScanResult;
 import org.apache.hadoop.ozone.container.common.utils.StorageVolumeUtil;
 import org.apache.hadoop.ozone.container.ozoneimpl.ContainerScanError.FailureType;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 import org.apache.ozone.test.GenericTestUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -119,12 +119,12 @@ public class TestBackgroundContainerMetadataScanner extends
   public void testScannerMetricsUnregisters() {
     String name = scanner.getMetrics().getName();
 
-    assertNotNull(DefaultMetricsSystem.instance().getSource(name));
+    assertNotNull(OzoneMetricsSystem.instance().getSource(name));
 
     scanner.shutdown();
     scanner.run();
 
-    assertNull(DefaultMetricsSystem.instance().getSource(name));
+    assertNull(OzoneMetricsSystem.instance().getSource(name));
   }
 
   @Test

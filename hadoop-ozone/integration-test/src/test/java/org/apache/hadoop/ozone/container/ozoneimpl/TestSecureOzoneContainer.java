@@ -50,7 +50,6 @@ import org.apache.hadoop.hdds.security.symmetric.SecretKeyClient;
 import org.apache.hadoop.hdds.security.token.ContainerTokenIdentifier;
 import org.apache.hadoop.hdds.security.token.ContainerTokenSecretManager;
 import org.apache.hadoop.hdds.security.x509.certificate.client.CertificateClientTestImpl;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.client.SecretKeyTestClient;
 import org.apache.hadoop.ozone.container.common.ContainerTestUtils;
@@ -58,6 +57,7 @@ import org.apache.hadoop.ozone.container.common.interfaces.VolumeChoosingPolicy;
 import org.apache.hadoop.ozone.container.common.utils.StorageVolumeUtil;
 import org.apache.hadoop.ozone.container.common.volume.MutableVolumeSet;
 import org.apache.hadoop.ozone.container.common.volume.VolumeChoosingPolicyFactory;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.apache.ratis.util.ExitUtils;
@@ -100,7 +100,7 @@ class TestSecureOzoneContainer {
 
   @BeforeAll
   static void init() {
-    DefaultMetricsSystem.setMiniClusterMode(true);
+    OzoneMetricsSystem.setMiniClusterMode(true);
     ExitUtils.disableSystemExit();
   }
 

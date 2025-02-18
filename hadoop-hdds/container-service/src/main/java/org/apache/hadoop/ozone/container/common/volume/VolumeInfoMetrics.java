@@ -25,13 +25,13 @@ import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableGaugeInt;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 
 /**
  * This class is used to track Volume Info stats for each HDDS Volume.
@@ -107,12 +107,12 @@ public class VolumeInfoMetrics implements MetricsSource {
   }
 
   public void init() {
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     ms.register(metricsSourceName, "Volume Info Statistics", this);
   }
 
   public void unregister() {
-    MetricsSystem ms = DefaultMetricsSystem.instance();
+    MetricsSystem ms = OzoneMetricsSystem.instance();
     ms.unregisterSource(metricsSourceName);
   }
 

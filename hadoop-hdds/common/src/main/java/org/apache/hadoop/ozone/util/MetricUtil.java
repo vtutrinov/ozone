@@ -25,7 +25,8 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableQuantiles;
-import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.metrics2.lib.MutableStat;
+import org.apache.hadoop.ozone.metrics.OzoneMutableQuantiles;
 import org.apache.hadoop.util.Time;
 import org.apache.ratis.util.function.CheckedRunnable;
 import org.apache.ratis.util.function.CheckedSupplier;
@@ -38,7 +39,7 @@ public final class MetricUtil {
   }
 
   public static <T, E extends Exception> T captureLatencyNs(
-      MutableRate metric,
+      MutableStat metric,
       CheckedSupplier<T, E> block) throws E {
     long start = Time.monotonicNowNanos();
     try {
@@ -49,7 +50,7 @@ public final class MetricUtil {
   }
 
   public static <E extends IOException> void captureLatencyNs(
-      MutableRate metric,
+      MutableStat metric,
       CheckedRunnable<E> block) throws IOException {
     long start = Time.monotonicNowNanos();
     try {
@@ -113,6 +114,16 @@ public final class MetricUtil {
   public static void stop(MutableQuantiles... quantiles) {
     if (quantiles != null) {
       stop(Arrays.asList(quantiles));
+    }
+  }
+
+  public static void stop(OzoneMutableQuantiles... quantiles) {
+    if (quantiles != null) {
+      for (OzoneMutableQuantiles q : quantiles) {
+        if (q != null) {
+          q.stop();
+        }
+      }
     }
   }
 

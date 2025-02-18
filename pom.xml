@@ -40,6 +40,7 @@
     <!-- Default aspectj version for java8 -->
     <aspectj.version>1.9.7</aspectj.version>
     <assertj.version>3.27.7</assertj.version>
+    <awaitility.version>4.2.0</awaitility.version>
     <aws-java-sdk.version>1.12.788</aws-java-sdk.version>
     <bonecp.version>0.8.0.RELEASE</bonecp.version>
     <bouncycastle.version>1.85</bouncycastle.version>
@@ -1543,6 +1544,11 @@
         <groupId>org.assertj</groupId>
         <artifactId>assertj-core</artifactId>
         <version>${assertj.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.awaitility</groupId>
+        <artifactId>awaitility</artifactId>
+        <version>${awaitility.version}</version>
       </dependency>
       <dependency>
         <groupId>org.bouncycastle</groupId>

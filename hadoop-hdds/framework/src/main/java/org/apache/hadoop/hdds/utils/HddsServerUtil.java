@@ -118,12 +118,12 @@ import org.apache.hadoop.ipc_.RPC;
 import org.apache.hadoop.ipc_.Server;
 import org.apache.hadoop.metrics2.MetricsException;
 import org.apache.hadoop.metrics2.MetricsSystem;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.source.JvmMetrics;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.ha.ConfUtils;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.ShutdownHookManager;
 import org.apache.ratis.util.Preconditions;
@@ -702,11 +702,11 @@ public final class HddsServerUtil {
    */
   public static MetricsSystem initializeMetrics(
       OzoneConfiguration configuration, String serverName) {
-    MetricsSystem metricsSystem = DefaultMetricsSystem.initialize(serverName);
+    MetricsSystem metricsSystem = OzoneMetricsSystem.initialize(serverName);
     try {
       JvmMetrics.create(serverName,
           configuration.get(HddsConfigKeys.HDDS_METRICS_SESSION_ID_KEY),
-          DefaultMetricsSystem.instance());
+          OzoneMetricsSystem.instance());
       CpuMetrics.create();
     } catch (MetricsException e) {
       LOG.info("Metrics source JvmMetrics already added to DataNode.");
