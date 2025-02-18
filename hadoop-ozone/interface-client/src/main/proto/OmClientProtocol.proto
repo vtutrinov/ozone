@@ -729,6 +729,7 @@ message BucketInfo {
     optional BucketLayoutProto bucketLayout = 18;
     optional string owner = 19;
     optional hadoop.hdds.DefaultReplicationConfig defaultReplicationConfig = 20;
+    optional string compressionType = 21;
 }
 
 enum StorageTypeProto {
@@ -1026,6 +1027,8 @@ message KeyArgs {
     optional bool forceUpdateContainerCacheFromSCM = 20;
 
     optional int32 partNumber = 24;
+
+    optional string compressionType = 25;
 }
 
 message KeyLocation {
@@ -1108,6 +1111,7 @@ message KeyInfo {
     optional hadoop.hdds.ECReplicationConfig ecReplicationConfig = 17;
     optional FileChecksumProto fileChecksum = 18;
     optional bool isFile = 19;
+    optional string compressionType = 20;
 }
 
 message BasicKeyInfo {

@@ -788,6 +788,7 @@ public abstract class OMKeyRequest extends OMClientRequest {
       builder.setFileName(omPathInfoFSO.getLeafNodeName());
     }
     builder.setObjectID(objectID);
+    builder.setCompressionType(keyArgs.getCompressionType());
     return builder.build();
   }
 

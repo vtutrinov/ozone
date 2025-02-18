@@ -161,6 +161,10 @@ public class OMKeyCreateRequest extends OMKeyRequest {
           .map(info -> info.getProtobuf(false,
               getOmRequest().getVersion()))
           .collect(Collectors.toList()));
+
+      if (bucketInfo.getCompressionType() != null) {
+        newKeyArgs.setCompressionType(bucketInfo.getCompressionType());
+      }
     } else {
       newKeyArgs = keyArgs.toBuilder().setModificationTime(Time.now());
     }

@@ -659,6 +659,9 @@ public class RpcClient implements ClientProtocol {
     }
 
     OmBucketInfo.Builder builder = OmBucketInfo.newBuilder();
+
+    String compressionType = bucketArgs.getCompressionType();
+
     builder.setVolumeName(volumeName)
         .setBucketName(bucketName)
         .setIsVersionEnabled(isVersionEnabled)
@@ -670,6 +673,7 @@ public class RpcClient implements ClientProtocol {
         .setQuotaInNamespace(bucketArgs.getQuotaInNamespace())
         .setAcls(listOfAcls.stream().distinct().collect(Collectors.toList()))
         .setBucketLayout(bucketLayout)
+        .setCompressionType(OzoneCompressionCodecFactory.validateCompression(conf, compressionType))
         .setOwner(owner);
 
     if (bek != null) {
@@ -682,7 +686,7 @@ public class RpcClient implements ClientProtocol {
       builder.setDefaultReplicationConfig(defaultReplicationConfig);
     }
 
-    String replicationType = defaultReplicationConfig == null 
+    String replicationType = defaultReplicationConfig == null
         ? "server-side default replication type"
         : defaultReplicationConfig.getType().toString();
 
@@ -1302,6 +1306,7 @@ public class RpcClient implements ClientProtocol {
         .setMetadata(bucketInfo.getMetadata())
         .setEncryptionKeyName(bucketInfo.getEncryptionKeyInfo() != null ?
             bucketInfo.getEncryptionKeyInfo().getKeyName() : null)
+        .setCompressionType(bucketInfo.getCompressionType())
         .setSourceVolume(bucketInfo.getSourceVolume())
         .setSourceBucket(bucketInfo.getSourceBucket())
         .setUsedBytes(bucketInfo.getUsedBytes())
@@ -1322,7 +1327,7 @@ public class RpcClient implements ClientProtocol {
     List<OmBucketInfo> buckets = ozoneManagerClient.listBuckets(
         volumeName, prevBucket, bucketPrefix, maxListResult, hasSnapshot);
 
-    return buckets.stream().map(bucket -> 
+    return buckets.stream().map(bucket ->
             OzoneBucket.newBuilder(conf, this)
                 .setVolumeName(bucket.getVolumeName())
                 .setName(bucket.getBucketName())
@@ -1333,6 +1338,7 @@ public class RpcClient implements ClientProtocol {
                 .setMetadata(bucket.getMetadata())
                 .setEncryptionKeyName(bucket.getEncryptionKeyInfo() != null ?
                     bucket.getEncryptionKeyInfo().getKeyName() : null)
+                .setCompressionType(bucket.getCompressionType())
                 .setSourceVolume(bucket.getSourceVolume())
                 .setSourceBucket(bucket.getSourceBucket())
                 .setUsedBytes(bucket.getUsedBytes())
@@ -1694,6 +1700,7 @@ public class RpcClient implements ClientProtocol {
         keyInfo.getModificationTime(), ozoneKeyLocations,
         keyInfo.getReplicationConfig(), keyInfo.getMetadata(),
         keyInfo.getFileEncryptionInfo(),
+        keyInfo.getCompressionType(),
         () -> getInputStreamWithRetryFunction(keyInfo), keyInfo.isFile(), keyInfo.getUpdateID());
   }
 

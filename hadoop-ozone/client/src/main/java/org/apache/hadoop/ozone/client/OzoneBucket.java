@@ -130,6 +130,8 @@ public class OzoneBucket extends WithMetadata {
    */
   private String encryptionKeyName;
 
+  private String compressionType;
+
   private OzoneObj ozoneObj;
 
   private String sourceVolume;
@@ -179,6 +181,7 @@ public class OzoneBucket extends WithMetadata {
       }
     }
     this.encryptionKeyName = builder.encryptionKeyName;
+    this.compressionType = builder.compressionType;
     this.ozoneObj = OzoneObjInfo.Builder.newBuilder()
         .setBucketName(name)
         .setVolumeName(volumeName)
@@ -264,6 +267,10 @@ public class OzoneBucket extends WithMetadata {
    */
   public String getEncryptionKeyName() {
     return encryptionKeyName;
+  }
+
+  public String getCompressionType() {
+    return compressionType;
   }
 
   public String getSourceVolume() {
@@ -954,6 +961,7 @@ public class OzoneBucket extends WithMetadata {
     private long creationTime;
     private long modificationTime;
     private String encryptionKeyName;
+    private String compressionType;
     private String sourceVolume;
     private String sourceBucket;
     private long quotaInBytes;
@@ -1022,6 +1030,11 @@ public class OzoneBucket extends WithMetadata {
 
     public Builder setEncryptionKeyName(String encryptionKeyName) {
       this.encryptionKeyName = encryptionKeyName;
+      return this;
+    }
+
+    public Builder setCompressionType(String compressionType) {
+      this.compressionType = compressionType;
       return this;
     }
 

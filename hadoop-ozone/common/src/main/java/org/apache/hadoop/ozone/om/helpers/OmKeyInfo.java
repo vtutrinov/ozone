@@ -88,6 +88,7 @@ public final class OmKeyInfo extends WithParentObjectId
   private ReplicationConfig replicationConfig;
   private FileEncryptionInfo encInfo;
   private final FileChecksum fileChecksum;
+  private String compressionType;
   /**
    * Support OFS use-case to identify if the key is a file or a directory.
    */
@@ -112,7 +113,8 @@ public final class OmKeyInfo extends WithParentObjectId
       ReplicationConfig replicationConfig,
       Map<String, String> metadata,
       FileEncryptionInfo encInfo, List<OzoneAcl> acls,
-      long objectID, long updateID, FileChecksum fileChecksum) {
+      long objectID, long updateID, FileChecksum fileChecksum,
+      String compressionType) {
     this.volumeName = volumeName;
     this.bucketName = bucketName;
     this.keyName = keyName;
@@ -127,6 +129,7 @@ public final class OmKeyInfo extends WithParentObjectId
     this.objectID = objectID;
     this.updateID = updateID;
     this.fileChecksum = fileChecksum;
+    this.compressionType = compressionType;
   }
 
   @SuppressWarnings("parameternumber")
@@ -137,10 +140,10 @@ public final class OmKeyInfo extends WithParentObjectId
             Map<String, String> metadata,
             FileEncryptionInfo encInfo, List<OzoneAcl> acls,
             long parentObjectID, long objectID, long updateID,
-            FileChecksum fileChecksum, boolean isFile) {
+            FileChecksum fileChecksum, boolean isFile, String compressionType) {
     this(volumeName, bucketName, keyName, versions, dataSize,
             creationTime, modificationTime, replicationConfig, metadata,
-            encInfo, acls, objectID, updateID, fileChecksum);
+            encInfo, acls, objectID, updateID, fileChecksum, compressionType);
     this.fileName = fileName;
     this.parentObjectID = parentObjectID;
     this.isFile = isFile;
@@ -190,6 +193,13 @@ public final class OmKeyInfo extends WithParentObjectId
     return parentObjectID;
   }
 
+  public String getCompressionType() {
+    return compressionType;
+  }
+
+  public void setCompressionType(String compressionType) {
+    this.compressionType = compressionType;
+  }
 
   public @Nullable synchronized OmKeyLocationInfoGroup getLatestVersionLocations() {
     return keyLocationVersions.isEmpty() ? null : keyLocationVersions.get(keyLocationVersions.size() - 1);
@@ -467,6 +477,7 @@ public final class OmKeyInfo extends WithParentObjectId
         ", fileChecksum=" + fileChecksum +
         ", isFile=" + isFile +
         ", fileName='" + fileName + '\'' +
+        ", compressionType='" + compressionType + '\'' +
         ", acls=" + acls +
         '}';
   }
@@ -487,6 +498,7 @@ public final class OmKeyInfo extends WithParentObjectId
     private ReplicationConfig replicationConfig;
     private Map<String, String> metadata;
     private FileEncryptionInfo encInfo;
+    private String compressionType;
     private List<OzoneAcl> acls;
     private long objectID;
     private long updateID;
@@ -569,6 +581,11 @@ public final class OmKeyInfo extends WithParentObjectId
       return this;
     }
 
+    public Builder setCompressionType(String compressionType) {
+      this.compressionType = compressionType;
+      return this;
+    }
+
     public Builder setAcls(List<OzoneAcl> listOfAcls) {
       if (listOfAcls != null) {
         this.acls.addAll(listOfAcls);
@@ -618,7 +635,7 @@ public final class OmKeyInfo extends WithParentObjectId
               volumeName, bucketName, keyName, fileName,
               omKeyLocationInfoGroups, dataSize, creationTime,
               modificationTime, replicationConfig, metadata, encInfo, acls,
-              parentObjectID, objectID, updateID, fileChecksum, isFile);
+              parentObjectID, objectID, updateID, fileChecksum, isFile, compressionType);
     }
   }
 
@@ -720,6 +737,9 @@ public final class OmKeyInfo extends WithParentObjectId
     if (encInfo != null) {
       kb.setFileEncryptionInfo(OMPBHelper.convert(encInfo));
     }
+    if (compressionType != null) {
+      kb.setCompressionType(compressionType);
+    }
     kb.setIsFile(isFile);
     return kb.build();
   }
@@ -770,6 +790,7 @@ public final class OmKeyInfo extends WithParentObjectId
 
     // not persisted to DB. FileName will be filtered out from keyName
     builder.setFileName(OzoneFSUtils.getFileName(keyInfo.getKeyName()));
+    builder.setCompressionType(keyInfo.getCompressionType());
     return builder.build();
   }
 
@@ -784,6 +805,7 @@ public final class OmKeyInfo extends WithParentObjectId
         ", objectID='" + objectID + '\'' +
         ", parentID='" + parentObjectID + '\'' +
         ", replication='" + replicationConfig + '\'' +
+        ", compressionType='" + compressionType + '\'' +
         ", fileChecksum='" + fileChecksum +
         '}';
   }
@@ -800,6 +822,7 @@ public final class OmKeyInfo extends WithParentObjectId
         replicationConfig.equals(omKeyInfo.replicationConfig) &&
         Objects.equals(metadata, omKeyInfo.metadata) &&
         Objects.equals(acls, omKeyInfo.acls) &&
+        Objects.equals(compressionType, omKeyInfo.compressionType) &&
         objectID == omKeyInfo.objectID;
 
     if (isEqual && checkUpdateID) {
@@ -853,6 +876,7 @@ public final class OmKeyInfo extends WithParentObjectId
         .setDataSize(dataSize)
         .setReplicationConfig(replicationConfig)
         .setFileEncryptionInfo(encInfo)
+        .setCompressionType(compressionType)
         .setObjectID(objectID)
         .setUpdateID(updateID)
         .setParentObjectID(parentObjectID)
@@ -875,6 +899,10 @@ public final class OmKeyInfo extends WithParentObjectId
 
     if (fileChecksum != null) {
       builder.setFileChecksum(fileChecksum);
+    }
+
+    if (compressionType != null) {
+      builder.setCompressionType(compressionType);
     }
 
     return builder.build();

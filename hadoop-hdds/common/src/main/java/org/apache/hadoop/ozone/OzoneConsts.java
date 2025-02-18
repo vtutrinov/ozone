@@ -347,6 +347,7 @@ public final class OzoneConsts {
   public static final String MULTIPART_UPLOAD_PART_NUMBER = "partNumber";
   public static final String MULTIPART_UPLOAD_PART_NAME = "partName";
   public static final String BUCKET_ENCRYPTION_KEY = "bucketEncryptionKey";
+  public static final String BUCKET_COMPRESSION_TYPE = "bucketCompressionType";
   public static final String DELETED_KEYS_LIST = "deletedKeysList";
   public static final String UNDELETED_KEYS_LIST = "unDeletedKeysList";
   public static final String SOURCE_VOLUME = "sourceVolume";

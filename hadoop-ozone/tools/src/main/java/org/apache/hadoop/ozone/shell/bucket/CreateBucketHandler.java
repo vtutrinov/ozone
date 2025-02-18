@@ -54,6 +54,10 @@ public class CreateBucketHandler extends BucketHandler {
           "false/unspecified indicates otherwise")
   private Boolean isGdprEnforced;
 
+  @Option(names = {"--compression", "-c"},
+      description = "Bucket Compression Type")
+  private String compressionType;
+
   @Option(names = {"--user", "-u"},
           description = "Owner of the bucket. Defaults to current" +
               " user if not specified")
@@ -91,6 +95,9 @@ public class CreateBucketHandler extends BucketHandler {
       bb.setBucketLayout(bucketLayout);
     }
     // TODO: New Client talking to old server, will it create a LEGACY bucket?
+
+
+    bb.setCompressionType(compressionType);
 
     if (isGdprEnforced != null) {
       bb.addMetadata(OzoneConsts.GDPR_FLAG, String.valueOf(isGdprEnforced));

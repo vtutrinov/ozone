@@ -109,6 +109,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
 
   private String owner;
 
+  private String compressionType;
+
   /**
    * Private constructor, constructed via builder.
    * @param volumeName - Volume name.
@@ -150,7 +152,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
       long quotaInNamespace,
       BucketLayout bucketLayout,
       String owner,
-      DefaultReplicationConfig defaultReplicationConfig) {
+      DefaultReplicationConfig defaultReplicationConfig,
+      String compressionType) {
     this.volumeName = volumeName;
     this.bucketName = bucketName;
     this.acls = acls;
@@ -171,6 +174,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
     this.bucketLayout = bucketLayout;
     this.owner = owner;
     this.defaultReplicationConfig = defaultReplicationConfig;
+    this.compressionType = compressionType;
   }
 
   /**
@@ -268,6 +272,10 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
     return bekInfo;
   }
 
+  public String getCompressionType() {
+    return compressionType;
+  }
+
   /**
    * Returns the Bucket Layout.
    *
@@ -361,6 +369,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
     auditMap.put(OzoneConsts.CREATION_TIME, String.valueOf(this.creationTime));
     auditMap.put(OzoneConsts.BUCKET_ENCRYPTION_KEY,
         (bekInfo != null) ? bekInfo.getKeyName() : null);
+    auditMap.put(OzoneConsts.BUCKET_COMPRESSION_TYPE, compressionType);
     auditMap.put(OzoneConsts.MODIFICATION_TIME,
         String.valueOf(this.modificationTime));
     if (isLink()) {
@@ -427,7 +436,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
         .setQuotaInNamespace(quotaInNamespace)
         .setBucketLayout(bucketLayout)
         .setOwner(owner)
-        .setDefaultReplicationConfig(defaultReplicationConfig);
+        .setDefaultReplicationConfig(defaultReplicationConfig)
+        .setCompressionType(compressionType);
   }
 
   /**
@@ -454,6 +464,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
     private BucketLayout bucketLayout;
     private String owner;
     private DefaultReplicationConfig defaultReplicationConfig;
+    private String compressionType;
 
     public Builder() {
       //Default values
@@ -588,6 +599,12 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
       return this;
     }
 
+    public Builder setCompressionType(
+        String compressionType) {
+      this.compressionType = compressionType;
+      return this;
+    }
+
     /**
      * Constructs the OmBucketInfo.
      * @return instance of OmBucketInfo.
@@ -602,7 +619,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
           storageType, creationTime, modificationTime, objectID, updateID,
           metadata, bekInfo, sourceVolume, sourceBucket, usedBytes,
           usedNamespace, quotaInBytes, quotaInNamespace, bucketLayout, owner,
-          defaultReplicationConfig);
+          defaultReplicationConfig, compressionType);
     }
   }
 
@@ -643,6 +660,9 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
     if (owner != null) {
       bib.setOwner(owner);
     }
+    if (compressionType != null) {
+      bib.setCompressionType(compressionType);
+    }
     return bib.build();
   }
 
@@ -675,7 +695,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
         .setModificationTime(bucketInfo.getModificationTime())
         .setQuotaInBytes(bucketInfo.getQuotaInBytes())
         .setUsedNamespace(bucketInfo.getUsedNamespace())
-        .setQuotaInNamespace(bucketInfo.getQuotaInNamespace());
+        .setQuotaInNamespace(bucketInfo.getQuotaInNamespace())
+        .setCompressionType(bucketInfo.getCompressionType());
     if (buckLayout != null) {
       obib.setBucketLayout(buckLayout);
     } else if (bucketInfo.getBucketLayout() != null) {
@@ -730,6 +751,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
         ", quotaInNamespace='" + quotaInNamespace + "'" +
         ", bucketLayout='" + bucketLayout + '\'' +
         ", defaultReplicationConfig='" + defaultReplicationConfig + '\'' +
+        ", compressionType='" + compressionType + '\'' +
         sourceInfo +
         '}';
   }
@@ -759,7 +781,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
         Objects.equals(metadata, that.metadata) &&
         Objects.equals(bekInfo, that.bekInfo) &&
         Objects.equals(owner, that.owner) &&
-        Objects.equals(defaultReplicationConfig, that.defaultReplicationConfig);
+        Objects.equals(defaultReplicationConfig, that.defaultReplicationConfig) &&
+        Objects.equals(compressionType, this.compressionType);
   }
 
   @Override
@@ -789,6 +812,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable {
         ", bucketLayout=" + bucketLayout +
         ", owner=" + owner +
         ", defaultReplicationConfig=" + defaultReplicationConfig +
+        ", compressionType=" + compressionType +
         '}';
   }
 }

@@ -269,6 +269,8 @@ public class OMException extends IOException {
     
     INVALID_PATH,
 
-    TOO_MANY_BUCKETS
+    TOO_MANY_BUCKETS,
+
+    COMPRESSION_NOT_SUPPORTED
   }
 }

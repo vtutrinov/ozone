@@ -161,7 +161,7 @@ public class OzoneBucketStub extends OzoneBucket {
                 size,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
-                new ArrayList<>(), replicationConfig, metadata, null,
+                new ArrayList<>(), replicationConfig, metadata, null, null,
                 () -> readKey(key), true, 1
             ));
             super.close();
@@ -193,7 +193,7 @@ public class OzoneBucketStub extends OzoneBucket {
                 size,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
-                new ArrayList<>(), finalReplicationCon, metadata, null,
+                new ArrayList<>(), finalReplicationCon, metadata, null, null,
                 () -> readKey(key), true, 1
             ));
             super.close();
@@ -230,7 +230,7 @@ public class OzoneBucketStub extends OzoneBucket {
                 size,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
-                new ArrayList<>(), rConfig, objectMetadata, null,
+                new ArrayList<>(), rConfig, objectMetadata, null, null,
                 null, false, 1
             ));
           }
@@ -619,7 +619,7 @@ public class OzoneBucketStub extends OzoneBucket {
         0,
         System.currentTimeMillis(),
         System.currentTimeMillis(),
-        new ArrayList<>(), replicationConfig, new HashMap<>(), null,
+        new ArrayList<>(), replicationConfig, new HashMap<>(), null, null,
         () -> readKey(keyName), false, 1));
   }
 
