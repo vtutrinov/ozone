@@ -93,6 +93,11 @@ public final class OmKeyInfo extends WithParentObjectId
   private final String ownerName;
 
   /**
+   * SDP: compression codec used for the key data (null if not compressed).
+   */
+  private String compressionType;
+
+  /**
    * ACL Information.
    */
   private final ImmutableList<OzoneAcl> acls;
@@ -126,6 +131,7 @@ public final class OmKeyInfo extends WithParentObjectId
     this.fileName = b.fileName;
     this.isFile = b.isFile;
     this.ownerName = b.ownerName;
+    this.compressionType = b.compressionType;
     this.tags = b.tags.build();
     this.expectedDataGeneration = b.expectedDataGeneration;
   }
@@ -189,6 +195,14 @@ public final class OmKeyInfo extends WithParentObjectId
 
   public String getOwnerName() {
     return ownerName;
+  }
+
+  public String getCompressionType() {
+    return compressionType;
+  }
+
+  public void setCompressionType(String compressionType) {
+    this.compressionType = compressionType;
   }
 
   public OmKeyInfo withCommittedKeyDeletedFlag(boolean val) {
@@ -464,6 +478,7 @@ public final class OmKeyInfo extends WithParentObjectId
         ", isFile=" + isFile +
         ", fileName='" + fileName + '\'' +
         ", acls=" + acls +
+        ", compressionType='" + compressionType + '\'' +
         '}';
   }
 
@@ -475,6 +490,7 @@ public final class OmKeyInfo extends WithParentObjectId
     private String bucketName;
     private String keyName;
     private String ownerName;
+    private String compressionType;
     private long dataSize;
     private final List<OmKeyLocationInfoGroup> omKeyLocationInfoGroups =
         new ArrayList<>();
@@ -503,6 +519,7 @@ public final class OmKeyInfo extends WithParentObjectId
       this.bucketName = obj.bucketName;
       this.keyName = obj.keyName;
       this.ownerName = obj.ownerName;
+      this.compressionType = obj.compressionType;
       this.dataSize = obj.dataSize;
       this.creationTime = obj.creationTime;
       this.modificationTime = obj.modificationTime;
@@ -554,6 +571,11 @@ public final class OmKeyInfo extends WithParentObjectId
 
     public Builder setOwnerName(String owner) {
       this.ownerName = owner;
+      return this;
+    }
+
+    public Builder setCompressionType(String compression) {
+      this.compressionType = compression;
       return this;
     }
 
@@ -805,6 +827,9 @@ public final class OmKeyInfo extends WithParentObjectId
     if (ownerName != null) {
       kb.setOwnerName(ownerName);
     }
+    if (compressionType != null) {
+      kb.setCompressionType(compressionType);
+    }
     return kb.build();
   }
 
@@ -859,6 +884,9 @@ public final class OmKeyInfo extends WithParentObjectId
     if (keyInfo.hasOwnerName()) {
       builder.setOwnerName(keyInfo.getOwnerName());
     }
+    if (keyInfo.hasCompressionType()) {
+      builder.setCompressionType(keyInfo.getCompressionType());
+    }
     return builder;
   }
 
@@ -896,6 +924,7 @@ public final class OmKeyInfo extends WithParentObjectId
         Objects.equals(getMetadata(), omKeyInfo.getMetadata()) &&
         Objects.equals(acls, omKeyInfo.acls) &&
         Objects.equals(getTags(), omKeyInfo.getTags()) &&
+        Objects.equals(compressionType, omKeyInfo.compressionType) &&
         getObjectID() == omKeyInfo.getObjectID();
 
     if (isEqual && checkUpdateID) {

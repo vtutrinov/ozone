@@ -654,7 +654,10 @@ public class RpcClient implements ClientProtocol {
         .setQuotaInBytes(bucketArgs.getQuotaInBytes())
         .setQuotaInNamespace(bucketArgs.getQuotaInNamespace())
         .setBucketLayout(bucketLayout)
-        .setOwner(owner);
+        .setOwner(owner)
+        // SDP (SDPOZN-1499): bucket level compression
+        .setCompressionType(OzoneCompressionCodecFactory.validateCompression(conf,
+            bucketArgs.getCompressionType()));
 
     if (bucketArgs.getAcls() != null) {
       builder.acls().addAll(bucketArgs.getAcls());
@@ -1338,6 +1341,7 @@ public class RpcClient implements ClientProtocol {
         .setBucketLayout(bucketInfo.getBucketLayout())
         .setOwner(bucketInfo.getOwner())
         .setDefaultReplicationConfig(bucketInfo.getDefaultReplicationConfig())
+        .setCompressionType(bucketInfo.getCompressionType())
         .build();
   }
 
@@ -1372,6 +1376,7 @@ public class RpcClient implements ClientProtocol {
                 .setOwner(bucket.getOwner())
                 .setDefaultReplicationConfig(
                     bucket.getDefaultReplicationConfig())
+                .setCompressionType(bucket.getCompressionType())
                 .build())
         .collect(Collectors.toList());
   }
@@ -1839,7 +1844,7 @@ public class RpcClient implements ClientProtocol {
         keyInfo.getFileEncryptionInfo(),
         () -> getInputStreamWithRetryFunction(keyInfo), keyInfo.isFile(),
         keyInfo.getOwnerName(), keyInfo.getTags(),
-        keyInfo.getGeneration()
+        keyInfo.getGeneration(), keyInfo.getCompressionType()
     );
   }
 

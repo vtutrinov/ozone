@@ -281,5 +281,8 @@ public class OMException extends IOException {
     ETAG_NOT_AVAILABLE,
 
     ATOMIC_WRITE_CONFLICT,
+
+    // SDP extensions: the order must match OzoneManagerProtocolProtos.Status
+    COMPRESSION_NOT_SUPPORTED,
   }
 }

@@ -48,6 +48,11 @@ public class OzoneKeyDetails extends OzoneKey {
   private final Long generation;
 
   /**
+   * SDP: compression codec of the key data (null if not compressed).
+   */
+  private final String compressionType;
+
+  /**
    * Constructs OzoneKeyDetails from OmKeyInfo.
    */
   @SuppressWarnings("parameternumber")
@@ -59,12 +64,30 @@ public class OzoneKeyDetails extends OzoneKey {
       FileEncryptionInfo feInfo,
       CheckedSupplier<OzoneInputStream, IOException> contentSupplier,
       boolean isFile, String owner, Map<String, String> tags, Long generation) {
+    this(volumeName, bucketName, keyName, size, creationTime, modificationTime, ozoneKeyLocations,
+        replicationConfig, metadata, feInfo, contentSupplier, isFile, owner, tags, generation, null);
+  }
+
+  /**
+   * Constructs OzoneKeyDetails from OmKeyInfo, including the SDP compression type.
+   */
+  @SuppressWarnings("parameternumber")
+  public OzoneKeyDetails(String volumeName, String bucketName, String keyName,
+      long size, long creationTime, long modificationTime,
+      List<OzoneKeyLocation> ozoneKeyLocations,
+      ReplicationConfig replicationConfig,
+      Map<String, String> metadata,
+      FileEncryptionInfo feInfo,
+      CheckedSupplier<OzoneInputStream, IOException> contentSupplier,
+      boolean isFile, String owner, Map<String, String> tags, Long generation,
+      String compressionType) {
     super(volumeName, bucketName, keyName, size, creationTime,
         modificationTime, replicationConfig, metadata, isFile, owner, tags);
     this.ozoneKeyLocations = ozoneKeyLocations;
     this.feInfo = feInfo;
     this.contentSupplier = contentSupplier;
     this.generation = generation;
+    this.compressionType = compressionType;
   }
 
   /**
@@ -97,6 +120,10 @@ public class OzoneKeyDetails extends OzoneKey {
 
   public Long getGeneration() {
     return generation;
+  }
+
+  public String getCompressionType() {
+    return compressionType;
   }
 
   /**

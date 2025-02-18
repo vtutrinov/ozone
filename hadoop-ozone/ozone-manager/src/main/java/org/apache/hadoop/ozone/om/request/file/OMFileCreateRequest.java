@@ -148,6 +148,10 @@ public class OMFileCreateRequest extends OMKeyRequest {
         .map(info -> info.getProtobuf(getOmRequest().getVersion()))
         .collect(Collectors.toList()));
 
+    if (bucketInfo.getCompressionType() != null) {
+      newKeyArgs.setCompressionType(bucketInfo.getCompressionType());
+    }
+
     generateRequiredEncryptionInfo(keyArgs, newKeyArgs, ozoneManager);
 
     KeyArgs resolvedArgs = resolveBucketAndCheckKeyAcls(newKeyArgs.build(),

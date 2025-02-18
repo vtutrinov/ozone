@@ -61,6 +61,11 @@ public final class BucketArgs {
    */
   private final String bucketEncryptionKey;
   private final DefaultReplicationConfig defaultReplicationConfig;
+
+  /**
+   * SDP: compression codec for keys in the bucket.
+   */
+  private final String compressionType;
   private final String sourceVolume;
   private final String sourceBucket;
 
@@ -87,6 +92,7 @@ public final class BucketArgs {
     bucketLayout = b.bucketLayout;
     owner = b.owner;
     defaultReplicationConfig = b.defaultReplicationConfig;
+    compressionType = b.compressionType;
   }
 
   /**
@@ -134,6 +140,10 @@ public final class BucketArgs {
    * Returns the bucket default replication config.
    * @return bucket's default Replication Config.
    */
+  public String getCompressionType() {
+    return compressionType;
+  }
+
   public DefaultReplicationConfig getDefaultReplicationConfig() {
     return this.defaultReplicationConfig;
   }
@@ -201,6 +211,7 @@ public final class BucketArgs {
     private BucketLayout bucketLayout;
     private String owner;
     private DefaultReplicationConfig defaultReplicationConfig;
+    private String compressionType;
 
     public Builder() {
       quotaInBytes = OzoneConsts.QUOTA_RESET;
@@ -265,6 +276,11 @@ public final class BucketArgs {
 
     public BucketArgs.Builder setOwner(String ownerName) {
       owner = ownerName;
+      return this;
+    }
+
+    public BucketArgs.Builder setCompressionType(String compression) {
+      this.compressionType = compression;
       return this;
     }
 

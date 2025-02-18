@@ -1051,6 +1051,7 @@ public abstract class OMKeyRequest extends OMClientRequest {
       builder.setParentObjectID(omPathInfoFSO.getLastKnownParentId());
     }
     builder.setObjectID(objectID);
+    builder.setCompressionType(keyArgs.getCompressionType());
     return builder.build();
   }
 

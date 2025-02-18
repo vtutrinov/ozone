@@ -107,6 +107,11 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
 
   private final String owner;
 
+  /**
+   * SDP: compression codec applied to keys created in this bucket (null if disabled).
+   */
+  private final String compressionType;
+
   private OmBucketInfo(Builder b) {
     super(b);
     this.volumeName = b.volumeName;
@@ -127,6 +132,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     this.quotaInNamespace = b.quotaInNamespace;
     this.bucketLayout = b.bucketLayout;
     this.owner = b.owner;
+    this.compressionType = b.compressionType;
     this.defaultReplicationConfig = b.defaultReplicationConfig;
   }
 
@@ -303,6 +309,10 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     return owner;
   }
 
+  public String getCompressionType() {
+    return compressionType;
+  }
+
   /**
    * Returns new builder class that builds a OmBucketInfo.
    *
@@ -341,6 +351,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     auditMap.put(OzoneConsts.SNAPSHOT_USED_BYTES, String.valueOf(this.snapshotUsedBytes));
     auditMap.put(OzoneConsts.SNAPSHOT_USED_NAMESPACE, String.valueOf(this.snapshotUsedNamespace));
     auditMap.put(OzoneConsts.OWNER, this.owner);
+    auditMap.put(OzoneConsts.BUCKET_COMPRESSION_TYPE, this.compressionType);
     auditMap.put(OzoneConsts.REPLICATION_TYPE,
         (this.defaultReplicationConfig != null) ?
             String.valueOf(this.defaultReplicationConfig.getType()) : null);
@@ -378,7 +389,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
         .setSnapshotUsedNamespace(snapshotUsedNamespace)
         .setBucketLayout(bucketLayout)
         .setOwner(owner)
-        .setDefaultReplicationConfig(defaultReplicationConfig);
+        .setDefaultReplicationConfig(defaultReplicationConfig)
+        .setCompressionType(compressionType);
   }
 
   /**
@@ -401,6 +413,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     private long quotaInNamespace = OzoneConsts.QUOTA_RESET;
     private BucketLayout bucketLayout = BucketLayout.DEFAULT;
     private String owner;
+    private String compressionType;
     private DefaultReplicationConfig defaultReplicationConfig;
     private long snapshotUsedBytes;
     private long snapshotUsedNamespace;
@@ -544,6 +557,11 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
       return this;
     }
 
+    public Builder setCompressionType(String compression) {
+      this.compressionType = compression;
+      return this;
+    }
+
     public Builder setDefaultReplicationConfig(
         DefaultReplicationConfig defaultReplConfig) {
       this.defaultReplicationConfig = defaultReplConfig;
@@ -603,6 +621,9 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     }
     if (owner != null) {
       bib.setOwner(owner);
+    }
+    if (compressionType != null) {
+      bib.setCompressionType(compressionType);
     }
     return bib.build();
   }
@@ -672,6 +693,9 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     }
     if (bucketInfo.hasOwner()) {
       obib.setOwner(bucketInfo.getOwner());
+    }
+    if (bucketInfo.hasCompressionType()) {
+      obib.setCompressionType(bucketInfo.getCompressionType());
     }
     return obib;
   }
@@ -745,7 +769,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
         Objects.equals(getMetadata(), that.getMetadata()) &&
         Objects.equals(bekInfo, that.bekInfo) &&
         Objects.equals(owner, that.owner) &&
-        Objects.equals(defaultReplicationConfig, that.defaultReplicationConfig);
+        Objects.equals(defaultReplicationConfig, that.defaultReplicationConfig) &&
+        Objects.equals(compressionType, that.compressionType);
   }
 
   @Override
@@ -777,6 +802,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
         ", bucketLayout=" + bucketLayout +
         ", owner=" + owner +
         ", defaultReplicationConfig=" + defaultReplicationConfig +
+        ", compressionType=" + compressionType +
         '}';
   }
 }

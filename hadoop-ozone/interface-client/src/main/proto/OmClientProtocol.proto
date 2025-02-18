@@ -579,6 +579,9 @@ enum Status {
     ETAG_NOT_AVAILABLE = 100;
 
     ATOMIC_WRITE_CONFLICT = 101;
+
+    // SDP extensions (1000+). The order must match OMException.ResultCodes.
+    COMPRESSION_NOT_SUPPORTED = 1001;
 }
 
 /**
@@ -787,6 +790,9 @@ message BucketInfo {
     optional hadoop.hdds.DefaultReplicationConfig defaultReplicationConfig = 20;
     optional uint64 snapshotUsedBytes = 21;
     optional uint64 snapshotUsedNamespace = 22;
+
+    // SDP extension (SDP numbers are kept in the 1000+ range)
+    optional string compressionType = 1001;
 }
 
 enum BucketLayoutProto {
@@ -1101,6 +1107,9 @@ message KeyArgs {
     // the given ETag for the operation to succeed. This is used for
     // S3 conditional writes with the If-Match header.
     optional string expectedETag = 24;
+
+    // SDP extension (SDP numbers are kept in the 1000+ range)
+    optional string compressionType = 1001;
 }
 
 message KeyLocation {
@@ -1192,6 +1201,9 @@ message KeyInfo {
   // This allows a key to be created an committed atomically if the original has not
   // been modified.
     optional uint64 expectedDataGeneration = 22;
+
+    // SDP extension (SDP numbers are kept in the 1000+ range)
+    optional string compressionType = 1001;
 }
 
 // KeyInfoProtoLight is a lightweight subset of KeyInfo message containing
