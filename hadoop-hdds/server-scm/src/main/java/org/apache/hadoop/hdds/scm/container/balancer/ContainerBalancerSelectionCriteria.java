@@ -24,6 +24,7 @@ import org.apache.hadoop.hdds.scm.container.ContainerInfo;
 import org.apache.hadoop.hdds.scm.container.ContainerManager;
 import org.apache.hadoop.hdds.scm.container.ContainerNotFoundException;
 import org.apache.hadoop.hdds.scm.container.ContainerReplica;
+import org.apache.hadoop.hdds.scm.container.replication.ContainerHealthResult;
 import org.apache.hadoop.hdds.scm.container.replication.ReplicationManager;
 import org.apache.hadoop.hdds.scm.node.NodeManager;
 import org.apache.hadoop.hdds.scm.node.states.NodeNotFoundException;
@@ -171,13 +172,22 @@ public class ContainerBalancerSelectionCriteria {
   private boolean shouldBeExcluded(ContainerID containerID,
       DatanodeDetails node, long sizeMovedAlready) {
     ContainerInfo container;
+    Set<ContainerReplica> replicas;
+    ContainerHealthResult healthResult;
     try {
       container = containerManager.getContainer(containerID);
+      replicas = containerManager.getContainerReplicas(containerID);
+      healthResult = replicationManager.getContainerReplicationHealth(container, replicas);
+      if (healthResult.getHealthState() != ContainerHealthResult.HealthState.HEALTHY) {
+        LOG.warn("Excluding container {} because it is not healthy : {}", containerID, healthResult.getHealthState());
+        return true;
+      }
     } catch (ContainerNotFoundException e) {
       LOG.warn("Could not find Container {} to check if it should be a " +
           "candidate container. Excluding it.", containerID);
       return true;
     }
+
     return !isContainerClosed(container, node) || isECContainer(container) ||
         isContainerReplicatingOrDeleting(containerID) ||
         !findSourceStrategy.canSizeLeaveSource(node, container.getUsedBytes())
