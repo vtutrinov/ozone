@@ -1,37 +1,36 @@
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with this
- * work for additional information regarding copyright ownership.  The ASF
- * licenses this file to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.apache.hadoop.ozone.metric;
-
-import org.apache.hadoop.metrics2.AbstractMetric;
-import org.apache.hadoop.metrics2.util.SampleStat;
-import org.apache.hadoop.ozone.metric.util.MetricsRecordBuilderImpl;
-import org.apache.hadoop.ozone.metrics.OzoneMutableStat;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.apache.hadoop.ozone.metric.util.MetricRecordBuilderFactory.getMetricsRecordBuilder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import org.apache.hadoop.metrics2.AbstractMetric;
+import org.apache.hadoop.metrics2.util.SampleStat;
+import org.apache.hadoop.ozone.metric.util.MetricsRecordBuilderImpl;
+import org.apache.hadoop.ozone.metrics.OzoneMutableStat;
+import org.junit.jupiter.api.Test;
 
 /**
  * Tests for OzoneMutableStat.
@@ -87,10 +86,10 @@ class OzoneMutableStatTest {
     metric.snapshot(metricsRecordBuilder);
     List<AbstractMetric> metrics = metricsRecordBuilder.metrics();
 
-    Number numberOfSamples = metrics.get(0).value();
+    Number numberOfSamples = getNumberOfSamples(metrics);
     assertEquals(10L, numberOfSamples);
 
-    Number averageTimeMetricValue = metrics.get(1).value();
+    Number averageTimeMetricValue = getAverageTime(metrics);
     assertEquals(5.5, averageTimeMetricValue);
   }
 
@@ -133,10 +132,10 @@ class OzoneMutableStatTest {
     metric.snapshot(metricsRecordBuilder);
     List<AbstractMetric> metrics = metricsRecordBuilder.metrics();
 
-    Number numberOfSamples = metrics.get(0).value();
+    Number numberOfSamples = getNumberOfSamples(metrics);
     assertEquals(15L, numberOfSamples);
 
-    Number averageTime = metrics.get(1).value();
+    Number averageTime = getAverageTime(metrics);
     assertEquals(20.0, averageTime);
   }
 
@@ -184,14 +183,14 @@ class OzoneMutableStatTest {
   }
 
   @Test
-  void testOzoneMutableStatMetricsSizeAfterInsertElements1() {
+  void testOzoneMutableStatEmptySnapshotTimeWithoutSnapshot() {
     OzoneMutableStat metric = createMutableStat();
     metric.setUpdateTimeStamp(true);
     assertEquals(0, metric.getSnapshotTimeStamp());
   }
 
   @Test
-  void testOzoneMutableStatMetricsSizeAfterInsertElements2() {
+  void testOzoneMutableStatSnapshotTimeStampAfterInsert() {
     OzoneMutableStat metric = createMutableStat();
     metric.setUpdateTimeStamp(true);
     MetricsRecordBuilderImpl metricsRecordBuilder = getMetricsRecordBuilder();
@@ -224,5 +223,13 @@ class OzoneMutableStatTest {
         "Test_description",
         "Test_sample_name",
         "Test_value_name");
+  }
+
+  private Number getNumberOfSamples(List<AbstractMetric> metrics) {
+    return metrics.get(0).value();
+  }
+
+  private Number getAverageTime(List<AbstractMetric> metrics) {
+    return metrics.get(1).value();
   }
 }
