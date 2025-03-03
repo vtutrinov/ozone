@@ -129,6 +129,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -141,6 +142,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import javax.management.ObjectName;
 import org.apache.commons.lang3.StringUtils;
@@ -209,6 +211,7 @@ import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.metrics2.util.MBeans;
+import org.apache.hadoop.ozone.BucketIterator;
 import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.OzoneAcl;
@@ -217,6 +220,7 @@ import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.OzoneFsServerDefaults;
 import org.apache.hadoop.ozone.OzoneManagerVersion;
 import org.apache.hadoop.ozone.OzoneSecurityUtil;
+import org.apache.hadoop.ozone.VolumeIterator;
 import org.apache.hadoop.ozone.audit.AuditAction;
 import org.apache.hadoop.ozone.audit.AuditLogger;
 import org.apache.hadoop.ozone.audit.AuditLoggerType;
@@ -269,6 +273,7 @@ import org.apache.hadoop.ozone.om.protocolPB.OMAdminProtocolPB;
 import org.apache.hadoop.ozone.om.protocolPB.OMInterServiceProtocolClientSideImpl;
 import org.apache.hadoop.ozone.om.protocolPB.OMInterServiceProtocolPB;
 import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerProtocolPB;
+import org.apache.hadoop.ozone.om.ratis.BucketStateMachine;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.ratis_snapshot.OmRatisSnapshotProvider;
@@ -324,11 +329,14 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.KMSUtil;
 import org.apache.hadoop.util.Time;
 import org.apache.ozone.graph.PrintableGraph;
+import org.apache.ratis.client.RaftClient;
 import org.apache.ratis.grpc.GrpcTlsConfig;
 import org.apache.ratis.proto.RaftProtos.RaftPeerRole;
+import org.apache.ratis.protocol.RaftGroup;
 import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.protocol.RaftPeer;
 import org.apache.ratis.protocol.RaftPeerId;
+import org.apache.ratis.protocol.exceptions.AlreadyClosedException;
 import org.apache.ratis.server.RaftServer;
 import org.apache.ratis.server.protocol.TermIndex;
 import org.apache.ratis.util.ExitUtils;
@@ -475,6 +483,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private boolean fsSnapshotEnabled;
 
   private String omHostName;
+  private BiFunction<RaftPeer, GrpcTlsConfig, RaftClient> raftClientProvider;
 
   /**
    * OM Startup mode.
@@ -507,6 +516,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   // instance creation every single time.
   private ReferenceCounted<IOmMetadataReader> rcOmMetadataReader;
   private OmSnapshotManager omSnapshotManager;
+
+  private final Map<String, RaftGroup> bucketRaftGroups = new HashMap();
+  private final Map<String, BucketStateMachine> bucketStateMachines = new HashMap();
 
   @SuppressWarnings("methodlength")
   private OzoneManager(OzoneConfiguration conf, StartupOption startupOption)
@@ -728,6 +740,69 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
     bucketUtilizationMetrics = BucketUtilizationMetrics.create(metadataManager);
     omHostName = HddsUtils.getHostName(conf);
+    raftClientProvider = RatisHelper.newRaftClient(configuration);
+  }
+
+  private void initializeBucketRaftGroups() throws IOException {
+    LOG.info("Initializing ozone buckets raft groups");
+    Iterator<OmVolumeArgs> volumeIterator = getVolumeIterator();
+    while (volumeIterator.hasNext()) {
+      OmVolumeArgs volume = volumeIterator.next();
+      Iterator<OmBucketInfo> bucketIterator = getBucketIterator(volume.getVolume());
+      while (bucketIterator.hasNext()) {
+        OmBucketInfo bucket = bucketIterator.next();
+        createRaftGroupForBucket(bucket.getBucketName());
+      }
+    }
+  }
+
+  private void createRaftGroupForBucket(String bucketName) {
+    LOG.info("Create raft group for bucket: {}", bucketName);
+    UUID raftGroupIdUUID = getRaftGroupIdFromOmServiceId(bucketName);
+    RaftGroupId raftGroupId = RaftGroupId.valueOf(raftGroupIdUUID);
+    RaftGroup bucketRaftGroup = RaftGroup.valueOf(raftGroupId, peerNodesMap.entrySet().stream().map(omPearDetails ->
+        RaftPeer.newBuilder().setId(RaftPeerId.valueOf(omPearDetails.getKey())).setAddress(omPearDetails.getValue()
+            .getRatisHostPortStr()).build()).collect(Collectors.toList()));
+    BucketStateMachine stateMachine = new BucketStateMachine(bucketName);
+
+    bucketRaftGroups.put(bucketName, bucketRaftGroup);
+    bucketStateMachines.put(bucketName, stateMachine);
+    try {
+      omRatisServer.addBucketGroup(bucketRaftGroup);
+      peerNodesMap.entrySet().stream().filter(entry -> !entry.getKey().equals(omRatisServer.getId()))
+          .forEach(stringOMNodeDetailsEntry -> {
+            RaftPeer raftPeer = RaftPeer.newBuilder().setId(RaftPeerId.valueOf(stringOMNodeDetailsEntry.getKey()))
+                .setAddress(stringOMNodeDetailsEntry.getValue().getRatisHostPortStr()).build();
+            try (RaftClient raftClient = raftClientProvider.apply(raftPeer,
+                new GrpcTlsConfig(getCertificateClient().getKeyManager(), getCertificateClient().getTrustManager(),
+                    true))) {
+              raftClient.getGroupManagementApi(raftPeer.getId()).add(bucketRaftGroup);
+            } catch (AlreadyClosedException ex) {
+              // do nothing
+            } catch (IOException ex) {
+              LOG.error("Failed to add peer {} to bucket group {}", stringOMNodeDetailsEntry.getKey(), bucketName, ex);
+            }
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private VolumeIterator<OmVolumeArgs> getVolumeIterator() {
+    return new VolumeIterator<>(null, null, null, 1024, (user, volPrefix1, prevVolume1, listSize1) ->
+        listAllVolumes(null, null, listSize1));
+  }
+
+  private BucketIterator<OmBucketInfo> getBucketIterator(String volume) {
+    return new BucketIterator<>(volume, null, null, false, 1024,
+        (volName, startBucket, prevBucket, listSize, hasSnapshot) ->
+        {
+          try {
+            return listBuckets(volName, startBucket, prevBucket, listSize, hasSnapshot);
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        });
   }
 
   public boolean isStopped() {
@@ -1751,6 +1826,16 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     if (omState == State.BOOTSTRAPPING) {
       bootstrap(omNodeDetails);
     }
+
+    while (!isLeaderReady()) {
+      try {
+        Thread.sleep(1000);
+      } catch (InterruptedException e) {
+        LOG.error("Interrupted while waiting for leader to be ready.", e);
+        Thread.currentThread().interrupt();
+      }
+    }
+    initializeBucketRaftGroups();
 
     omState = State.RUNNING;
     auditMap.put("NewOmState", omState.name());

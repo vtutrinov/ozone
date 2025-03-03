@@ -74,6 +74,7 @@ import org.apache.ratis.grpc.GrpcTlsConfig;
 import org.apache.ratis.netty.NettyConfigKeys;
 import org.apache.ratis.protocol.ClientId;
 import org.apache.ratis.protocol.ClientInvocationId;
+import org.apache.ratis.protocol.GroupManagementRequest;
 import org.apache.ratis.protocol.Message;
 import org.apache.ratis.protocol.RaftClientReply;
 import org.apache.ratis.protocol.RaftClientRequest;
@@ -175,7 +176,7 @@ public final class OzoneManagerRatisServer {
         .setGroup(this.raftGroup)
         .setProperties(serverProperties)
         .setParameters(parameters)
-        .setStateMachine(omStateMachine)
+        .setStateMachine(omStateMachine) // TODO stateMachineRegistry instead of a single stateMachine
         .setOption(RaftStorage.StartupOption.RECOVER)
         .build();
     this.serverDivision = MemoizedSupplier.valueOf(() -> {
@@ -186,6 +187,28 @@ public final class OzoneManagerRatisServer {
       }
     });
     this.perfMetrics = om.getPerfMetrics();
+  }
+
+  public void addBucketGroup(RaftGroup bucketRaftGroup) throws IOException {
+    GroupManagementRequest request = GroupManagementRequest.newAdd(clientId, server.getId(), nextCallId(),
+        bucketRaftGroup);
+    RaftClientReply reply;
+    LOG.info("Create bucket raft group: {}", bucketRaftGroup.getGroupId());
+    try {
+      reply = server.groupManagement(request);
+    } catch (Exception ex) {
+      throw new IOException(ex.getMessage(), ex);
+    }
+    NotLeaderException notLeaderException = reply.getNotLeaderException();
+    if (notLeaderException != null) {
+      throw notLeaderException;
+    }
+    StateMachineException stateMachineException =
+        reply.getStateMachineException();
+    if (stateMachineException != null) {
+      throw stateMachineException;
+    }
+    LOG.info("Create raft group {} successfully", bucketRaftGroup.getGroupId());
   }
 
   /**
@@ -894,4 +917,9 @@ public final class OzoneManagerRatisServer {
     GrpcTlsConfig config = createServerTlsConfig(conf, caClient);
     return config == null ? null : RatisHelper.setServerTlsConf(config);
   }
+
+  public String getId() {
+    return raftPeerId.toString();
+  }
+
 }

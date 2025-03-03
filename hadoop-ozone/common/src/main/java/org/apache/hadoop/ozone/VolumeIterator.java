@@ -17,6 +17,7 @@
 
 package org.apache.hadoop.ozone;
 
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -83,7 +84,7 @@ public class VolumeIterator<T extends Volume> implements Iterator<T> {
   @FunctionalInterface
   public interface VolumeListProvider<T> {
 
-    List<T> getList(String user, String volPrefix, String prevVolume, int listSize);
+    List<T> getList(String user, String volPrefix, String prevVolume, int listSize) throws IOException;
 
   }
 
