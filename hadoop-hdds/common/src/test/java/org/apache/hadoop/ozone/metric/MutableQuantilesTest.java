@@ -99,22 +99,22 @@ class MutableQuantilesTest {
       List<AbstractMetric> metrics = metricsRecordBuilder.metrics();
       assertFalse(metrics.isEmpty());
 
-      Number sampleNumbers = metrics.get(0).value();
+      Number sampleNumbers = getSampleNumbers(metrics);
       assertEquals(10L, sampleNumbers);
 
-      Number metrics50thPercentileValue = metrics.get(1).value();
+      Number metrics50thPercentileValue = get50thPercentile(metrics);
       assertEquals(4L, metrics50thPercentileValue);
 
-      Number metrics75thPercentileValue = metrics.get(2).value();
+      Number metrics75thPercentileValue = get75thPercentile(metrics);
       assertEquals(6L, metrics75thPercentileValue);
 
-      Number metrics90thPercentileValue = metrics.get(3).value();
+      Number metrics90thPercentileValue = get90thPercentile(metrics);
       assertEquals(8L, metrics90thPercentileValue);
 
-      Number metrics95thPercentileValue = metrics.get(4).value();
+      Number metrics95thPercentileValue = get95thPercentile(metrics);
       assertEquals(8L, metrics95thPercentileValue);
 
-      Number metrics99thPercentileValue = metrics.get(5).value();
+      Number metrics99thPercentileValue = get99thPercentile(metrics);
       assertEquals(8L, metrics99thPercentileValue);
     });
     quantiles.stop();
@@ -132,5 +132,29 @@ class MutableQuantilesTest {
     for (int i = 0; i < 10; i++) {
       metric.add(i);
     }
+  }
+
+  private Number getSampleNumbers(List<AbstractMetric> metrics) {
+    return metrics.get(0).value();
+  }
+
+  private Number get50thPercentile(List<AbstractMetric> metrics) {
+    return metrics.get(1).value();
+  }
+
+  private Number get75thPercentile(List<AbstractMetric> metrics) {
+    return metrics.get(2).value();
+  }
+
+  private Number get90thPercentile(List<AbstractMetric> metrics) {
+    return metrics.get(3).value();
+  }
+
+  private Number get95thPercentile(List<AbstractMetric> metrics) {
+    return metrics.get(4).value();
+  }
+
+  private Number get99thPercentile(List<AbstractMetric> metrics) {
+    return metrics.get(5).value();
   }
 }

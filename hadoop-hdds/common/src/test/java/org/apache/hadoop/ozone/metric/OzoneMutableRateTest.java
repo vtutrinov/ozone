@@ -62,7 +62,7 @@ class OzoneMutableRateTest {
   }
 
   @Test
-  void testOzoneMutableStatMetricsNamesAfterInsertElementsExtended1() {
+  void testOzoneMutableStatMetricsNamesAfterInsertElementsExtended() {
     Set<String> expectedMetricNames = Stream.of(
             "Test_nameAvgTime",
             "Test_nameStdevTime",
@@ -97,26 +97,26 @@ class OzoneMutableRateTest {
 
     List<AbstractMetric> metrics = metricsRecordBuilder.metrics();
 
-    Number numberOfSamples = metrics.get(0).value();
+    Number numberOfSamples = getNumberOfSamples(metrics);
     assertEquals(10L, numberOfSamples);
 
-    Number averageTimeMetricValue = metrics.get(1).value();
-    assertEquals(5.5, averageTimeMetricValue);
+    Number averageTimeMetric = getAverageTime(metrics);
+    assertEquals(5.5, averageTimeMetric);
 
-    Number intervalMinTimeMetricValue = metrics.get(3).value();
-    assertEquals(1.0, intervalMinTimeMetricValue);
+    Number intervalMinTimeMetric = getIntervalMinTimeMetric(metrics);
+    assertEquals(1.0, intervalMinTimeMetric);
 
-    Number intervalMaxTimeMetricValue = metrics.get(4).value();
-    assertEquals(10.0, intervalMaxTimeMetricValue);
+    Number intervalMaxTimeMetric = getIntervalMaxTimeMetric(metrics);
+    assertEquals(10.0, intervalMaxTimeMetric);
 
-    Number minTimeMetricValue = metrics.get(5).value();
-    assertEquals(1.0, minTimeMetricValue);
+    Number minTimeMetric = getMinTimeMetric(metrics);
+    assertEquals(1.0, minTimeMetric);
 
-    Number maxTimeMetricValue = metrics.get(6).value();
-    assertEquals(10.0, maxTimeMetricValue);
+    Number maxTimeMetric = getMaxTimeMetric(metrics);
+    assertEquals(10.0, maxTimeMetric);
 
-    Number intervalNumberMetricValue = metrics.get(7).value();
-    assertEquals(10L, intervalNumberMetricValue);
+    Number intervalNumberMetric = getIntervalNumberMetricValue(metrics);
+    assertEquals(10L, intervalNumberMetric);
   }
 
   @Test
@@ -169,25 +169,25 @@ class OzoneMutableRateTest {
     metric.snapshot(metricsRecordBuilder);
     List<AbstractMetric> metrics = metricsRecordBuilder.metrics();
 
-    Number numberOfSamples = metrics.get(0).value();
+    Number numberOfSamples = getNumberOfSamples(metrics);
     assertEquals(15L, numberOfSamples);
 
-    Number averageTime = metrics.get(1).value();
+    Number averageTime = getAverageTime(metrics);
     assertEquals(20.0, averageTime);
 
-    float intervalMinTimeMetricValue = Float.parseFloat(metrics.get(3).value().toString());
+    float intervalMinTimeMetricValue = Float.parseFloat(getIntervalMinTimeMetric(metrics).toString());
     assertEquals(Float.MAX_VALUE, intervalMinTimeMetricValue);
 
-    float intervalMaxTimeMetricValue = Float.parseFloat(metrics.get(4).value().toString());
+    float intervalMaxTimeMetricValue = Float.parseFloat(getIntervalMaxTimeMetric(metrics).toString());
     assertEquals(Float.MIN_VALUE, intervalMaxTimeMetricValue);
 
-    float minTimeMetricValue = Float.parseFloat(metrics.get(5).value().toString());
+    float minTimeMetricValue = Float.parseFloat(getMinTimeMetric(metrics).toString());
     assertEquals(Float.MAX_VALUE, minTimeMetricValue);
 
-    float maxTimeMetricValue = Float.parseFloat(metrics.get(6).value().toString());
+    float maxTimeMetricValue = Float.parseFloat(getMaxTimeMetric(metrics).toString());
     assertEquals(Float.MIN_VALUE, maxTimeMetricValue);
 
-    Number intervalNumberMetricValue = metrics.get(7).value();
+    Number intervalNumberMetricValue = getIntervalNumberMetricValue(metrics);
     assertEquals(15L, intervalNumberMetricValue);
   }
 
@@ -242,10 +242,10 @@ class OzoneMutableRateTest {
     metric.snapshot(metricsRecordBuilder);
     List<AbstractMetric> metrics = metricsRecordBuilder.metrics();
 
-    Number numberOfSamples = metrics.get(0).value();
+    Number numberOfSamples = getNumberOfSamples(metrics);
     assertEquals(10L, numberOfSamples);
 
-    Number averageTimeMetricValue = metrics.get(1).value();
+    Number averageTimeMetricValue = getAverageTime(metrics);
     assertEquals(5.5, averageTimeMetricValue);
   }
 
@@ -292,10 +292,10 @@ class OzoneMutableRateTest {
     metric.snapshot(metricsRecordBuilder);
     List<AbstractMetric> metrics = metricsRecordBuilder.metrics();
 
-    Number numberOfSamples = metrics.get(0).value();
+    Number numberOfSamples = getNumberOfSamples(metrics);
     assertEquals(15L, numberOfSamples);
 
-    Number averageTime = metrics.get(1).value();
+    Number averageTime = getAverageTime(metrics);
     assertEquals(20.0, averageTime);
   }
 
@@ -343,14 +343,14 @@ class OzoneMutableRateTest {
   }
 
   @Test
-  void testOzoneMutableStatMetricsSizeAfterInsertElements1() {
+  void testOzoneMutableRateEmptySnapshotTimeWithoutSnapshot() {
     OzoneMutableRate metric = createMutableRate();
     metric.setUpdateTimeStamp(true);
     assertEquals(0, metric.getSnapshotTimeStamp());
   }
 
   @Test
-  void testOzoneMutableStatMetricsSizeAfterInsertElements2() {
+  void testOzoneMutableRateSnapshotTimeStampAfterInsert() {
     OzoneMutableRate metric = createMutableRate();
     metric.setUpdateTimeStamp(true);
     MetricsRecordBuilderImpl metricsRecordBuilder = getMetricsRecordBuilder();
@@ -382,5 +382,33 @@ class OzoneMutableRateTest {
         "Test_name",
         "Test_description",
         false);
+  }
+
+  private Number getNumberOfSamples(List<AbstractMetric> metrics) {
+    return metrics.get(0).value();
+  }
+
+  private Number getAverageTime(List<AbstractMetric> metrics) {
+    return metrics.get(1).value();
+  }
+
+  private Number getIntervalMinTimeMetric(List<AbstractMetric> metrics) {
+    return metrics.get(3).value();
+  }
+
+  private Number getIntervalMaxTimeMetric(List<AbstractMetric> metrics) {
+    return metrics.get(4).value();
+  }
+
+  private Number getMinTimeMetric(List<AbstractMetric> metrics) {
+    return metrics.get(5).value();
+  }
+
+  private Number getMaxTimeMetric(List<AbstractMetric> metrics) {
+    return metrics.get(6).value();
+  }
+
+  private Number getIntervalNumberMetricValue(List<AbstractMetric> metrics) {
+    return metrics.get(7).value();
   }
 }

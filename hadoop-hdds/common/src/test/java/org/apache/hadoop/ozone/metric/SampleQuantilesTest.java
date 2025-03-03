@@ -40,7 +40,7 @@ class SampleQuantilesTest {
       new Quantile(0.95, 0.005), new Quantile(0.99, 0.001)};
 
   @Test
-  void testSnapshotEmptySnaphotReturnEmptyMap() {
+  void testSnapshotEmptySnapshotReturnEmptyMap() {
     OzoneSampleQuantiles quantiles = new OzoneSampleQuantiles(QUANTILES);
 
     Map<Quantile, Long> snapshot = quantiles.snapshot();
