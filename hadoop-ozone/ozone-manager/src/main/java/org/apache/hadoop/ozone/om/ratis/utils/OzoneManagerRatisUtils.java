@@ -57,6 +57,7 @@ import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketSetAclRequest;
 import org.apache.hadoop.ozone.om.request.file.OMRecoverLeaseRequest;
 import org.apache.hadoop.ozone.om.request.key.OMDirectoriesPurgeRequestWithFSO;
 import org.apache.hadoop.ozone.om.request.key.OMKeyPurgeRequest;
+import org.apache.hadoop.ozone.om.request.key.OMKeyRequest;
 import org.apache.hadoop.ozone.om.request.key.OMOpenKeysDeleteRequest;
 import org.apache.hadoop.ozone.om.request.key.acl.OMKeyAddAclRequest;
 import org.apache.hadoop.ozone.om.request.key.acl.OMKeyAddAclRequestWithFSO;
@@ -352,8 +353,12 @@ public final class OzoneManagerRatisUtils {
           + cmdType, OMException.ResultCodes.INVALID_REQUEST);
     }
 
-    return BucketLayoutAwareOMKeyRequestFactory.createRequest(
+    OMKeyRequest request = BucketLayoutAwareOMKeyRequestFactory.createRequest(
         volumeName, bucketName, omRequest, ozoneManager.getMetadataManager());
+    if (!bucketName.isEmpty()) {
+      request.setWriteReqBucketName(bucketName);
+    }
+    return request;
   }
 
   private static OMClientRequest getOMAclRequest(OMRequest omRequest,
@@ -516,7 +521,7 @@ public final class OzoneManagerRatisUtils {
   }
 
   public static OzoneManagerProtocolProtos.OMResponse submitRequest(
-      OzoneManager om, OMRequest omRequest, ClientId clientId, long callId) throws ServiceException {
-    return om.getOmRatisServer().submitRequest(omRequest, clientId, callId);
+      OzoneManager om, OMRequest omRequest, ClientId clientId, long callId, String raftGroupToHandleRequest) throws ServiceException {
+    return om.getOmRatisServer().submitRequest(omRequest, clientId, callId, raftGroupToHandleRequest);
   }
 }

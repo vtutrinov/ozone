@@ -54,6 +54,7 @@ import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
 import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.ratis.protocol.ClientId;
@@ -189,7 +190,8 @@ public class QuotaRepairTask {
   private OzoneManagerProtocolProtos.OMResponse submitRequest(
       OzoneManagerProtocolProtos.OMRequest omRequest, ClientId clientId) throws Exception {
     try {
-      return OzoneManagerRatisUtils.submitRequest(om, omRequest, clientId, RUN_CNT.getAndIncrement());
+      return OzoneManagerRatisUtils.submitRequest(om, omRequest, clientId, RUN_CNT.getAndIncrement(),
+          OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
     } catch (ServiceException e) {
       LOG.error("repair quota count " + omRequest.getCmdType() + " request failed.", e);
       throw e;

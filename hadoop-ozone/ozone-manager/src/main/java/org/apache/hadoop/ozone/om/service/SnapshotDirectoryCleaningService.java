@@ -54,6 +54,7 @@ import org.apache.hadoop.ozone.om.helpers.OmDirectoryInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyLocationInfoGroup;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.request.file.OMFileRequest;
 import org.apache.hadoop.ozone.om.snapshot.ReferenceCounted;
@@ -434,7 +435,8 @@ public class SnapshotDirectoryCleaningService
 
   public void submitRequest(OMRequest omRequest, ClientId clientId) {
     try {
-      OzoneManagerRatisUtils.submitRequest(getOzoneManager(), omRequest, clientId, getRunCount().get());
+      OzoneManagerRatisUtils.submitRequest(getOzoneManager(), omRequest, clientId, getRunCount().get(),
+          OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
     } catch (ServiceException e) {
       LOG.error("Snapshot deep cleaning request failed. " +
           "Will retry at next run.", e);

@@ -89,6 +89,7 @@ import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.TOKE
 import static org.apache.hadoop.ozone.om.lock.OzoneManagerLock.Resource.BUCKET_LOCK;
 import static org.apache.hadoop.ozone.om.lock.OzoneManagerLock.Resource.VOLUME_LOCK;
 import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.LEADER_AND_READY;
+import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.createRaftPeerList;
 import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.getRaftGroupIdFromOmServiceId;
 import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.DEFAULT_SECRET_STORAGE_TYPE;
 import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SECRET_STORAGE_TYPE;
@@ -337,8 +338,10 @@ import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.protocol.RaftPeer;
 import org.apache.ratis.protocol.RaftPeerId;
 import org.apache.ratis.protocol.exceptions.AlreadyClosedException;
+import org.apache.ratis.protocol.exceptions.AlreadyExistsException;
 import org.apache.ratis.server.RaftServer;
 import org.apache.ratis.server.protocol.TermIndex;
+import org.apache.ratis.statemachine.StateMachine;
 import org.apache.ratis.util.ExitUtils;
 import org.apache.ratis.util.FileUtils;
 import org.apache.ratis.util.LifeCycle;
@@ -517,8 +520,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private ReferenceCounted<IOmMetadataReader> rcOmMetadataReader;
   private OmSnapshotManager omSnapshotManager;
 
-  private final Map<String, RaftGroup> bucketRaftGroups = new HashMap();
-  private final Map<String, BucketStateMachine> bucketStateMachines = new HashMap();
+  private final Map<RaftGroupId, RaftGroup> omRaftGroups = new HashMap();
+  private final Map<RaftGroupId, StateMachine> omStateMachines = new HashMap<>();
 
   @SuppressWarnings("methodlength")
   private OzoneManager(OzoneConfiguration conf, StartupOption startupOption)
@@ -751,41 +754,66 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       Iterator<OmBucketInfo> bucketIterator = getBucketIterator(volume.getVolume());
       while (bucketIterator.hasNext()) {
         OmBucketInfo bucket = bucketIterator.next();
-        createRaftGroupForBucket(bucket.getBucketName());
+        initBucketRaftGroupAndStateMachine(bucket.getBucketName());
       }
     }
   }
 
-  private void createRaftGroupForBucket(String bucketName) {
+  public Pair<RaftGroup, Boolean> initBucketRaftGroupAndStateMachine(String bucketName) {
+    RaftGroup bucketRaftGroup;
+    if (omRaftGroups.containsKey(bucketName)) {
+      return Pair.of(omRaftGroups.get(bucketName), false);
+    }
     LOG.info("Create raft group for bucket: {}", bucketName);
     UUID raftGroupIdUUID = getRaftGroupIdFromOmServiceId(bucketName);
+    LOG.info("Bucket raft group with raftGroupIdUUID: {}", raftGroupIdUUID);
     RaftGroupId raftGroupId = RaftGroupId.valueOf(raftGroupIdUUID);
-    RaftGroup bucketRaftGroup = RaftGroup.valueOf(raftGroupId, peerNodesMap.entrySet().stream().map(omPearDetails ->
-        RaftPeer.newBuilder().setId(RaftPeerId.valueOf(omPearDetails.getKey())).setAddress(omPearDetails.getValue()
-            .getRatisHostPortStr()).build()).collect(Collectors.toList()));
-    BucketStateMachine stateMachine = new BucketStateMachine(bucketName);
+    LOG.info("Bucket raft group with raftGroupId: {}", raftGroupId);
+    bucketRaftGroup = RaftGroup.valueOf(raftGroupId, createRaftPeerList(omNodeDetails, peerNodesMap, false).getRight());
+    BucketStateMachine stateMachine = new BucketStateMachine(bucketName, this);
 
-    bucketRaftGroups.put(bucketName, bucketRaftGroup);
-    bucketStateMachines.put(bucketName, stateMachine);
+    omRaftGroups.put(raftGroupId, bucketRaftGroup);
+    omStateMachines.put(raftGroupId, stateMachine);
+    return Pair.of(bucketRaftGroup, true);
+  }
+
+  public void createRaftGroupForBucket(String bucketName) {
+    Pair<RaftGroup, Boolean> raftGroupBooleanPair = initBucketRaftGroupAndStateMachine(bucketName);
+    if (!raftGroupBooleanPair.getValue()) {
+      return;
+    }
     try {
-      omRatisServer.addBucketGroup(bucketRaftGroup);
+      omRatisServer.addBucketGroup(raftGroupBooleanPair.getKey());
       peerNodesMap.entrySet().stream().filter(entry -> !entry.getKey().equals(omRatisServer.getId()))
           .forEach(stringOMNodeDetailsEntry -> {
             RaftPeer raftPeer = RaftPeer.newBuilder().setId(RaftPeerId.valueOf(stringOMNodeDetailsEntry.getKey()))
                 .setAddress(stringOMNodeDetailsEntry.getValue().getRatisHostPortStr()).build();
-            try (RaftClient raftClient = raftClientProvider.apply(raftPeer,
-                new GrpcTlsConfig(getCertificateClient().getKeyManager(), getCertificateClient().getTrustManager(),
-                    true))) {
-              raftClient.getGroupManagementApi(raftPeer.getId()).add(bucketRaftGroup);
+            try (RaftClient raftClient = raftClientProvider.apply(raftPeer, null)) {
+              raftClient.getGroupManagementApi(raftPeer.getId()).add(raftGroupBooleanPair.getKey());
             } catch (AlreadyClosedException ex) {
               // do nothing
             } catch (IOException ex) {
               LOG.error("Failed to add peer {} to bucket group {}", stringOMNodeDetailsEntry.getKey(), bucketName, ex);
             }
           });
+    } catch (AlreadyExistsException ex) {
+      // do nothing
     } catch (IOException e) {
-      throw new RuntimeException(e);
+      if (e.getCause() instanceof AlreadyExistsException) {
+        // do nothing
+      } else {
+        LOG.error("Failed to create bucket raft group for bucket: {}", bucketName, e);
+        throw new RuntimeException(e);
+      }
     }
+  }
+
+  public Map<RaftGroupId, StateMachine> getStateMachines() {
+    return omStateMachines;
+  }
+
+  public Map<RaftGroupId, RaftGroup> getOmRaftGroups() {
+    return omRaftGroups;
   }
 
   private VolumeIterator<OmVolumeArgs> getVolumeIterator() {
@@ -1583,26 +1611,26 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     // om service id.
 
     // This will help to catch if some one has changed service id later on.
-    File[] ratisDirFiles = omRatisDir.listFiles();
-    if (ratisDirFiles != null) {
-      for (File ratisGroupDir : ratisDirFiles) {
-        if (ratisGroupDir.isDirectory()) {
-          if (!ratisGroupDir.getName().equals(groupIDfromServiceID)) {
-            throw new IOException("Ratis group Dir on disk "
-                + ratisGroupDir.getName() + " does not match with RaftGroupID"
-                + groupIDfromServiceID + " generated from service id "
-                + getOMServiceId() + ". Looks like there is a change to " +
-                OMConfigKeys.OZONE_OM_SERVICE_IDS_KEY + " value after the " +
-                "cluster is setup. Currently change to this value is not " +
-                "supported.");
-          }
-        } else {
-          LOG.warn("Unknown file {} exists in ratis storage dir {}."
-              + " It is recommended not to share the ratis storage dir.",
-              ratisGroupDir, omRatisDir);
-        }
-      }
-    }
+//    File[] ratisDirFiles = omRatisDir.listFiles();
+//    if (ratisDirFiles != null) {
+//      for (File ratisGroupDir : ratisDirFiles) {
+//        if (ratisGroupDir.isDirectory()) {
+//          if (!ratisGroupDir.getName().equals(groupIDfromServiceID)) {
+//            throw new IOException("Ratis group Dir on disk "
+//                + ratisGroupDir.getName() + " does not match with RaftGroupID"
+//                + groupIDfromServiceID + " generated from service id "
+//                + getOMServiceId() + ". Looks like there is a change to " +
+//                OMConfigKeys.OZONE_OM_SERVICE_IDS_KEY + " value after the " +
+//                "cluster is setup. Currently change to this value is not " +
+//                "supported.");
+//          }
+//        } else {
+//          LOG.warn("Unknown file {} exists in ratis storage dir {}."
+//              + " It is recommended not to share the ratis storage dir.",
+//              ratisGroupDir, omRatisDir);
+//        }
+//      }
+//    }
 
     if (peerNodesMap != null && !peerNodesMap.isEmpty()) {
       this.omRatisSnapshotProvider = new OmRatisSnapshotProvider(
@@ -1756,6 +1784,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     metadataManager.start(configuration);
 
     startSecretManagerIfNecessary();
+
+//    initializeBucketRaftGroups();
+
     // Start Ratis services
     if (omRatisServer != null) {
       omRatisServer.start();
@@ -1826,16 +1857,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     if (omState == State.BOOTSTRAPPING) {
       bootstrap(omNodeDetails);
     }
-
-    while (!isLeaderReady()) {
-      try {
-        Thread.sleep(1000);
-      } catch (InterruptedException e) {
-        LOG.error("Interrupted while waiting for leader to be ready.", e);
-        Thread.currentThread().interrupt();
-      }
-    }
-    initializeBucketRaftGroups();
 
     omState = State.RUNNING;
     auditMap.put("NewOmState", omState.name());
@@ -2283,6 +2304,25 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   public long getObjectIdFromTxId(long trxnId) {
     return OmUtils.getObjectIdFromTxId(metadataManager.getOmEpoch(),
         trxnId);
+  }
+
+  public StateMachine getStateMachineRegistry(RaftGroupId raftGroupId) {
+    StateMachine stateMachine = omStateMachines.get(raftGroupId);
+    if (stateMachine == null) {
+      stateMachine = new BucketStateMachine(UUID.randomUUID().toString(), this);
+
+      RaftGroup bucketRaftGroup = RaftGroup.valueOf(raftGroupId, peerNodesMap.entrySet().stream().map(omPearDetails ->
+          RaftPeer.newBuilder().setId(RaftPeerId.valueOf(omPearDetails.getKey())).setAddress(omPearDetails.getValue()
+              .getRatisHostPortStr()).build()).collect(Collectors.toList()));
+
+      omRaftGroups.put(raftGroupId, bucketRaftGroup);
+      omStateMachines.put(raftGroupId, stateMachine);
+    }
+    return stateMachine;
+  }
+
+  public String getStateMachineThreadPrefix() {
+    return threadPrefix;
   }
 
   /**

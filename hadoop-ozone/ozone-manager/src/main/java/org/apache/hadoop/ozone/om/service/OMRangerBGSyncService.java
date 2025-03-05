@@ -58,6 +58,7 @@ import org.apache.hadoop.ozone.om.multitenant.InMemoryMultiTenantAccessControlle
 import org.apache.hadoop.ozone.om.multitenant.MultiTenantAccessController;
 import org.apache.hadoop.ozone.om.multitenant.MultiTenantAccessController.Policy;
 import org.apache.hadoop.ozone.om.multitenant.MultiTenantAccessController.Role;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.SetRangerServiceVersionRequest;
@@ -385,7 +386,8 @@ public class OMRangerBGSyncService extends BackgroundService {
         .build();
 
     try {
-      OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, CLIENT_ID, runCount.get());
+      OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, CLIENT_ID, runCount.get(),
+          OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
     } catch (ServiceException e) {
       LOG.error("SetRangerServiceVersion request failed. "
           + "Will retry at next run.", e);

@@ -54,6 +54,7 @@ import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyLocationInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyLocationInfoGroup;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.snapshot.ReferenceCounted;
 import org.apache.hadoop.ozone.om.snapshot.SnapshotUtils;
@@ -295,7 +296,8 @@ public class SnapshotDeletingService extends AbstractKeyDeletingService {
 
     private void submitRequest(OMRequest omRequest) {
       try {
-        OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, getRunCount().get());
+        OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, getRunCount().get(),
+            OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
       } catch (ServiceException e) {
         LOG.error("Request: {} fired by SnapshotDeletingService failed. Will retry in the next run", omRequest, e);
       }

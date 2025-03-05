@@ -52,6 +52,7 @@ import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.RepeatedOmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeletedKeys;
@@ -216,7 +217,8 @@ public abstract class AbstractKeyDeletingService extends BackgroundService
 
     // Submit PurgeKeys request to OM
     try {
-      OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, runCount.get());
+      OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, runCount.get(),
+          OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
     } catch (ServiceException e) {
       LOG.error("PurgeKey request failed. Will retry at next run.", e);
       return 0;
@@ -271,7 +273,8 @@ public abstract class AbstractKeyDeletingService extends BackgroundService
 
     // Submit Purge paths request to OM
     try {
-      OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, rnCnt);
+      OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, rnCnt,
+          OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
     } catch (ServiceException e) {
       LOG.error("PurgePaths request failed. Will retry at next run.", e);
     }

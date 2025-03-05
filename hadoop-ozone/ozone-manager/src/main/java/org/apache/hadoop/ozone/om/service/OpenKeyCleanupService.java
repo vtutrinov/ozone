@@ -42,6 +42,7 @@ import org.apache.hadoop.ozone.om.KeyManager;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CommitKeyRequest;
@@ -273,7 +274,8 @@ public class OpenKeyCleanupService extends BackgroundService {
 
     private OMResponse submitRequest(OMRequest omRequest) {
       try {
-        return OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, callId.incrementAndGet());
+        return OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, callId.incrementAndGet(),
+            OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
       } catch (ServiceException e) {
         LOG.error("Open key " + omRequest.getCmdType()
             + " request failed. Will retry at next run.", e);

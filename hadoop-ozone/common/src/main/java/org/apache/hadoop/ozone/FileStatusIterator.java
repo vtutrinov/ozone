@@ -56,7 +56,9 @@ public class FileStatusIterator implements Iterator<OzoneFileStatusLight> {
       startPath = currentFileStatus.getKeyInfo().getKeyName();
       List<OzoneFileStatusLight> nextListOfFiles = getNextListOfFiles();
       currentIterator = nextListOfFiles.iterator();
-      currentIterator.next();
+      if (!nextListOfFiles.isEmpty()) {
+        currentIterator.next();
+      }
     }
     return currentIterator.hasNext();
   }

@@ -78,6 +78,7 @@ public abstract class OMClientRequest implements RequestAuditor {
   private InetAddress inetAddress;
   private final OMLockDetails omLockDetails = new OMLockDetails();
   private final OMAuditLogger.Builder auditBuilder = OMAuditLogger.newBuilder();
+  private String bucketName;
 
   public OMAuditLogger.Builder getAuditBuilder() {
     return auditBuilder;
@@ -590,4 +591,13 @@ public abstract class OMClientRequest implements RequestAuditor {
   public void mergeOmLockDetails(OMLockDetails details) {
     omLockDetails.merge(details);
   }
+
+  public String getWriteReqBucketName() {
+    return bucketName;
+  }
+
+  public void setWriteReqBucketName(String bucketName) {
+    this.bucketName = bucketName;
+  }
+
 }

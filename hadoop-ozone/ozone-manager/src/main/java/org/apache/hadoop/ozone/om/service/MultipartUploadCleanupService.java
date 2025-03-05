@@ -33,6 +33,7 @@ import org.apache.hadoop.hdds.utils.BackgroundTaskResult;
 import org.apache.hadoop.ozone.om.KeyManager;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OzoneManager;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ExpiredMultipartUploadsBucket;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.MultipartUploadsExpiredAbortRequest;
@@ -198,7 +199,8 @@ public class MultipartUploadCleanupService extends BackgroundService {
 
     private void submitRequest(OMRequest omRequest) {
       try {
-        OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, runCount.get());
+        OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, runCount.get(),
+            OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
       } catch (ServiceException e) {
         LOG.error("Expired multipart info delete request failed. " +
             "Will retry at next run.", e);

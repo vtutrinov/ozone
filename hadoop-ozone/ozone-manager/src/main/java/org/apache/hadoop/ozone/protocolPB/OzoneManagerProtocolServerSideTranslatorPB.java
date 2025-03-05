@@ -44,6 +44,7 @@ import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
+import org.apache.hadoop.ozone.om.request.key.OMKeyRequest;
 import org.apache.hadoop.ozone.om.request.validation.RequestValidations;
 import org.apache.hadoop.ozone.om.request.validation.ValidationContext;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
@@ -194,7 +195,9 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
         return createErrorResponse(request, ex);
       }
 
-      final OMResponse response = omRatisServer.submitRequest(requestToSubmit);
+      final OMResponse response = omRatisServer.submitRequest(requestToSubmit,
+          omClientRequest.getWriteReqBucketName() != null ?
+              omClientRequest.getWriteReqBucketName() : OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
       if (!response.getSuccess()) {
         omClientRequest.handleRequestFailure(ozoneManager);
       }

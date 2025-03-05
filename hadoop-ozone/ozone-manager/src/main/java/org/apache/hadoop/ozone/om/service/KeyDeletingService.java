@@ -60,6 +60,7 @@ import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.RepeatedOmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.snapshot.ReferenceCounted;
 import org.apache.hadoop.ozone.om.snapshot.SnapshotUtils;
@@ -518,7 +519,8 @@ public class KeyDeletingService extends AbstractKeyDeletingService {
 
     public void submitRequest(OMRequest omRequest, ClientId clientId) {
       try {
-        OzoneManagerRatisUtils.submitRequest(getOzoneManager(), omRequest, clientId, getRunCount().get());
+        OzoneManagerRatisUtils.submitRequest(getOzoneManager(), omRequest, clientId, getRunCount().get(),
+            OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
       } catch (ServiceException e) {
         LOG.error("Snapshot deep cleaning request failed. " +
             "Will retry at next run.", e);

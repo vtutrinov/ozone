@@ -30,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
@@ -232,7 +233,7 @@ public class TestRangerBGSyncService {
         ozoneManager.getMetadataManager().getMetaTable().put(
             OzoneConsts.RANGER_OZONE_SERVICE_VERSION_KEY, String.valueOf(v));
         return null;
-      }).when(omRatisServer).submitRequest(any(), any(), anyLong());
+      }).when(omRatisServer).submitRequest(any(), any(), anyLong(), anyString());
     } catch (ServiceException e) {
       throw new RuntimeException(e);
     }

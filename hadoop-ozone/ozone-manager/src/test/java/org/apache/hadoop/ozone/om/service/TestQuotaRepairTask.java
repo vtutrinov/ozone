@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -62,7 +63,7 @@ public class TestQuotaRepairTask extends TestOMKeyRequest {
     doAnswer(invocation -> {
       ref.set(invocation.getArgument(0, OzoneManagerProtocolProtos.OMRequest.class));
       return respMock;
-    }).when(ratisServerMock).submitRequest(any(), any(), anyLong());
+    }).when(ratisServerMock).submitRequest(any(), any(), anyLong(), anyString());
     when(ozoneManager.getOmRatisServer()).thenReturn(ratisServerMock);
     OMRequestTestUtils.addVolumeAndBucketToDB(volumeName, bucketName,
         omMetadataManager, BucketLayout.OBJECT_STORE);
@@ -139,7 +140,7 @@ public class TestQuotaRepairTask extends TestOMKeyRequest {
     doAnswer(invocation -> {
       ref.set(invocation.getArgument(0, OzoneManagerProtocolProtos.OMRequest.class));
       return respMock;
-    }).when(ratisServerMock).submitRequest(any(), any(), anyLong());
+    }).when(ratisServerMock).submitRequest(any(), any(), anyLong(), anyString());
     when(ozoneManager.getOmRatisServer()).thenReturn(ratisServerMock);
     // add volume with -2 value
     OmVolumeArgs omVolumeArgs =

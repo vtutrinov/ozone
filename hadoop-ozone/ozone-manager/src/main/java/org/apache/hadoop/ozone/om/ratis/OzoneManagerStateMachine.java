@@ -559,6 +559,9 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
           request, context, ozoneManagerDoubleBuffer);
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
       OMResponse omResponse = omClientResponse.getOMResponse();
+      if (request.hasCreateBucketRequest()) {
+        ozoneManager.createRaftGroupForBucket(request.getCreateBucketRequest().getBucketInfo().getBucketName());
+      }
       if (omLockDetails != null) {
         return omResponse.toBuilder()
             .setOmLockDetails(omLockDetails.toProtobufBuilder()).build();
