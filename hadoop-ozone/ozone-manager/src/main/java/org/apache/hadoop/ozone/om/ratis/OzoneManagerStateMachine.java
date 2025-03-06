@@ -100,11 +100,12 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   private volatile TermIndex lastNotifiedTermIndex = TermIndex.valueOf(0, RaftLog.INVALID_LOG_INDEX);
   /** The last index skipped by {@link #notifyTermIndexUpdated(long, long)}. */
   private volatile long lastSkippedIndex = RaftLog.INVALID_LOG_INDEX;
+  private final RaftGroupId raftGroupId;
 
   private final NettyMetrics nettyMetrics;
 
   public OzoneManagerStateMachine(OzoneManagerRatisServer ratisServer,
-      boolean isTracingEnabled) throws IOException {
+      RaftGroupId raftGroupId, boolean isTracingEnabled) throws IOException {
     this.isTracingEnabled = isTracingEnabled;
     this.ozoneManager = ratisServer.getOzoneManager();
 
@@ -124,6 +125,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     this.installSnapshotExecutor =
         HadoopExecutors.newSingleThreadExecutor(installSnapshotThreadFactory);
     this.nettyMetrics = NettyMetrics.create();
+    this.raftGroupId = raftGroupId;
   }
 
   /**
@@ -151,7 +153,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
 
   @Override
   public SnapshotInfo getLatestSnapshot() {
-    final SnapshotInfo snapshotInfo = ozoneManager.getTransactionInfo().toSnapshotInfo();
+    final SnapshotInfo snapshotInfo = ozoneManager.getTransactionInfo(raftGroupId).toSnapshotInfo();
     LOG.debug("Latest Snapshot Info {}", snapshotInfo);
     return snapshotInfo;
   }
@@ -249,7 +251,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     case SUCCESS:
     case SNAPSHOT_UNAVAILABLE:
       // Currently, only trigger for the one who installed snapshot
-      if (ozoneManager.getOmRatisServer().getServerDivision().getPeer().equals(peer)) {
+      if (ozoneManager.getOmRatisServer().getServerDivision(raftGroupId).getPeer().equals(peer)) {
         ozoneManager.getOmSnapshotProvider().init();
       }
       break;
@@ -499,7 +501,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
 
     long startTime = Time.monotonicNow();
     final TransactionInfo transactionInfo = TransactionInfo.valueOf(snapshot);
-    ozoneManager.setTransactionInfo(transactionInfo);
+    ozoneManager.setTransactionInfo(raftGroupId, transactionInfo);
     ozoneManager.getMetadataManager().getTransactionInfoTable().put(TRANSACTION_INFO_KEY, transactionInfo);
     ozoneManager.getMetadataManager().getStore().flushDB();
     LOG.info("{}: taking snapshot. applied = {}, skipped = {}, " +
@@ -526,7 +528,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
             "term index: {}", leaderNodeId, firstTermIndexInLog);
 
     return CompletableFuture.supplyAsync(
-        () -> ozoneManager.installSnapshotFromLeader(leaderNodeId),
+        () -> ozoneManager.installSnapshotFromLeader(raftGroupId, leaderNodeId),
         installSnapshotExecutor);
   }
 
@@ -605,7 +607,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     if (transactionInfo != null) {
       final TermIndex ti =  transactionInfo.getTermIndex();
       setLastAppliedTermIndex(ti);
-      ozoneManager.setTransactionInfo(transactionInfo);
+      ozoneManager.setTransactionInfo(raftGroupId, transactionInfo);
       LOG.info("LastAppliedIndex is set from TransactionInfo from OM DB as {}", ti);
     } else {
       LOG.info("TransactionInfo not found in OM DB.");

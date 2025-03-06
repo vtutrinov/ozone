@@ -25,6 +25,7 @@ import com.google.common.annotations.VisibleForTesting;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.cert.CertificateExpiredException;
 import java.security.cert.CertificateNotYetValidException;
 import java.security.cert.X509Certificate;
@@ -49,6 +50,7 @@ import org.apache.hadoop.ozone.om.S3SecretManager;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.exceptions.OMLeaderNotReadyException;
 import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.upgrade.OMLayoutFeature;
 import org.apache.hadoop.ozone.security.OzoneSecretStore.OzoneManagerSecretState;
 import org.apache.hadoop.ozone.security.OzoneTokenIdentifier.TokenInfo;
@@ -57,6 +59,7 @@ import org.apache.hadoop.security.HadoopKerberosName;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.Time;
+import org.apache.ratis.protocol.RaftGroupId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -364,7 +367,11 @@ public class OzoneDelegationTokenSecretManager
     // following check does not allow ANY token auth. In optimistic, it should
     // allow known tokens in.
     try {
-      ozoneManager.checkLeaderStatus();
+      UUID raftGroupIdFromOmServiceId = UUID.nameUUIDFromBytes(
+          ozoneManager.getOMServiceId().getBytes(StandardCharsets.UTF_8));;
+      RaftGroupId raftGroupId = RaftGroupId.valueOf(raftGroupIdFromOmServiceId);
+
+      ozoneManager.checkLeaderStatus(raftGroupId);
     } catch (OMNotLeaderException | OMLeaderNotReadyException e) {
       InvalidToken wrappedStandby = new InvalidToken("IOException");
       wrappedStandby.initCause(e);

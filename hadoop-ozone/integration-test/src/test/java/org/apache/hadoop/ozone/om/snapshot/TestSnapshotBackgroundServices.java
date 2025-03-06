@@ -33,10 +33,12 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -70,6 +72,7 @@ import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServerConfig;
 import org.apache.hadoop.ozone.snapshot.SnapshotDiffReportOzone;
 import org.apache.hadoop.ozone.snapshot.SnapshotDiffResponse;
@@ -78,6 +81,7 @@ import org.apache.ozone.rocksdiff.CompactionNode;
 import org.apache.ozone.test.GenericTestUtils;
 import org.apache.ozone.test.LambdaTestUtils;
 import org.apache.ozone.test.tag.Flaky;
+import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.server.protocol.TermIndex;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -597,7 +601,10 @@ public class TestSnapshotBackgroundServices {
 
     GenericTestUtils.waitFor(() -> {
       try {
-        followerOM.checkLeaderStatus();
+        UUID raftGroupIdFromOmServiceId = UUID.nameUUIDFromBytes(
+            leaderOM.getOMServiceId().getBytes(StandardCharsets.UTF_8));;
+        RaftGroupId raftGroupId = RaftGroupId.valueOf(raftGroupIdFromOmServiceId);
+        followerOM.checkLeaderStatus(raftGroupId);
         return true;
       } catch (OMNotLeaderException | OMLeaderNotReadyException e) {
         return false;

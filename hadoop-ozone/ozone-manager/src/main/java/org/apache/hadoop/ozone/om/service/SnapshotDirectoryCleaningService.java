@@ -436,7 +436,7 @@ public class SnapshotDirectoryCleaningService
   public void submitRequest(OMRequest omRequest, ClientId clientId) {
     try {
       OzoneManagerRatisUtils.submitRequest(getOzoneManager(), omRequest, clientId, getRunCount().get(),
-          OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
+          getOzoneManager().getOMServiceId());
     } catch (ServiceException e) {
       LOG.error("Snapshot deep cleaning request failed. " +
           "Will retry at next run.", e);

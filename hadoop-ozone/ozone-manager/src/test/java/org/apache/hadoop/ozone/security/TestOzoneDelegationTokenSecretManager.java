@@ -70,6 +70,7 @@ import org.apache.hadoop.security.token.SecretManager;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Time;
 import org.apache.ozone.test.GenericTestUtils;
+import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.protocol.RaftPeerId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -184,7 +185,7 @@ public class TestOzoneDelegationTokenSecretManager {
     secretManager = createSecretManager(conf, TOKEN_MAX_LIFETIME,
         expiryTime, TOKEN_REMOVER_SCAN_INTERVAL);
     doThrow(new OMNotLeaderException(RaftPeerId.valueOf("om")))
-        .when(om).checkLeaderStatus();
+        .when(om).checkLeaderStatus(any(RaftGroupId.class));
     OzoneTokenIdentifier identifier = new OzoneTokenIdentifier();
     try {
       secretManager.retrievePassword(identifier);
@@ -195,7 +196,7 @@ public class TestOzoneDelegationTokenSecretManager {
     }
 
     doThrow(new OMLeaderNotReadyException("Leader not ready"))
-        .when(om).checkLeaderStatus();
+        .when(om).checkLeaderStatus(any(RaftGroupId.class));
     try {
       secretManager.retrievePassword(identifier);
     } catch (Exception e) {
@@ -204,7 +205,7 @@ public class TestOzoneDelegationTokenSecretManager {
           e.getCause().getClass());
     }
 
-    doNothing().when(om).checkLeaderStatus();
+    doNothing().when(om).checkLeaderStatus(any(RaftGroupId.class));
     try {
       secretManager.retrievePassword(identifier);
     } catch (Exception e) {

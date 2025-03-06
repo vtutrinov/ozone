@@ -25,8 +25,11 @@ import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.exceptions.OMLeaderNotReadyException;
 import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
 import org.apache.hadoop.ozone.om.service.QuotaRepairTask;
+import org.apache.ratis.protocol.RaftGroupId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 /**
  * Quota repair for usages action to be triggered after upgrade.
@@ -42,7 +45,11 @@ public class QuotaRepairUpgradeAction implements OmUpgradeAction {
     if (enabled) {
       // just trigger quota repair and status can be checked via CLI
       try {
-        arg.checkLeaderStatus();
+        UUID raftGroupIdFromOmServiceId = UUID.nameUUIDFromBytes(
+            arg.getOMServiceId().getBytes(StandardCharsets.UTF_8));;
+        RaftGroupId raftGroupId = RaftGroupId.valueOf(raftGroupIdFromOmServiceId);
+
+        arg.checkLeaderStatus(raftGroupId);
         QuotaRepairTask quotaRepairTask = new QuotaRepairTask(arg);
         quotaRepairTask.repair();
       } catch (OMNotLeaderException | OMLeaderNotReadyException ex) {

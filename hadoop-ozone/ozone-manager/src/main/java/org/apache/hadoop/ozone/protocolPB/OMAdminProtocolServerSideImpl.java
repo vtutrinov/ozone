@@ -78,7 +78,7 @@ public class OMAdminProtocolServerSideImpl implements OMAdminProtocolPB {
     }
 
     OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
-    OzoneManagerRatisUtils.checkLeaderStatus(ozoneManager);
+    OzoneManagerRatisUtils.checkLeaderStatus(ozoneManager.getOMServiceId(), ozoneManager);
 
     OMNodeDetails decommNode = ozoneManager.getPeerNode(request.getNodeId());
     if (decommNode == null) {

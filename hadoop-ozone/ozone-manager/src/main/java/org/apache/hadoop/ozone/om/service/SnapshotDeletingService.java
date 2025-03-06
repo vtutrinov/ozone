@@ -297,7 +297,7 @@ public class SnapshotDeletingService extends AbstractKeyDeletingService {
     private void submitRequest(OMRequest omRequest) {
       try {
         OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, getRunCount().get(),
-            OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
+            ozoneManager.getOMServiceId());
       } catch (ServiceException e) {
         LOG.error("Request: {} fired by SnapshotDeletingService failed. Will retry in the next run", omRequest, e);
       }

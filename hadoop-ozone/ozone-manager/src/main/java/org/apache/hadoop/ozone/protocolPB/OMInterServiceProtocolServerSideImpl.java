@@ -53,7 +53,7 @@ public class OMInterServiceProtocolServerSideImpl implements
       return null;
     }
 
-    OzoneManagerRatisUtils.checkLeaderStatus(ozoneManager);
+    OzoneManagerRatisUtils.checkLeaderStatus(ozoneManager.getOMServiceId(), ozoneManager);
 
     OMNodeDetails newOmNode = new OMNodeDetails.Builder()
         .setOMNodeId(request.getNodeId())

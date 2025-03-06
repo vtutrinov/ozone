@@ -21,6 +21,8 @@ import static org.apache.ozone.test.GenericTestUtils.waitFor;
 import static org.mockito.Mockito.mock;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 import org.apache.hadoop.crypto.key.KeyProviderCryptoExtension;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
@@ -34,8 +36,10 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.om.protocol.OzoneManagerProtocol;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus;
 import org.apache.hadoop.security.authentication.client.AuthenticationException;
+import org.apache.ratis.protocol.RaftGroupId;
 
 /**
  * Test utility for creating a dummy OM, the associated
@@ -122,7 +126,8 @@ public final class OmTestManagers {
         "scmTopologyClient", scmTopologyClient);
 
     om.start();
-    waitFor(() -> om.getOmRatisServer().checkLeaderStatus() == RaftServerStatus.LEADER_AND_READY,
+
+    waitFor(() -> om.getOmRatisServer().checkLeaderStatus(om.getOmRatisServer().getRaftGroupId()) == RaftServerStatus.LEADER_AND_READY,
         10, 10_000);
 
     rpcClient = OzoneClientFactory.getRpcClient(conf);

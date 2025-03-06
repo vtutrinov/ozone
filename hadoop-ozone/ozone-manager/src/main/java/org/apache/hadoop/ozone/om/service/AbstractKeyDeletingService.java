@@ -218,7 +218,7 @@ public abstract class AbstractKeyDeletingService extends BackgroundService
     // Submit PurgeKeys request to OM
     try {
       OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, runCount.get(),
-          OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
+          ozoneManager.getOMServiceId());
     } catch (ServiceException e) {
       LOG.error("PurgeKey request failed. Will retry at next run.", e);
       return 0;
@@ -274,7 +274,7 @@ public abstract class AbstractKeyDeletingService extends BackgroundService
     // Submit Purge paths request to OM
     try {
       OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, rnCnt,
-          OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
+          ozoneManager.getOMServiceId());
     } catch (ServiceException e) {
       LOG.error("PurgePaths request failed. Will retry at next run.", e);
     }

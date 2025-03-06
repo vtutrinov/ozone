@@ -200,7 +200,7 @@ public class MultipartUploadCleanupService extends BackgroundService {
     private void submitRequest(OMRequest omRequest) {
       try {
         OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, runCount.get(),
-            OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
+            ozoneManager.getOMServiceId());
       } catch (ServiceException e) {
         LOG.error("Expired multipart info delete request failed. " +
             "Will retry at next run.", e);

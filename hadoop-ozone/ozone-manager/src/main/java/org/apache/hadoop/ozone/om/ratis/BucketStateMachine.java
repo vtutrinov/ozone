@@ -1,7 +1,9 @@
 package org.apache.hadoop.ozone.om.ratis;
 
+import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.hdds.tracing.TracingUtil;
+import org.apache.hadoop.hdds.utils.TransactionInfo;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
@@ -14,21 +16,32 @@ import org.apache.hadoop.ozone.om.response.OMClientResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocolPB.OzoneManagerRequestHandler;
 import org.apache.hadoop.ozone.protocolPB.RequestHandler;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
+import org.apache.ratis.proto.RaftProtos;
 import org.apache.ratis.protocol.Message;
 import org.apache.ratis.protocol.RaftGroupId;
+import org.apache.ratis.protocol.RaftGroupMemberId;
+import org.apache.ratis.protocol.RaftPeer;
+import org.apache.ratis.protocol.RaftPeerId;
 import org.apache.ratis.server.RaftServer;
 import org.apache.ratis.server.protocol.TermIndex;
+import org.apache.ratis.server.raftlog.RaftLog;
 import org.apache.ratis.server.storage.RaftStorage;
+import org.apache.ratis.statemachine.SnapshotInfo;
 import org.apache.ratis.statemachine.TransactionContext;
 import org.apache.ratis.statemachine.impl.BaseStateMachine;
 import org.apache.ratis.statemachine.impl.SimpleStateMachineStorage;
 import org.apache.ratis.util.ExitUtils;
+import org.apache.ratis.util.IOUtils;
+import org.apache.ratis.util.LifeCycle;
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.apache.hadoop.ozone.OzoneConsts.TRANSACTION_INFO_KEY;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status.INTERNAL_ERROR;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status.METADATA_ERROR;
 
@@ -38,24 +51,53 @@ public class BucketStateMachine extends BaseStateMachine {
 
   private final SimpleStateMachineStorage storage = new SimpleStateMachineStorage();
 
-  private final OzoneManagerDoubleBuffer ozoneManagerDoubleBuffer;
+  private volatile OzoneManagerDoubleBuffer ozoneManagerDoubleBuffer;
 
   private final String threadNamePrefix;
 
   private final ExecutorService executorService;
 
+  private final RaftGroupId raftGroupId;
+
   private RequestHandler handler;
 
-  public BucketStateMachine(String bucketName, OzoneManager om) {
+  private final AtomicInteger statePausedCount = new AtomicInteger(0);
+
+  private final ExecutorService installSnapshotExecutor;
+
+  private volatile TermIndex lastNotifiedTermIndex = TermIndex.valueOf(0, RaftLog.INVALID_LOG_INDEX);
+
+  private volatile long lastSkippedIndex = RaftLog.INVALID_LOG_INDEX;
+
+  public BucketStateMachine(RaftGroupId raftGroupId, OzoneManager om) {
     this.ozoneManager = om;
     this.ozoneManagerDoubleBuffer =  buildDoubleBufferForRatis();
-    this.threadNamePrefix = om.getThreadNamePrefix() + "-" + bucketName;
+    this.threadNamePrefix = om.getThreadNamePrefix() + "-" + raftGroupId;
+    this.raftGroupId = raftGroupId;
 
     ThreadFactory build = new ThreadFactoryBuilder().setDaemon(true)
         .setNameFormat(threadNamePrefix +
             "OMStateMachineApplyTransactionThread - %d").build();
     this.executorService = HadoopExecutors.newSingleThreadExecutor(build);
     this.handler = new OzoneManagerRequestHandler(ozoneManager);
+    ThreadFactory installSnapshotThreadFactory = new ThreadFactoryBuilder()
+        .setNameFormat(threadNamePrefix + "-InstallSnapshotThread").build();
+    this.installSnapshotExecutor =
+        HadoopExecutors.newSingleThreadExecutor(installSnapshotThreadFactory);
+  }
+
+  @Override
+  public CompletableFuture<TermIndex> notifyInstallSnapshotFromLeader(
+      RaftProtos.RoleInfoProto roleInfoProto, TermIndex firstTermIndexInLog) {
+
+    String leaderNodeId = RaftPeerId.valueOf(roleInfoProto.getFollowerInfo()
+        .getLeaderInfo().getId().getId()).toString();
+    LOG.info("Received install snapshot notification from OM leader: {} with " +
+        "term index: {}", leaderNodeId, firstTermIndexInLog);
+
+    return CompletableFuture.supplyAsync(
+        () -> ozoneManager.installSnapshotFromLeader(raftGroupId, leaderNodeId),
+        installSnapshotExecutor);
   }
 
   @Override
@@ -193,4 +235,170 @@ public class BucketStateMachine extends BaseStateMachine {
         .build()
         .start();
   }
+
+  @Override
+  public long takeSnapshot() throws IOException {
+    // wait until applied == skipped
+    while (getLastAppliedTermIndex().getIndex() < lastSkippedIndex) {
+      if (ozoneManager.isStopped()) {
+        throw new IOException("OzoneManager is already stopped: " + ozoneManager.getNodeDetails());
+      }
+      try {
+        ozoneManagerDoubleBuffer.awaitFlush();
+      } catch (InterruptedException e) {
+        throw IOUtils.toInterruptedIOException("Interrupted ozoneManagerDoubleBuffer.awaitFlush", e);
+      }
+    }
+
+    return takeSnapshotImpl();
+  }
+
+  private synchronized long takeSnapshotImpl() throws IOException {
+    final TermIndex applied = getLastAppliedTermIndex();
+    final TermIndex notified = getLastNotifiedTermIndex();
+    final TermIndex snapshot = applied.compareTo(notified) > 0 ? applied : notified;
+
+    long startTime = Time.monotonicNow();
+    final TransactionInfo transactionInfo = TransactionInfo.valueOf(snapshot);
+    ozoneManager.setTransactionInfo(raftGroupId, transactionInfo);
+    ozoneManager.getMetadataManager().getTransactionInfoTable().put(TRANSACTION_INFO_KEY, transactionInfo);
+    ozoneManager.getMetadataManager().getStore().flushDB();
+    LOG.info("{}: taking snapshot. applied = {}, skipped = {}, " +
+            "notified = {}, current snapshot index = {}, took {} ms",
+        getId(), applied, lastSkippedIndex, notified, snapshot, Time.monotonicNow() - startTime);
+    return snapshot.getIndex();
+  }
+
+  @Override
+  public synchronized void reinitialize() throws IOException {
+    loadSnapshotInfoFromDB();
+    if (getLifeCycleState() == LifeCycle.State.PAUSED) {
+      final TermIndex lastApplied = getLastAppliedTermIndex();
+      unpause(lastApplied.getIndex(), lastApplied.getTerm());
+      LOG.info("{}: reinitialize {} with {}", getId(), getGroupId(), lastApplied);
+    }
+  }
+
+  @Override
+  public synchronized void pause() {
+    LOG.info("OzoneManagerStateMachine is pausing");
+    statePausedCount.incrementAndGet();
+    final LifeCycle.State state = getLifeCycleState();
+    if (state == LifeCycle.State.PAUSED) {
+      return;
+    }
+    if (state != LifeCycle.State.NEW) {
+      getLifeCycle().transition(LifeCycle.State.PAUSING);
+      getLifeCycle().transition(LifeCycle.State.PAUSED);
+    }
+
+    ozoneManagerDoubleBuffer.stop();
+  }
+
+  @Override
+  public SnapshotInfo getLatestSnapshot() {
+    final SnapshotInfo snapshotInfo = ozoneManager.getTransactionInfo(raftGroupId).toSnapshotInfo();
+    LOG.debug("Latest Snapshot Info {}", snapshotInfo);
+    return snapshotInfo;
+  }
+
+  @Override
+  public void notifyLeaderChanged(RaftGroupMemberId groupMemberId,
+                                  RaftPeerId newLeaderId) {
+    // Initialize OMHAMetrics
+    ozoneManager.omHAMetricsInit(newLeaderId.toString());
+    LOG.info("{}: leader changed to {}", groupMemberId, newLeaderId);
+  }
+
+  /** Notified by Ratis for non-StateMachine term-index update. */
+  @Override
+  public synchronized void notifyTermIndexUpdated(long currentTerm, long newIndex) {
+    // lastSkippedIndex is start of sequence (one less) of continuous notification from ratis
+    // if there is any applyTransaction (double buffer index), then this gap is handled during double buffer
+    // notification and lastSkippedIndex will be the start of last continuous sequence.
+    final long oldIndex = lastNotifiedTermIndex.getIndex();
+    if (newIndex - oldIndex > 1) {
+      lastSkippedIndex = newIndex - 1;
+    }
+    final TermIndex newTermIndex = TermIndex.valueOf(currentTerm, newIndex);
+    lastNotifiedTermIndex = assertUpdateIncreasingly("lastNotified", lastNotifiedTermIndex, newTermIndex);
+    if (lastNotifiedTermIndex.getIndex() - getLastAppliedTermIndex().getIndex() == 1) {
+      updateLastAppliedTermIndex(lastNotifiedTermIndex);
+    }
+  }
+
+  @Override
+  protected synchronized boolean updateLastAppliedTermIndex(TermIndex newTermIndex) {
+    TermIndex lastApplied = getLastAppliedTermIndex();
+    assertUpdateIncreasingly("lastApplied", lastApplied, newTermIndex);
+    // if newTermIndex getting updated is within sequence of notifiedTermIndex (i.e. from lastSkippedIndex and
+    // notifiedTermIndex), then can update directly to lastNotifiedTermIndex as it ensure previous double buffer's
+    // Index is notified or getting notified matching lastSkippedIndex
+    if (newTermIndex.getIndex() < getLastNotifiedTermIndex().getIndex()
+        && newTermIndex.getIndex() >= lastSkippedIndex) {
+      newTermIndex = getLastNotifiedTermIndex();
+    }
+    return super.updateLastAppliedTermIndex(newTermIndex);
+  }
+
+  @Override
+  public void notifySnapshotInstalled(RaftProtos.InstallSnapshotResult result,
+                                      long snapshotIndex, RaftPeer peer) {
+    LOG.info("Receive notifySnapshotInstalled event {} for the peer: {}" +
+        " snapshotIndex: {}.", result, peer.getId(), snapshotIndex);
+    switch (result) {
+    case SUCCESS:
+    case SNAPSHOT_UNAVAILABLE:
+      // Currently, only trigger for the one who installed snapshot
+      if (ozoneManager.getOmRatisServer().getServerDivision(raftGroupId).getPeer().equals(peer)) {
+        ozoneManager.getOmSnapshotProvider().init();
+      }
+      break;
+    default:
+      break;
+    }
+  }
+
+  public TermIndex getLastNotifiedTermIndex() {
+    return lastNotifiedTermIndex;
+  }
+
+  /** Assert if the given {@link TermIndex} is updated increasingly. */
+  private TermIndex assertUpdateIncreasingly(String name, TermIndex oldTermIndex, TermIndex newTermIndex) {
+    Preconditions.checkArgument(newTermIndex.compareTo(oldTermIndex) >= 0,
+        "%s: newTermIndex = %s < oldTermIndex = %s", name, newTermIndex, oldTermIndex);
+    return newTermIndex;
+  }
+
+  public void loadSnapshotInfoFromDB() throws IOException {
+    // This is done, as we have a check in Ratis for not throwing
+    // LeaderNotReadyException, it checks stateMachineIndex >= raftLog
+    // nextIndex (placeHolderIndex).
+    TransactionInfo transactionInfo =
+        TransactionInfo.readTransactionInfo(
+            ozoneManager.getMetadataManager());
+    if (transactionInfo != null) {
+      final TermIndex ti =  transactionInfo.getTermIndex();
+      setLastAppliedTermIndex(ti);
+      ozoneManager.setTransactionInfo(raftGroupId, transactionInfo);
+      LOG.info("LastAppliedIndex is set from TransactionInfo from OM DB as {}", ti);
+    } else {
+      LOG.info("TransactionInfo not found in OM DB.");
+    }
+  }
+
+  public synchronized void unpause(long newLastAppliedSnaphsotIndex,
+                                   long newLastAppliedSnapShotTermIndex) {
+    if (statePausedCount.decrementAndGet() == 0) {
+      getLifeCycle().startAndTransition(() -> {
+        this.ozoneManagerDoubleBuffer = buildDoubleBufferForRatis();
+        this.setLastAppliedTermIndex(TermIndex.valueOf(
+            newLastAppliedSnapShotTermIndex, newLastAppliedSnaphsotIndex));
+        LOG.info("{}: OzoneManagerStateMachine un-pause completed. " +
+                "newLastAppliedSnaphsotIndex: {}, newLastAppliedSnapShotTermIndex: {}",
+            getId(), newLastAppliedSnaphsotIndex, newLastAppliedSnapShotTermIndex);
+      });
+    }
+  }
+
 }

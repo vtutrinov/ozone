@@ -191,7 +191,7 @@ public class QuotaRepairTask {
       OzoneManagerProtocolProtos.OMRequest omRequest, ClientId clientId) throws Exception {
     try {
       return OzoneManagerRatisUtils.submitRequest(om, omRequest, clientId, RUN_CNT.getAndIncrement(),
-          OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
+          om.getOMServiceId());
     } catch (ServiceException e) {
       LOG.error("repair quota count " + omRequest.getCmdType() + " request failed.", e);
       throw e;

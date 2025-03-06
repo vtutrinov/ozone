@@ -106,6 +106,7 @@ public class OMPrepareRequest extends OMClientRequest {
 
       OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
       final RaftServer.Division division = omRatisServer.getServerDivision();
+      // TODO iterate over all of the state machines (ozoneManager.getStateMachines())
       final OzoneManagerStateMachine stateMachine = (OzoneManagerStateMachine) division.getStateMachine();
 
       // Wait for outstanding double buffer entries

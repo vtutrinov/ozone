@@ -101,7 +101,7 @@ public class TrashOzoneFileSystem extends FileSystem {
     omRequest = omClientRequest.preExecute(ozoneManager);
     OMKeyRequest omKeyRequest = (OMKeyRequest) omClientRequest;
     OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, CLIENT_ID, runCount.getAndIncrement(),
-        omKeyRequest.getWriteReqBucketName() != null ? omKeyRequest.getWriteReqBucketName() : OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
+        omKeyRequest.getWriteReqBucketName() != null ? omKeyRequest.getWriteReqBucketName() : ozoneManager.getOMServiceId());
   }
 
   @Override

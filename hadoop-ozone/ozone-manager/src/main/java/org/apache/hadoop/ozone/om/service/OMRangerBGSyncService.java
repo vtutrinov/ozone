@@ -387,7 +387,7 @@ public class OMRangerBGSyncService extends BackgroundService {
 
     try {
       OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, CLIENT_ID, runCount.get(),
-          OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
+          ozoneManager.getOMServiceId());
     } catch (ServiceException e) {
       LOG.error("SetRangerServiceVersion request failed. "
           + "Will retry at next run.", e);

@@ -28,6 +28,8 @@ import com.google.protobuf.ProtocolMessageEnum;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.ServiceException;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.hdds.server.OzoneProtocolMessageDispatcher;
 import org.apache.hadoop.hdds.utils.ProtocolMessageMetrics;
@@ -51,6 +53,7 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMResponse;
 import org.apache.hadoop.ozone.security.S3SecurityUtil;
+import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.protocol.RaftPeerId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -162,23 +165,25 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
         return submitReadRequestToOM(request);
       }
 
-      // To validate credentials we have already verified leader status.
-      // This will skip of checking leader status again if request has S3Auth.
-      if (!s3Auth) {
-        OzoneManagerRatisUtils.checkLeaderStatus(ozoneManager);
-      }
 
-      // check retry cache
-      final OMResponse cached = omRatisServer.checkRetryCache();
-      if (cached != null) {
-        return cached;
-      }
 
       // process new request
       OMClientRequest omClientRequest = null;
       final OMRequest requestToSubmit;
       try {
         omClientRequest = createClientRequest(request, ozoneManager);
+        // check retry cache
+        final OMResponse cached = omRatisServer.checkRetryCache(omClientRequest.getWriteReqBucketName() != null ?
+            omClientRequest.getWriteReqBucketName() : ozoneManager.getOMServiceId());
+        if (cached != null) {
+          return cached;
+        }
+        // To validate credentials we have already verified leader status.
+        // This will skip of checking leader status again if request has S3Auth.
+        if (!s3Auth) {
+          OzoneManagerRatisUtils.checkLeaderStatus(omClientRequest.getWriteReqBucketName() != null ?
+              omClientRequest.getWriteReqBucketName() : ozoneManager.getOMServiceId(), ozoneManager);
+        }
         // TODO: Note: Due to HDDS-6055, createClientRequest() could now
         //  return null, which triggered the findbugs warning.
         //  Added the assertion.
@@ -197,7 +202,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
 
       final OMResponse response = omRatisServer.submitRequest(requestToSubmit,
           omClientRequest.getWriteReqBucketName() != null ?
-              omClientRequest.getWriteReqBucketName() : OzoneManagerRatisServer.OM_MAIN_RAFT_GROUP);
+              omClientRequest.getWriteReqBucketName() : ozoneManager.getOMServiceId());
       if (!response.getSuccess()) {
         omClientRequest.handleRequestFailure(ozoneManager);
       }
@@ -220,8 +225,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
 
   private OMResponse submitReadRequestToOM(OMRequest request)
       throws ServiceException {
-    // Check if this OM is the leader.
-    RaftServerStatus raftServerStatus = omRatisServer.checkLeaderStatus();
+    RaftServerStatus raftServerStatus = omRatisServer.checkLeaderStatus(omRatisServer.getRaftGroupId());
     if (raftServerStatus == LEADER_AND_READY ||
         request.getCmdType().equals(PrepareStatus)) {
       return handler.handleReadRequest(request);
@@ -233,7 +237,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
   private ServiceException createLeaderErrorException(
       RaftServerStatus raftServerStatus) {
     if (raftServerStatus == NOT_LEADER) {
-      return new ServiceException(omRatisServer.newOMNotLeaderException());
+      return new ServiceException(omRatisServer.newOMNotLeaderException(omRatisServer.getRaftGroupId()));
     } else {
       return createLeaderNotReadyException();
     }

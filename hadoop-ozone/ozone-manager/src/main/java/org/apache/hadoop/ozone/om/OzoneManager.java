@@ -522,6 +522,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
   private final Map<RaftGroupId, RaftGroup> omRaftGroups = new HashMap();
   private final Map<RaftGroupId, StateMachine> omStateMachines = new HashMap<>();
+  private final Map<RaftGroupId, AtomicReference<TransactionInfo>> omTransactionInfos = new HashMap<>();
 
   @SuppressWarnings("methodlength")
   private OzoneManager(OzoneConfiguration conf, StartupOption startupOption)
@@ -770,7 +771,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     RaftGroupId raftGroupId = RaftGroupId.valueOf(raftGroupIdUUID);
     LOG.info("Bucket raft group with raftGroupId: {}", raftGroupId);
     bucketRaftGroup = RaftGroup.valueOf(raftGroupId, createRaftPeerList(omNodeDetails, peerNodesMap, false).getRight());
-    BucketStateMachine stateMachine = new BucketStateMachine(bucketName, this);
+    BucketStateMachine stateMachine = new BucketStateMachine(raftGroupId, this);
 
     omRaftGroups.put(raftGroupId, bucketRaftGroup);
     omStateMachines.put(raftGroupId, stateMachine);
@@ -2309,7 +2310,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   public StateMachine getStateMachineRegistry(RaftGroupId raftGroupId) {
     StateMachine stateMachine = omStateMachines.get(raftGroupId);
     if (stateMachine == null) {
-      stateMachine = new BucketStateMachine(UUID.randomUUID().toString(), this);
+      stateMachine = new BucketStateMachine(raftGroupId, this);
 
       RaftGroup bucketRaftGroup = RaftGroup.valueOf(raftGroupId, peerNodesMap.entrySet().stream().map(omPearDetails ->
           RaftPeer.newBuilder().setId(RaftPeerId.valueOf(omPearDetails.getKey())).setAddress(omPearDetails.getValue()
@@ -2336,12 +2337,12 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return (layoutVersion == null) ? null : Integer.parseInt(layoutVersion);
   }
 
-  public TransactionInfo getTransactionInfo() {
-    return omTransactionInfo.get();
+  public TransactionInfo getTransactionInfo(RaftGroupId raftGroupId) {
+    return omTransactionInfos.computeIfAbsent(raftGroupId, trxInfo -> new AtomicReference<>(TransactionInfo.DEFAULT_VALUE)).get();
   }
 
-  public void setTransactionInfo(TransactionInfo info) {
-    omTransactionInfo.set(info);
+  public void setTransactionInfo(RaftGroupId raftGroupId, TransactionInfo info) {
+    omTransactionInfos.computeIfAbsent(raftGroupId, transactionInfo -> new AtomicReference<>(info)).set(info);
   }
 
   public long getRatisSnapshotIndex() throws IOException {
@@ -3182,7 +3183,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     if (null == omRatisServer) {
       return getRatisRolesException("Server is shutting down");
     }
-    String leaderReadiness = omRatisServer.checkLeaderStatus().name();
+
+    String leaderReadiness = omRatisServer.checkLeaderStatus(omRatisServer.getRaftGroupId()).name();
     final RaftPeerId leaderId = omRatisServer.getLeaderId();
     if (leaderId == null) {
       LOG.error(NO_LEADER_ERROR_MESSAGE);
@@ -3934,11 +3936,12 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   /**
    * Download and install latest checkpoint from leader OM.
    *
+   * @param raftGroupId RaftGroupId that the leader OM belongs to
    * @param leaderId peerNodeID of the leader OM
    * @return If checkpoint is installed successfully, return the
    *         corresponding termIndex. Otherwise, return null.
    */
-  public synchronized TermIndex installSnapshotFromLeader(String leaderId) {
+  public synchronized TermIndex installSnapshotFromLeader(RaftGroupId raftGroupId, String leaderId) {
     if (omRatisSnapshotProvider == null) {
       LOG.error("OM Snapshot Provider is not configured as there are no peer " +
           "nodes.");
@@ -3958,7 +3961,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     try {
       // Install hard links.
       OmSnapshotUtils.createHardLinks(omDBCheckpoint.getCheckpointLocation());
-      termIndex = installCheckpoint(leaderId, omDBCheckpoint);
+      termIndex = installCheckpoint(raftGroupId, leaderId, omDBCheckpoint);
     } catch (Exception ex) {
       LOG.error("Failed to install snapshot from Leader OM.", ex);
     }
@@ -3971,7 +3974,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    * state via this checkpoint. Before re-initializing OM state, the OM Ratis
    * server should be stopped so that no new transactions can be applied.
    */
-  TermIndex installCheckpoint(String leaderId, DBCheckpoint omDBCheckpoint)
+  TermIndex installCheckpoint(RaftGroupId raftGroupId, String leaderId, DBCheckpoint omDBCheckpoint)
       throws Exception {
 
     Path checkpointLocation = omDBCheckpoint.getCheckpointLocation();
@@ -3981,10 +3984,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     LOG.info("Installing checkpoint with OMTransactionInfo {}",
         checkpointTrxnInfo);
 
-    return installCheckpoint(leaderId, checkpointLocation, checkpointTrxnInfo);
+    return installCheckpoint(raftGroupId, leaderId, checkpointLocation, checkpointTrxnInfo);
   }
 
-  TermIndex installCheckpoint(String leaderId, Path checkpointLocation,
+  TermIndex installCheckpoint(RaftGroupId raftGroupId, String leaderId, Path checkpointLocation,
       TransactionInfo checkpointTrxnInfo) throws Exception {
     long startTime = Time.monotonicNow();
     File oldDBLocation = metadataManager.getStore().getDbLocation();
@@ -4076,7 +4079,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       if (oldOmMetadataManagerStopped) {
         time = Time.monotonicNow();
         reloadOMState();
-        setTransactionInfo(TransactionInfo.valueOf(termIndex));
+        setTransactionInfo(raftGroupId, TransactionInfo.valueOf(termIndex));
         omRatisServer.getOmStateMachine().unpause(lastAppliedIndex, term);
         newMetadataManagerStarted = true;
         LOG.info("Reloaded OM state with Term: {} and Index: {}. Spend {} ms",
@@ -4345,7 +4348,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    */
   public boolean isLeaderReady() {
     final OzoneManagerRatisServer ratisServer = omRatisServer;
-    return ratisServer != null && ratisServer.checkLeaderStatus() == LEADER_AND_READY;
+    return ratisServer != null && ratisServer.checkLeaderStatus(ratisServer.getRaftGroupId()) == LEADER_AND_READY;
   }
 
   /**
@@ -4353,18 +4356,19 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    * @throws OMLeaderNotReadyException  if leader, but not ready
    * @throws OMNotLeaderException       if not leader
    */
-  public void checkLeaderStatus() throws OMNotLeaderException,
+  public void checkLeaderStatus(RaftGroupId raftGroupId) throws OMNotLeaderException,
       OMLeaderNotReadyException {
-    OzoneManagerRatisServer.RaftServerStatus raftServerStatus =
-        omRatisServer.checkLeaderStatus();
     RaftPeerId raftPeerId = omRatisServer.getRaftPeerId();
+
+    OzoneManagerRatisServer.RaftServerStatus raftServerStatus =
+        omRatisServer.checkLeaderStatus(raftGroupId);
 
     switch (raftServerStatus) {
     case LEADER_AND_READY: return;
     case LEADER_AND_NOT_READY:
       throw new OMLeaderNotReadyException(raftPeerId + " is Leader but not ready to process request yet.");
     case NOT_LEADER:
-      throw omRatisServer.newOMNotLeaderException();
+      throw omRatisServer.newOMNotLeaderException(raftGroupId);
     default: throw new IllegalStateException(
         "Unknown Ratis Server state: " + raftServerStatus);
     }
