@@ -60,6 +60,8 @@ import org.apache.hadoop.hdds.utils.IOUtils;
 import org.apache.hadoop.io.ByteBufferPool;
 import org.apache.hadoop.io.ElasticByteBufferPool;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.compress.CompressionInputStream;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.OzoneConsts;
@@ -151,6 +153,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 import java.security.InvalidKeyException;
@@ -2268,6 +2271,8 @@ public class RpcClient implements ClientProtocol {
     // Need to revisit for GDP.
     FileEncryptionInfo feInfo = keyInfo.getFileEncryptionInfo();
 
+    String compressionType = keyInfo.getCompressionType();
+
     if (feInfo == null) {
       LengthInputStream lengthInputStream = KeyInputStream
           .getFromOmKeyInfo(keyInfo, xceiverClientManager, retryFunction,
@@ -2276,13 +2281,18 @@ public class RpcClient implements ClientProtocol {
         final GDPRSymmetricKey gk = getGDPRSymmetricKey(
             keyInfo.getMetadata(), Cipher.DECRYPT_MODE);
         if (gk != null) {
-          return new OzoneInputStream(
-              new CipherInputStream(lengthInputStream, gk.getCipher()));
+          CipherInputStream decrypted = new CipherInputStream(lengthInputStream, gk.getCipher());
+          CompressionInputStream input = createDecompressedInputStream(compressionType, decrypted);
+
+          return new OzoneInputStream(input != null ? input : decrypted);
         }
       } catch (Exception ex) {
         throw new IOException(ex);
       }
-      return new OzoneInputStream(lengthInputStream.getWrappedStream());
+      InputStream wrappedStream = lengthInputStream.getWrappedStream();
+      CompressionInputStream input = createDecompressedInputStream(compressionType, wrappedStream);
+
+      return new OzoneInputStream(input != null ? input : wrappedStream);
     } else if (!keyInfo.getLatestVersionLocations().isMultipartKey()) {
       // Regular Key with FileEncryptionInfo
       LengthInputStream lengthInputStream = KeyInputStream
@@ -2293,8 +2303,14 @@ public class RpcClient implements ClientProtocol {
           new CryptoInputStream(lengthInputStream.getWrappedStream(),
               OzoneKMSUtil.getCryptoCodec(conf, feInfo),
               decrypted.getMaterial(), feInfo.getIV());
-      return new OzoneInputStream(cryptoIn);
+
+      CompressionInputStream input = createDecompressedInputStream(compressionType, cryptoIn);
+
+      return new OzoneInputStream(input != null ? input : cryptoIn);
     } else {
+      if (!StringUtils.isEmpty(compressionType)) {
+        throw new IOException("Compression is not supported with multipart: " + compressionType);
+      }
       // Multipart Key with FileEncryptionInfo
       List<LengthInputStream> lengthInputStreams = KeyInputStream
           .getStreamsFromKeyInfo(keyInfo, xceiverClientManager, retryFunction,
@@ -2337,7 +2353,13 @@ public class RpcClient implements ClientProtocol {
             openKey.getOpenVersion());
     final OzoneOutputStream out = createSecureOutputStream(
         openKey, keyOutputStream, null);
-    return new OzoneDataStreamOutput(out != null ? out : keyOutputStream);
+
+    OutputStream compressed = createCompressedOutputStream(openKey, out != null ? out : keyOutputStream);
+
+    return new OzoneDataStreamOutput(
+        compressed != null
+            ? new OzoneOutputStream(compressed, null)
+            : (out != null ? out : keyOutputStream));
   }
 
   private OzoneOutputStream createOutputStream(OpenKeySession openKey)
@@ -2356,10 +2378,41 @@ public class RpcClient implements ClientProtocol {
     keyOutputStream
         .addPreallocateBlocks(openKey.getKeyInfo().getLatestVersionLocations(),
             openKey.getOpenVersion());
-    final OzoneOutputStream out = createSecureOutputStream(
-        openKey, keyOutputStream, keyOutputStream);
-    return out != null ? out : new OzoneOutputStream(
-        keyOutputStream, enableHsync);
+    OzoneOutputStream out = createSecureOutputStream(openKey, keyOutputStream, keyOutputStream);
+    OutputStream wrapped = out != null ? out : keyOutputStream;
+
+    OutputStream compressed = createCompressedOutputStream(openKey, wrapped);
+
+    return new OzoneOutputStream(
+        compressed != null ? compressed : wrapped,
+        keyOutputStream,
+        enableHsync
+    );
+  }
+
+  private OutputStream createCompressedOutputStream(OpenKeySession openKey,
+                                                    OutputStream keyOutputStream) throws IOException {
+    String compressionType = openKey.getKeyInfo().getCompressionType();
+    if (StringUtils.isEmpty(compressionType)) {
+      return null;
+    }
+
+    CompressionCodec codec =
+        OzoneCompressionCodecFactory.getCompressionCodec(conf, compressionType);
+
+    return codec.createOutputStream(keyOutputStream);
+  }
+
+  private CompressionInputStream createDecompressedInputStream(
+      String compressionType, InputStream lengthInputStream)
+      throws IOException {
+    if (StringUtils.isEmpty(compressionType)) {
+      return null;
+    }
+
+    CompressionCodec codec =
+        OzoneCompressionCodecFactory.getCompressionCodec(conf, compressionType);
+    return codec.createInputStream(lengthInputStream);
   }
 
   private OzoneOutputStream createSecureOutputStream(OpenKeySession openKey,

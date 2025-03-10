@@ -1,5 +1,6 @@
 package org.apache.hadoop.ozone.client.rpc;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.StorageUnit;
 import org.apache.hadoop.hdds.HddsConfigKeys;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
@@ -22,7 +23,9 @@ import org.apache.hadoop.ozone.om.helpers.BucketLayout;
 import org.apache.hadoop.ozone.om.helpers.CompressionType;
 import org.apache.ozone.test.GenericTestUtils;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -39,8 +42,10 @@ import java.util.stream.Stream;
 import static org.apache.hadoop.hdds.HddsConfigKeys.OZONE_METADATA_DIRS;
 import static org.apache.hadoop.hdds.client.ReplicationFactor.ONE;
 import static org.apache.hadoop.hdds.client.ReplicationType.RATIS;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_COMPRESSION_FILE_EXT_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 class TestOzoneCompression {
 
@@ -68,6 +73,7 @@ class TestOzoneCompression {
     conf.set(HddsConfigKeys.OZONE_METADATA_DIRS, testDir.getAbsolutePath());
     conf.setBoolean(HddsConfigKeys.HDDS_BLOCK_TOKEN_ENABLED, true);
     conf.set(OZONE_METADATA_DIRS, testDir.getAbsolutePath());
+    conf.set(OZONE_COMPRESSION_FILE_EXT_KEY, "");
     CertificateClientTestImpl certificateClientTest =
         new CertificateClientTestImpl(conf);
     cluster = MiniOzoneCluster.newBuilder(conf)
@@ -112,8 +118,78 @@ class TestOzoneCompression {
   }
 
   @ParameterizedTest
+  @MethodSource("compressedExtensions")
+  void testCompressOnlyAllowedExtensionsDefaults(String fileExt, boolean shouldCompress) throws IOException {
+    conf.unset(OZONE_COMPRESSION_FILE_EXT_KEY);
+
+    OzoneBucket bucket = prepareBucket(BucketLayout.FILE_SYSTEM_OPTIMIZED, CompressionType.GZIP);
+
+    validateExpectedCompression(fileExt, shouldCompress, bucket);
+  }
+
+  @Test
+  void testCompressOnlyAllowedExtensionsCustom() throws IOException {
+    conf.set(OZONE_COMPRESSION_FILE_EXT_KEY, ".doc");
+
+    OzoneBucket bucket = prepareBucket(BucketLayout.FILE_SYSTEM_OPTIMIZED, CompressionType.GZIP);
+
+    validateExpectedCompression(".doc", true, bucket);
+    validateExpectedCompression(".txt", false, bucket);
+  }
+
+  private static void validateExpectedCompression(String fileExt, boolean shouldCompress, OzoneBucket bucket)
+      throws IOException {
+    Instant testStartTime = Instant.now();
+    String keyName = UUID.randomUUID() + fileExt;
+    String value = "sample value";
+    try (OzoneOutputStream out = bucket.createKey(keyName,
+        value.getBytes(StandardCharsets.UTF_8).length,
+        ReplicationConfig.fromTypeAndFactor(RATIS, ONE),
+        new HashMap<>())) {
+      out.write(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    // Verify content.
+    OzoneKeyDetails key = bucket.getKey(keyName);
+    assertEquals(keyName, key.getName());
+    assertFalse(key.getCreationTime().isBefore(testStartTime));
+    assertFalse(key.getModificationTime().isBefore(testStartTime));
+
+    if (shouldCompress) {
+      assertEquals(CompressionType.GZIP.getCodecName(), key.getCompressionType());
+    } else {
+      Assertions.assertTrue(StringUtils.isEmpty(key.getCompressionType()));
+    }
+  }
+
+  public static Stream<Arguments> compressedExtensions() {
+    return Stream.of(
+        arguments(".txt", true),
+        arguments(".log", true),
+        arguments("log", false),
+        arguments(".csv", true),
+        arguments(".json", true),
+        arguments(".tar", true),
+        arguments(".xml", true),
+        arguments(".bin", true),
+        arguments(".doc", false)
+    );
+  }
+
+  @ParameterizedTest
   @MethodSource("bucketArgs")
   void testPutKeyWithEncryption(BucketLayout bucketLayout, CompressionType compressionType) throws Exception {
+    OzoneBucket bucket = prepareBucket(bucketLayout, compressionType);
+
+    createAndVerifyKeyData(bucket, compressionType);
+    createAndVerifyFileData(bucket, compressionType);
+    createAndVerifyStreamKeyData(bucket, compressionType);
+  }
+
+  private static OzoneBucket prepareBucket(
+      BucketLayout bucketLayout,
+      CompressionType compressionType
+  ) throws IOException {
     String volumeName = UUID.randomUUID().toString();
     String bucketName = UUID.randomUUID().toString();
 
@@ -123,11 +199,7 @@ class TestOzoneCompression {
         .setBucketLayout(bucketLayout)
         .setCompressionType(compressionType.getCodecName()).build();
     volume.createBucket(bucketName, bucketArgs);
-    OzoneBucket bucket = volume.getBucket(bucketName);
-
-    createAndVerifyKeyData(bucket, compressionType);
-    createAndVerifyFileData(bucket, compressionType);
-    createAndVerifyStreamKeyData(bucket, compressionType);
+    return volume.getBucket(bucketName);
   }
 
   private static Stream<Arguments> bucketArgs() {

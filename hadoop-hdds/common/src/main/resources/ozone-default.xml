@@ -4325,4 +4325,13 @@
       A key of the cache entry is a pair of bucket and the requested key path.
     </description>
   </property>
+  <property>
+    <name>ozone.compression.files.ext</name>
+    <value/>
+    <tag>OZONE</tag>
+    <description>
+      File extensions to be compressed, delimited by commas. e.g ".txt,.log".
+      If set, then only files having an extension from this list will be compressed.
+    </description>
+  </property>
 </configuration>

@@ -382,6 +382,11 @@ public final class OMConfigKeys {
   public static final String OZONE_BUCKET_LAYOUT_OBJECT_STORE =
       BucketLayout.OBJECT_STORE.name();
 
+  public static final String OZONE_COMPRESSION_FILE_EXT_KEY =
+      "ozone.compression.files.ext";
+  public static final String OZONE_COMPRESSION_FILE_EXT_DEFAULT =
+      ".txt,.log,.csv,.json,.tar,.xml,.bin";
+
   /**
    * Configuration properties for Directory Deleting Service.
    */

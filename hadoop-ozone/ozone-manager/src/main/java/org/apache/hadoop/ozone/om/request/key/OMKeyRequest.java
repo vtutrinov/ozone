@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -35,16 +36,20 @@ import java.util.stream.Collectors;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdds.client.ContainerBlockID;
 import org.apache.hadoop.hdds.client.ECReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
+import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.utils.db.cache.CacheKey;
 import org.apache.hadoop.hdds.utils.db.cache.CacheValue;
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.OzoneConsts;
+import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OMMetrics;
+import org.apache.hadoop.ozone.om.OmMetadataManagerImpl;
 import org.apache.hadoop.ozone.om.PrefixManager;
 import org.apache.hadoop.ozone.om.ResolvedBucket;
 import org.apache.hadoop.ozone.om.helpers.BucketEncryptionKeyInfo;
@@ -742,7 +747,7 @@ public abstract class OMKeyRequest extends OMClientRequest {
 
     // the key does not exist, create a new object.
     // Blocks will be appended as version 0.
-    return createFileInfo(keyArgs, locations, replicationConfig,
+    return createFileInfo(omMetadataManager, keyArgs, locations, replicationConfig,
             keyArgs.getDataSize(), encInfo, prefixManager,
             omBucketInfo, omPathInfo, transactionLogIndex, objectID);
   }
@@ -753,6 +758,7 @@ public abstract class OMKeyRequest extends OMClientRequest {
    */
   @SuppressWarnings("parameterNumber")
   protected OmKeyInfo createFileInfo(
+      OMMetadataManager omMetadataManager,
       @Nonnull KeyArgs keyArgs,
       @Nonnull List<OmKeyLocationInfo> locations,
       @Nonnull ReplicationConfig replicationConfig,
@@ -788,8 +794,34 @@ public abstract class OMKeyRequest extends OMClientRequest {
       builder.setFileName(omPathInfoFSO.getLeafNodeName());
     }
     builder.setObjectID(objectID);
-    builder.setCompressionType(keyArgs.getCompressionType());
+    // Note: a trick to get
+    // To do this properly, add OzoneManager as a parameter.
+    OzoneManager ozoneManager =
+        ((OmMetadataManagerImpl) omMetadataManager).getOzoneManager();
+    if (checkCompressionType(keyArgs.getKeyName(), keyArgs.getCompressionType(), ozoneManager.getConfiguration())) {
+      builder.setCompressionType(keyArgs.getCompressionType());
+    }
     return builder.build();
+  }
+
+  protected boolean checkCompressionType(String keyName, String compressionType, OzoneConfiguration config) {
+    if (StringUtils.isEmpty(compressionType)) {
+      return false;
+    }
+
+    String compressedExtensions = config
+        .get(OMConfigKeys.OZONE_COMPRESSION_FILE_EXT_KEY,
+            OMConfigKeys.OZONE_COMPRESSION_FILE_EXT_DEFAULT);
+    if (StringUtils.isEmpty(compressedExtensions)) {
+      return true;
+    }
+    String[] extensions = compressedExtensions.toLowerCase().split(",");
+
+    String lower = keyName.toLowerCase();
+
+    return Arrays.stream(extensions)
+        .map(String::trim)
+        .anyMatch(lower::endsWith);
   }
 
   /**
@@ -843,7 +875,7 @@ public abstract class OMKeyRequest extends OMClientRequest {
     }
     // For this upload part we don't need to check in KeyTable. As this
     // is not an actual key, it is a part of the key.
-    return createFileInfo(args, locations, partKeyInfo.getReplicationConfig(),
+    return createFileInfo(omMetadataManager, args, locations, partKeyInfo.getReplicationConfig(),
             size, encInfo, prefixManager, omBucketInfo, omPathInfo,
             transactionLogIndex, objectID);
   }

@@ -25,8 +25,6 @@ import com.sun.tools.javac.util.StringUtils;
 public enum CompressionType {
   GZIP("GzipCodec"),
   BZIP2("BZip2Codec"),
-  LZ4("Lz4Codec"),
-  ZSTD("ZStandardCodec"),
   SNAPPY("SnappyCodec");
 
   private final String codecName;
