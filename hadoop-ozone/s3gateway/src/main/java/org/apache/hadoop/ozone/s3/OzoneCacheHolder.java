@@ -1,5 +1,6 @@
 package org.apache.hadoop.ozone.s3;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -30,15 +31,19 @@ public class OzoneCacheHolder {
   @Inject
   private OzoneConfiguration ozoneConfiguration;
 
-  private LoadingCache<Pair<String, String>, OzoneKeyDetails> createCache() {
+  @VisibleForTesting
+  public LoadingCache<Pair<String, String>, OzoneKeyDetails> createCache(
+      OzoneClient ozoneClient,
+      OzoneConfiguration configuration
+  ) {
     CacheLoader<Pair<String, String>, OzoneKeyDetails> loader = new CacheLoader<Pair<String, String>,
         OzoneKeyDetails>() {
       @Override
       public OzoneKeyDetails load(Pair<String, String> key) throws Exception {
-        return client.getProxy().getS3KeyDetails(key.getLeft(), key.getRight());
+        return ozoneClient.getProxy().getS3KeyDetails(key.getLeft(), key.getRight());
       }
     };
-    long timeDuration = ozoneConfiguration.getTimeDuration(
+    long timeDuration = configuration.getTimeDuration(
         OzoneConfigKeys.OZONE_S3G_KEY_INFO_CACHE_IDLE_LIFETIME,
         OzoneConfigKeys.OZONE_S3G_KEY_INFO_CACHE_IDLE_LIFETIME_DEFAULT,
         TimeUnit.MILLISECONDS);
@@ -57,7 +62,7 @@ public class OzoneCacheHolder {
       throw new RuntimeException(e);
     }
 
-    return createCache();
+    return createCache(client, ozoneConfiguration);
   }
 
   private OzoneClient getClient(OzoneConfiguration config)

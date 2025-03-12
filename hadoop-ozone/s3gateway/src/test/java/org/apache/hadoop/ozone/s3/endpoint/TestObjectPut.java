@@ -27,8 +27,11 @@ import java.io.OutputStream;
 import java.security.MessageDigest;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.Response;
+
+import com.google.common.cache.LoadingCache;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdds.client.ECReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationType;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
@@ -43,6 +46,7 @@ import org.apache.hadoop.ozone.client.io.OzoneInputStream;
 import org.apache.hadoop.ozone.client.protocol.ClientProtocol;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
+import org.apache.hadoop.ozone.s3.OzoneCacheHolder;
 import org.apache.hadoop.ozone.s3.exception.OS3Exception;
 import org.apache.hadoop.ozone.s3.exception.S3ErrorTable;
 import org.apache.http.HttpStatus;
@@ -97,6 +101,12 @@ public class TestObjectPut {
     objectEndpoint = spy(new ObjectEndpoint());
     objectEndpoint.setClient(clientStub);
     objectEndpoint.setOzoneConfiguration(new OzoneConfiguration());
+
+    OzoneCacheHolder cacheHolder = new OzoneCacheHolder();
+
+    LoadingCache<Pair<String, String>, OzoneKeyDetails> keyDetailsCache =
+        cacheHolder.createCache(clientStub, new OzoneConfiguration());
+    objectEndpoint.setKeyDetailsCache(keyDetailsCache);
   }
 
   @Test

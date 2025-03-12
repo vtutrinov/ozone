@@ -126,6 +126,7 @@ public class OzoneVolumeStub extends OzoneVolume {
                 HddsProtos.ReplicationFactor.THREE)))
         .setStorageType(bucketArgs.getStorageType())
         .setVersioning(bucketArgs.getVersioning())
+        .setCompressionType(bucketArgs.getCompressionType())
         .setCreationTime(Time.now())
         .build());
   }

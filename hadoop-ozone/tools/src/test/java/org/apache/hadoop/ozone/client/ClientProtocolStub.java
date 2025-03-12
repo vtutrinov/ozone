@@ -228,6 +228,7 @@ public class ClientProtocolStub implements ClientProtocol {
             .setStorageType(bucketArgs.getStorageType())
             .setIsVersionEnabled(bucketArgs.getVersioning())
             .setCreationTime(Time.now())
+            .setCompressionType(bucketArgs.getCompressionType())
             .build();
 
     ozoneManagerProtocol.createBucket(bucketInfo);
@@ -288,6 +289,7 @@ public class ClientProtocolStub implements ClientProtocol {
             .setQuotaInBytes(bucketInfo.getQuotaInBytes())
             .setQuotaInNamespace(bucketInfo.getQuotaInNamespace())
             .setUsedBytes(bucketInfo.getUsedBytes())
+            .setCompressionType(bucketInfo.getCompressionType())
             .build();
   }
 

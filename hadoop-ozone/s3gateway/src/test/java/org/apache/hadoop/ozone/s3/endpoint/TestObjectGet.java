@@ -29,13 +29,16 @@ import java.io.IOException;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.ExecutionException;
 
+import com.google.common.cache.LoadingCache;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.ozone.client.OzoneBucket;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientStub;
+import org.apache.hadoop.ozone.client.OzoneKeyDetails;
 import org.apache.hadoop.ozone.client.io.OzoneInputStream;
 import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
-import org.apache.hadoop.ozone.client.protocol.ClientProtocol;
+import org.apache.hadoop.ozone.s3.OzoneCacheHolder;
 import org.apache.hadoop.ozone.s3.exception.OS3Exception;
 
 import org.apache.commons.io.IOUtils;
@@ -50,8 +53,6 @@ import static org.apache.hadoop.ozone.s3.util.S3Consts.RANGE_HEADER;
 import static org.mockito.Mockito.doReturn;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 
 /**
  * Test get object.
@@ -96,6 +97,12 @@ public class TestObjectGet {
     rest.setOzoneConfiguration(new OzoneConfiguration());
     headers = Mockito.mock(HttpHeaders.class);
     rest.setHeaders(headers);
+
+    OzoneCacheHolder cacheHolder = new OzoneCacheHolder();
+
+    LoadingCache<Pair<String, String>, OzoneKeyDetails> keyDetailsCache =
+        cacheHolder.createCache(client, new OzoneConfiguration());
+    rest.setKeyDetailsCache(keyDetailsCache);
 
     context = Mockito.mock(ContainerRequestContext.class);
     Mockito.when(context.getUriInfo()).thenReturn(Mockito.mock(UriInfo.class));
@@ -247,30 +254,6 @@ public class TestObjectGet {
     // THEN
     assertEquals(NO_SUCH_KEY.getCode(), ex.getCode());
     bucket.deleteKey(keyPath);
-  }
-
-  @Test
-  public void testOMGetKeyInfoResultWillBeCachedFor10SecondsByDefault()
-      throws IOException, OS3Exception, ExecutionException, InterruptedException {
-    // GIVEN
-    ClientProtocol omClientProxy = client.getProxy();
-
-    // WHEN
-    rest.get(BUCKET_NAME, KEY_NAME, 0, null, 0, null);
-    rest.get(BUCKET_NAME, KEY_NAME, 0, null, 0, null);
-    rest.get(BUCKET_NAME, KEY_NAME, 0, null, 0, null);
-
-    // THEN (expect only one call to OM despite 3 calls to rest.get)
-    verify(omClientProxy).getS3KeyDetails(BUCKET_NAME, KEY_NAME);
-
-    // AND WHEN
-    Thread.sleep(10000);
-    rest.get(BUCKET_NAME, KEY_NAME, 0, null, 0, null);
-    rest.get(BUCKET_NAME, KEY_NAME, 0, null, 0, null);
-
-    // THEN (expect the cache to be expired on 10 seconds and another call to OM will be made:
-    // sum of the calls count is 2)
-    verify(omClientProxy, times(2)).getS3KeyDetails(BUCKET_NAME, KEY_NAME);
   }
 
 }

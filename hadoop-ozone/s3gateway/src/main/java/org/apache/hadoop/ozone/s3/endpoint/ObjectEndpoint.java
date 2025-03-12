@@ -124,6 +124,7 @@ import static org.apache.hadoop.ozone.s3.S3GatewayConfigKeys.OZONE_S3G_FSO_DIREC
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.ENTITY_TOO_SMALL;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.INVALID_ARGUMENT;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.INVALID_REQUEST;
+import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.NOT_IMPLEMENTED;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.NO_SUCH_UPLOAD;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.PRECOND_FAILED;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.newError;
@@ -249,6 +250,8 @@ public class ObjectEndpoint extends EndpointBase {
 
       // Normal put object
       OzoneBucket bucket = volume.getBucket(bucketName);
+      checkBucketNotCompressed(bucket);
+
       ReplicationConfig replicationConfig =
           getReplicationConfig(bucket, storageType);
 
@@ -462,6 +465,8 @@ public class ObjectEndpoint extends EndpointBase {
       }
 
       isFile(keyPath, keyDetails);
+
+      checkBucketNotCompressed(bucketName, keyDetails.getCompressionType());
 
       long length = keyDetails.getDataSize();
 
@@ -941,6 +946,9 @@ public class ObjectEndpoint extends EndpointBase {
       copyHeader = headers.getHeaderString(COPY_SOURCE_HEADER);
       String storageType = headers.getHeaderString(STORAGE_CLASS_HEADER);
       final OzoneBucket ozoneBucket = volume.getBucket(bucket);
+
+      checkBucketNotCompressed(ozoneBucket);
+
       ReplicationConfig replicationConfig =
           getReplicationConfig(ozoneBucket, storageType);
 
@@ -1094,6 +1102,18 @@ public class ObjectEndpoint extends EndpointBase {
     }
   }
 
+  private static void checkBucketNotCompressed(OzoneBucket ozoneBucket) throws OS3Exception {
+    checkBucketNotCompressed(ozoneBucket.getName(), ozoneBucket.getCompressionType());
+  }
+
+  private static void checkBucketNotCompressed(String bucketName, String compressionType) throws OS3Exception {
+    if (StringUtils.isNotEmpty(compressionType)) {
+      OS3Exception os3Exception = newError(NOT_IMPLEMENTED, bucketName);
+      os3Exception.setErrorMessage("Compressed bucket are not supported in S3.");
+      throw os3Exception;
+    }
+  }
+
   /**
    * Returns response for the listParts request.
    * See: https://docs.aws.amazon.com/AmazonS3/latest/API/mpUploadListParts.html
@@ -1168,6 +1188,11 @@ public class ObjectEndpoint extends EndpointBase {
   @VisibleForTesting
   public void setContext(ContainerRequestContext context) {
     this.context = context;
+  }
+
+  @VisibleForTesting
+  public void setKeyDetailsCache(LoadingCache<Pair<String, String>, OzoneKeyDetails> keyDetailsCache) {
+    this.keyDetailsCache = keyDetailsCache;
   }
 
   @SuppressWarnings("checkstyle:ParameterNumber")

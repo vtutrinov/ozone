@@ -108,6 +108,11 @@ public class ObjectStore {
     return proxy;
   }
 
+  @VisibleForTesting
+  public BucketLayout getS3BucketLayout() {
+    return s3BucketLayout;
+  }
+
   /**
    * Creates the volume with default values.
    * @param volumeName Name of the volume to be created.

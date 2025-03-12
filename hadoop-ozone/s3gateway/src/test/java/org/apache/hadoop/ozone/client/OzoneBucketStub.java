@@ -131,6 +131,13 @@ public class OzoneBucketStub extends OzoneBucket {
     }
 
     @Override
+    public Builder setCompressionType(String compressionType) {
+      super.setCompressionType(compressionType);
+
+      return this;
+    }
+
+    @Override
     public OzoneBucketStub build() {
       return new OzoneBucketStub(this);
     }
@@ -193,7 +200,7 @@ public class OzoneBucketStub extends OzoneBucket {
                 size,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
-                new ArrayList<>(), finalReplicationCon, metadata, null, null,
+                new ArrayList<>(), finalReplicationCon, metadata, null, getCompressionType(),
                 () -> readKey(key), true, 1
             ));
             super.close();
