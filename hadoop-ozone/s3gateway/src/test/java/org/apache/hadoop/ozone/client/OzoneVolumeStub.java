@@ -128,6 +128,7 @@ public final class OzoneVolumeStub extends OzoneVolume {
         .setBucketLayout(bucketArgs.getBucketLayout())
         .setStorageType(bucketArgs.getStorageType())
         .setVersioning(bucketArgs.getVersioning())
+        .setCompressionType(bucketArgs.getCompressionType())
         .setCreationTime(Time.now())
         .build());
   }

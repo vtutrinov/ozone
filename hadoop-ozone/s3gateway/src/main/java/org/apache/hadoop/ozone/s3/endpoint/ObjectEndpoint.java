@@ -23,6 +23,7 @@ import static org.apache.hadoop.ozone.s3.S3GatewayConfigKeys.OZONE_S3G_FSO_DIREC
 import static org.apache.hadoop.ozone.s3.S3GatewayConfigKeys.OZONE_S3G_FSO_DIRECTORY_CREATION_ENABLED_DEFAULT;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.INVALID_ARGUMENT;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.INVALID_REQUEST;
+import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.NOT_IMPLEMENTED;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.NO_SUCH_UPLOAD;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.PRECOND_FAILED;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.newError;
@@ -45,6 +46,7 @@ import static org.apache.hadoop.ozone.s3.util.S3Utils.stripQuotes;
 import static org.apache.hadoop.ozone.s3.util.S3Utils.validateSignatureHeader;
 import static org.apache.hadoop.ozone.s3.util.S3Utils.wrapInQuotes;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import java.io.EOFException;
@@ -222,6 +224,9 @@ public class ObjectEndpoint extends ObjectOperationHandler {
       }
 
       copyHeader = getHeaders().getHeaderString(COPY_SOURCE_HEADER);
+
+      // Normal put object
+      checkBucketNotCompressed(bucket);
 
       ReplicationConfig replicationConfig = getReplicationConfig(bucket);
 
@@ -427,6 +432,8 @@ public class ObjectEndpoint extends ObjectOperationHandler {
       }
 
       isFile(keyPath, keyDetails);
+
+      checkBucketNotCompressed(bucketName, keyDetails.getCompressionType());
 
       Response conditionalResponse = S3ConditionalRequest.evaluatePreconditions(
           getHeaders(), keyPath, keyDetails, S3ConditionalRequest.PreconditionContext.READ);
@@ -853,6 +860,9 @@ public class ObjectEndpoint extends ObjectOperationHandler {
       length = chunkInputStreamInfo.getEffectiveLength();
 
       copyHeader = getHeaders().getHeaderString(COPY_SOURCE_HEADER);
+
+      checkBucketNotCompressed(ozoneBucket);
+
       ReplicationConfig replicationConfig = getReplicationConfig(ozoneBucket);
 
       boolean enableEC = false;
@@ -1242,5 +1252,22 @@ public class ObjectEndpoint extends ObjectOperationHandler {
       }
       throw new IOException(e.getCause());
     }
+  }
+
+  private static void checkBucketNotCompressed(OzoneBucket ozoneBucket) throws OS3Exception {
+    checkBucketNotCompressed(ozoneBucket.getName(), ozoneBucket.getCompressionType());
+  }
+
+  private static void checkBucketNotCompressed(String bucketName, String compressionType) throws OS3Exception {
+    if (StringUtils.isNotEmpty(compressionType)) {
+      OS3Exception os3Exception = newError(NOT_IMPLEMENTED, bucketName);
+      os3Exception.setErrorMessage("Compressed bucket are not supported in S3.");
+      throw os3Exception;
+    }
+  }
+
+  @VisibleForTesting
+  public void setKeyDetailsCache(LoadingCache<Pair<String, String>, OzoneKeyDetails> keyDetailsCache) {
+    this.keyDetailsCache = keyDetailsCache;
   }
 }
