@@ -1116,6 +1116,7 @@ message KeyInfo {
     optional FileChecksumProto fileChecksum = 18;
     optional bool isFile = 19;
     optional string compressionType = 20;
+    optional uint64 originalSataSize = 21;
 }
 
 message BasicKeyInfo {

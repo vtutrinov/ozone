@@ -250,6 +250,10 @@ public class OMKeyCommitRequest extends OMKeyRequest {
         omKeyInfo.getMetadata().put(OzoneConsts.HSYNC_CLIENT_ID,
             String.valueOf(commitKeyRequest.getClientID()));
       }
+      if (StringUtils.isNotEmpty(omKeyInfo.getCompressionType()) && omKeyInfo.getOriginalDataSize() == 0) {
+        omKeyInfo.setOriginalDataSize(omKeyInfo.getDataSize());
+      }
+
       omKeyInfo.setDataSize(commitKeyArgs.getDataSize());
       omKeyInfo.setModificationTime(commitKeyArgs.getModificationTime());
       // Update the block length for each block, return the allocated but

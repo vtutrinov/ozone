@@ -22,6 +22,7 @@ import java.nio.file.InvalidPathException;
 import java.util.HashMap;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.audit.AuditLogger;
 import org.apache.hadoop.ozone.audit.OMAction;
@@ -169,7 +170,9 @@ public class OMKeyCommitRequestWithFSO extends OMKeyCommitRequest {
         omKeyInfo.getMetadata().put(OzoneConsts.HSYNC_CLIENT_ID,
             String.valueOf(commitKeyRequest.getClientID()));
       }
-
+      if (StringUtils.isNotEmpty(omKeyInfo.getCompressionType()) && omKeyInfo.getOriginalDataSize() == 0) {
+        omKeyInfo.setOriginalDataSize(omKeyInfo.getDataSize());
+      }
       omKeyInfo.setDataSize(commitKeyArgs.getDataSize());
 
       omKeyInfo.setModificationTime(commitKeyArgs.getModificationTime());

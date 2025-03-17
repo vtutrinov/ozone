@@ -45,6 +45,11 @@ public class OzoneKeyDetails extends OzoneKey {
   private final CheckedSupplier<OzoneInputStream, IOException> contentSupplier;
 
   /**
+   * Original size of the data.
+   */
+  private final long originalDataSize;
+
+  /**
    * Constructs OzoneKeyDetails from OmKeyInfo.
    */
   @SuppressWarnings("parameternumber")
@@ -57,13 +62,14 @@ public class OzoneKeyDetails extends OzoneKey {
       String compressionType,
       CheckedSupplier<OzoneInputStream, IOException> contentSupplier,
       boolean isFile,
-      long updateId) {
+      long updateId, long originalDataSize) {
     super(volumeName, bucketName, keyName, size, creationTime,
         modificationTime, replicationConfig, metadata, isFile, updateId);
     this.ozoneKeyLocations = ozoneKeyLocations;
     this.feInfo = feInfo;
     this.compressionType = compressionType;
     this.contentSupplier = contentSupplier;
+    this.originalDataSize = originalDataSize;
   }
 
   /**
@@ -88,5 +94,9 @@ public class OzoneKeyDetails extends OzoneKey {
   @JsonIgnore
   public OzoneInputStream getContent() throws IOException {
     return this.contentSupplier.get();
+  }
+
+  public long getOriginalDataSize() {
+    return originalDataSize;
   }
 }

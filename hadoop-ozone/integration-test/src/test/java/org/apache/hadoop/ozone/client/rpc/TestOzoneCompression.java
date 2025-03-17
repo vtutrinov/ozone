@@ -142,8 +142,9 @@ class TestOzoneCompression {
     Instant testStartTime = Instant.now();
     String keyName = UUID.randomUUID() + fileExt;
     String value = "sample value";
+    int originalSize = value.getBytes(StandardCharsets.UTF_8).length;
     try (OzoneOutputStream out = bucket.createKey(keyName,
-        value.getBytes(StandardCharsets.UTF_8).length,
+        originalSize,
         ReplicationConfig.fromTypeAndFactor(RATIS, ONE),
         new HashMap<>())) {
       out.write(value.getBytes(StandardCharsets.UTF_8));
@@ -157,6 +158,7 @@ class TestOzoneCompression {
 
     if (shouldCompress) {
       assertEquals(CompressionType.GZIP.getCodecName(), key.getCompressionType());
+      assertEquals(originalSize, key.getOriginalDataSize());
     } else {
       Assertions.assertTrue(StringUtils.isEmpty(key.getCompressionType()));
     }
@@ -179,6 +181,8 @@ class TestOzoneCompression {
   @ParameterizedTest
   @MethodSource("bucketArgs")
   void testPutKeyWithEncryption(BucketLayout bucketLayout, CompressionType compressionType) throws Exception {
+    conf.set(OZONE_COMPRESSION_FILE_EXT_KEY, "");
+
     OzoneBucket bucket = prepareBucket(bucketLayout, compressionType);
 
     createAndVerifyKeyData(bucket, compressionType);
@@ -216,46 +220,50 @@ class TestOzoneCompression {
     Instant testStartTime = Instant.now();
     String keyName = UUID.randomUUID().toString();
     String value = "sample value";
+    int originalSize = value.getBytes(StandardCharsets.UTF_8).length;
     try (OzoneOutputStream out = bucket.createKey(keyName,
-        value.getBytes(StandardCharsets.UTF_8).length,
+        originalSize,
         ReplicationConfig.fromTypeAndFactor(RATIS, ONE),
         new HashMap<>())) {
       out.write(value.getBytes(StandardCharsets.UTF_8));
     }
-    verifyKeyData(bucket, keyName, compressionType, testStartTime);
+    verifyKeyData(bucket, keyName, compressionType, testStartTime, originalSize);
     OzoneKeyDetails key1 = bucket.getKey(keyName);
 
     // Overwrite the key
     try (OzoneOutputStream out = bucket.createKey(keyName,
-        value.getBytes(StandardCharsets.UTF_8).length,
+        originalSize,
         ReplicationConfig.fromTypeAndFactor(RATIS, ONE),
         new HashMap<>())) {
       out.write(value.getBytes(StandardCharsets.UTF_8));
     }
     OzoneKeyDetails key2 = bucket.getKey(keyName);
     assertEquals(key1.getCompressionType(), key2.getCompressionType());
+    assertEquals(key1.getOriginalDataSize(), key2.getOriginalDataSize());
   }
 
   static void createAndVerifyFileData(OzoneBucket bucket, CompressionType compressionType) throws Exception {
     Instant testStartTime = Instant.now();
     String keyName = UUID.randomUUID().toString();
     String value = "sample value";
+    int originalSize = value.getBytes(StandardCharsets.UTF_8).length;
     try (OzoneOutputStream out = bucket.createFile(keyName,
-        value.getBytes(StandardCharsets.UTF_8).length,
+        originalSize,
         ReplicationConfig.fromTypeAndFactor(RATIS, ONE), true, false)) {
       out.write(value.getBytes(StandardCharsets.UTF_8));
     }
-    verifyKeyData(bucket, keyName, compressionType, testStartTime);
+    verifyKeyData(bucket, keyName, compressionType, testStartTime, originalSize);
     OzoneKeyDetails key1 = bucket.getKey(keyName);
 
     // Overwrite the key
     try (OzoneOutputStream out = bucket.createFile(keyName,
-        value.getBytes(StandardCharsets.UTF_8).length,
+        originalSize,
         ReplicationConfig.fromTypeAndFactor(RATIS, ONE), true, false)) {
       out.write(value.getBytes(StandardCharsets.UTF_8));
     }
     OzoneKeyDetails key2 = bucket.getKey(keyName);
     assertEquals(key1.getCompressionType(), key2.getCompressionType());
+    assertEquals(key1.getOriginalDataSize(), key2.getOriginalDataSize());
   }
 
   static void createAndVerifyStreamKeyData(OzoneBucket bucket, CompressionType compressionType)
@@ -263,17 +271,18 @@ class TestOzoneCompression {
     Instant testStartTime = Instant.now();
     String keyName = UUID.randomUUID().toString();
     String value = "sample value";
+    int originalSize = value.getBytes(StandardCharsets.UTF_8).length;
     try (OzoneDataStreamOutput out = bucket.createStreamKey(keyName,
-        value.getBytes(StandardCharsets.UTF_8).length,
+        originalSize,
         ReplicationConfig.fromTypeAndFactor(RATIS, ONE),
         new HashMap<>())) {
       out.write(value.getBytes(StandardCharsets.UTF_8));
     }
-    verifyKeyData(bucket, keyName, compressionType, testStartTime);
+    verifyKeyData(bucket, keyName, compressionType, testStartTime, originalSize);
   }
 
   static void verifyKeyData(OzoneBucket bucket, String keyName, CompressionType compressionType,
-                            Instant testStartTime) throws Exception {
+                            Instant testStartTime, int originalSize) throws Exception {
     // Verify content.
     OzoneKeyDetails key = bucket.getKey(keyName);
     assertEquals(keyName, key.getName());
@@ -281,6 +290,7 @@ class TestOzoneCompression {
     assertFalse(key.getModificationTime().isBefore(testStartTime));
 
     assertEquals(compressionType.getCodecName(), key.getCompressionType());
+    assertEquals(originalSize, key.getOriginalDataSize());
   }
 
 }
