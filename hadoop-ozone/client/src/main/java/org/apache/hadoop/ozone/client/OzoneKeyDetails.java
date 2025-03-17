@@ -53,6 +53,11 @@ public class OzoneKeyDetails extends OzoneKey {
   private final String compressionType;
 
   /**
+   * SDP: size of the original (uncompressed) data.
+   */
+  private final long originalDataSize;
+
+  /**
    * Constructs OzoneKeyDetails from OmKeyInfo.
    */
   @SuppressWarnings("parameternumber")
@@ -65,7 +70,7 @@ public class OzoneKeyDetails extends OzoneKey {
       CheckedSupplier<OzoneInputStream, IOException> contentSupplier,
       boolean isFile, String owner, Map<String, String> tags, Long generation) {
     this(volumeName, bucketName, keyName, size, creationTime, modificationTime, ozoneKeyLocations,
-        replicationConfig, metadata, feInfo, contentSupplier, isFile, owner, tags, generation, null);
+        replicationConfig, metadata, feInfo, contentSupplier, isFile, owner, tags, generation, null, 0);
   }
 
   /**
@@ -80,7 +85,7 @@ public class OzoneKeyDetails extends OzoneKey {
       FileEncryptionInfo feInfo,
       CheckedSupplier<OzoneInputStream, IOException> contentSupplier,
       boolean isFile, String owner, Map<String, String> tags, Long generation,
-      String compressionType) {
+      String compressionType, long originalDataSize) {
     super(volumeName, bucketName, keyName, size, creationTime,
         modificationTime, replicationConfig, metadata, isFile, owner, tags);
     this.ozoneKeyLocations = ozoneKeyLocations;
@@ -88,6 +93,7 @@ public class OzoneKeyDetails extends OzoneKey {
     this.contentSupplier = contentSupplier;
     this.generation = generation;
     this.compressionType = compressionType;
+    this.originalDataSize = originalDataSize;
   }
 
   /**
@@ -124,6 +130,10 @@ public class OzoneKeyDetails extends OzoneKey {
 
   public String getCompressionType() {
     return compressionType;
+  }
+
+  public long getOriginalDataSize() {
+    return originalDataSize;
   }
 
   /**

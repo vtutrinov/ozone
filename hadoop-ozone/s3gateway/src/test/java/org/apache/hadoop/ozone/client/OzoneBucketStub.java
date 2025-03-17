@@ -158,7 +158,7 @@ public final class OzoneBucketStub extends OzoneBucket {
                 new ArrayList<>(), finalReplicationCon, getMetadata(), null,
                 () -> readKey(key), true,
                 UserGroupInformation.getCurrentUser().getShortUserName(),
-                tags, null, getCompressionType()
+                tags, null, getCompressionType(), 0
             ));
           }
         };

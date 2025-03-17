@@ -28,6 +28,7 @@ import java.nio.file.InvalidPathException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.audit.AuditLogger;
@@ -224,6 +225,10 @@ public class OMKeyCommitRequestWithFSO extends OMKeyCommitRequest {
         }
       }
 
+      // SDP (SDPOZN-1497): remember the size of the original (uncompressed) data
+      if (StringUtils.isNotEmpty(omKeyInfo.getCompressionType()) && omKeyInfo.getOriginalDataSize() == 0) {
+        omKeyInfo.setOriginalDataSize(omKeyInfo.getDataSize());
+      }
       // Set the new metadata from the request and UpdateID to current
       // transactionLogIndex
       omKeyInfo = omKeyInfo.toBuilder()

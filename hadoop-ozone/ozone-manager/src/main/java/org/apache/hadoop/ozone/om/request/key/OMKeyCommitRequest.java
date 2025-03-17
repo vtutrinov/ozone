@@ -33,6 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.OzoneConsts;
@@ -306,6 +307,10 @@ public class OMKeyCommitRequest extends OMKeyRequest {
       // Optimistic locking validation has passed. Now set the rewrite fields to null so they are
       // not persisted in the key table.
       // Combination
+      // SDP (SDPOZN-1497): remember the size of the original (uncompressed) data
+      if (StringUtils.isNotEmpty(omKeyInfo.getCompressionType()) && omKeyInfo.getOriginalDataSize() == 0) {
+        omKeyInfo.setOriginalDataSize(omKeyInfo.getDataSize());
+      }
       // Set the UpdateID to current transactionLogIndex
       omKeyInfo = omKeyInfo.toBuilder()
           .setExpectedDataGeneration(null)

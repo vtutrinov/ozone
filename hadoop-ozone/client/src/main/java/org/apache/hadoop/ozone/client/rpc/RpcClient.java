@@ -1847,7 +1847,8 @@ public class RpcClient implements ClientProtocol {
         keyInfo.getFileEncryptionInfo(),
         () -> getInputStreamWithRetryFunction(keyInfo), keyInfo.isFile(),
         keyInfo.getOwnerName(), keyInfo.getTags(),
-        keyInfo.getGeneration(), keyInfo.getCompressionType()
+        keyInfo.getGeneration(), keyInfo.getCompressionType(),
+        keyInfo.getOriginalDataSize()
     );
   }
 

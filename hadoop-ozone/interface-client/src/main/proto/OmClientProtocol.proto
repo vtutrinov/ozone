@@ -1213,6 +1213,7 @@ message KeyInfo {
 
     // SDP extension (SDP numbers are kept in the 1000+ range)
     optional string compressionType = 1001;
+    optional uint64 originalDataSize = 1002;
 }
 
 // KeyInfoProtoLight is a lightweight subset of KeyInfo message containing
