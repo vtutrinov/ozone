@@ -45,12 +45,12 @@ class OzoneAdderSampleStatTest {
   void testAddWithSum() {
     OzoneAdderSampleStat metric = new OzoneAdderSampleStat();
 
-    int numberOfSamples = 5;
-    int samplesSum = 100;
+    int metricNumStatsToAdd = 5;
+    int totalSumOf5Metrics = 100;
 
-    metric.add(numberOfSamples, samplesSum);
-    metric.add(numberOfSamples, samplesSum);
-    metric.add(numberOfSamples, samplesSum);
+    metric.add(metricNumStatsToAdd, totalSumOf5Metrics);
+    metric.add(metricNumStatsToAdd, totalSumOf5Metrics);
+    metric.add(metricNumStatsToAdd, totalSumOf5Metrics);
 
     assertEquals(15, metric.numSamples());
     assertEquals(Float.MAX_VALUE, metric.min());

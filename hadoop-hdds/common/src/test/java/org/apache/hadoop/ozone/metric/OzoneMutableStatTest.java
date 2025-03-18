@@ -87,10 +87,10 @@ class OzoneMutableStatTest {
     metric.snapshot(metricsRecordBuilder);
     List<AbstractMetric> metrics = metricsRecordBuilder.metrics();
 
-    Number numberOfSamples = metrics.get(0).value();
+    Number numberOfSamples = getNumberOfSamples(metrics);
     assertEquals(10L, numberOfSamples);
 
-    Number averageTimeMetricValue = metrics.get(1).value();
+    Number averageTimeMetricValue = getAverageTime(metrics);
     assertEquals(5.5, averageTimeMetricValue);
   }
 
@@ -133,10 +133,10 @@ class OzoneMutableStatTest {
     metric.snapshot(metricsRecordBuilder);
     List<AbstractMetric> metrics = metricsRecordBuilder.metrics();
 
-    Number numberOfSamples = metrics.get(0).value();
+    Number numberOfSamples = getNumberOfSamples(metrics);
     assertEquals(15L, numberOfSamples);
 
-    Number averageTime = metrics.get(1).value();
+    Number averageTime = getAverageTime(metrics);
     assertEquals(20.0, averageTime);
   }
 
@@ -184,14 +184,14 @@ class OzoneMutableStatTest {
   }
 
   @Test
-  void testOzoneMutableStatMetricsSizeAfterInsertElements1() {
+  void testOzoneMutableStatEmptySnapshotTimeWithoutSnapshot() {
     OzoneMutableStat metric = createMutableStat();
     metric.setUpdateTimeStamp(true);
     assertEquals(0, metric.getSnapshotTimeStamp());
   }
 
   @Test
-  void testOzoneMutableStatMetricsSizeAfterInsertElements2() {
+  void testOzoneMutableStatSnapshotTimeStampAfterInsert() {
     OzoneMutableStat metric = createMutableStat();
     metric.setUpdateTimeStamp(true);
     MetricsRecordBuilderImpl metricsRecordBuilder = getMetricsRecordBuilder();
@@ -224,5 +224,13 @@ class OzoneMutableStatTest {
         "Test_description",
         "Test_sample_name",
         "Test_value_name");
+  }
+
+  private Number getNumberOfSamples(List<AbstractMetric> metrics) {
+    return metrics.get(0).value();
+  }
+
+  private Number getAverageTime(List<AbstractMetric> metrics) {
+    return metrics.get(1).value();
   }
 }
