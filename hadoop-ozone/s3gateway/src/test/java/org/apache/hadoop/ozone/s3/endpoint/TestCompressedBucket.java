@@ -21,9 +21,12 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.X_AMZ_CONTENT_SHA256;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import javax.ws.rs.core.HttpHeaders;
+import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.hdds.scm.client.HddsClientUtils;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.client.BucketArgs;
 import org.apache.hadoop.ozone.client.ObjectStore;
@@ -57,13 +60,10 @@ public class TestCompressedBucket {
   private ObjectEndpoint rest;
   private OzoneClient client;
 
-
   @BeforeEach
   public void init() throws IOException {
     //GIVEN
     client = new OzoneClientStub();
-    // creates the S3 volume in the stub
-    client.getObjectStore().createS3Bucket("plain");
     createS3Bucket("b1", CompressionType.GZIP, client.getObjectStore());
     OzoneBucket bucket = client.getObjectStore().getS3Bucket("b1");
     OzoneOutputStream keyStream =
@@ -79,12 +79,13 @@ public class TestCompressedBucket {
         .build();
   }
 
-
   private void createS3Bucket(
       String bucketName,
       CompressionType compressionType,
       ObjectStore objectStore
   ) throws IOException {
+    objectStore.createVolume(HddsClientUtils.getDefaultS3VolumeName(new OzoneConfiguration()));
+
     OzoneVolume volume = objectStore.getS3Volume();
     // Backwards compatibility:
     // When OM is pre-finalized for the bucket layout feature, it will block
@@ -122,6 +123,8 @@ public class TestCompressedBucket {
   public void get() {
     OS3Exception ex = assertThrows(OS3Exception.class, () -> EndpointTestUtils.get(rest, "b1", "key1"));
     assertEquals(S3ErrorTable.NOT_IMPLEMENTED.getCode(), ex.getCode());
+    assertTrue(ex.getErrorMessage() != null
+        && ex.getErrorMessage().contains("Compressed bucket are not supported in S3"));
   }
 
   @Test

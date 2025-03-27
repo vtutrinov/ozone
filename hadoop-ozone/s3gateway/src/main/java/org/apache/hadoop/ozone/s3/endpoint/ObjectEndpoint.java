@@ -86,6 +86,7 @@ import org.apache.hadoop.hdds.client.ECReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.audit.S3GAction;
+import org.apache.hadoop.ozone.client.ObjectStore;
 import org.apache.hadoop.ozone.client.OzoneBucket;
 import org.apache.hadoop.ozone.client.OzoneKey;
 import org.apache.hadoop.ozone.client.OzoneKeyDetails;
@@ -226,7 +227,7 @@ public class ObjectEndpoint extends ObjectOperationHandler {
       copyHeader = getHeaders().getHeaderString(COPY_SOURCE_HEADER);
 
       // Normal put object
-      checkBucketNotCompressed(bucket);
+      checkBucketNotCompressed(getClient().getObjectStore(), bucket);
 
       ReplicationConfig replicationConfig = getReplicationConfig(bucket);
 
@@ -861,7 +862,7 @@ public class ObjectEndpoint extends ObjectOperationHandler {
 
       copyHeader = getHeaders().getHeaderString(COPY_SOURCE_HEADER);
 
-      checkBucketNotCompressed(ozoneBucket);
+      checkBucketNotCompressed(getClient().getObjectStore(), ozoneBucket);
 
       ReplicationConfig replicationConfig = getReplicationConfig(ozoneBucket);
 
@@ -1254,8 +1255,18 @@ public class ObjectEndpoint extends ObjectOperationHandler {
     }
   }
 
-  private static void checkBucketNotCompressed(OzoneBucket ozoneBucket) throws OS3Exception {
+  private static void checkBucketNotCompressed(ObjectStore objectStore, OzoneBucket ozoneBucket) throws OS3Exception {
     checkBucketNotCompressed(ozoneBucket.getName(), ozoneBucket.getCompressionType());
+    if (ozoneBucket.isLink()) {
+      try {
+        OzoneVolume sourceVolume = objectStore.getVolume(ozoneBucket.getSourceVolume());
+        OzoneBucket linkedBucket = sourceVolume.getBucket(ozoneBucket.getSourceBucket());
+
+        checkBucketNotCompressed(linkedBucket.getName(), linkedBucket.getCompressionType());
+      } catch (IOException e) {
+        LOG.error("Failed to resolve bucket link", e);
+      }
+    }
   }
 
   private static void checkBucketNotCompressed(String bucketName, String compressionType) throws OS3Exception {
