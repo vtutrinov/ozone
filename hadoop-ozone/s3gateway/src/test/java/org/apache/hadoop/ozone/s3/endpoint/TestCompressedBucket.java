@@ -3,6 +3,7 @@ package org.apache.hadoop.ozone.s3.endpoint;
 import com.google.common.cache.LoadingCache;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.hdds.scm.client.HddsClientUtils;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.client.BucketArgs;
 import org.apache.hadoop.ozone.client.ObjectStore;
@@ -36,6 +37,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Test accessing a compressed bucket via S3.
@@ -57,7 +59,6 @@ public class TestCompressedBucket {
   public void init() throws IOException {
     //GIVEN
     client = new OzoneClientStub();
-    client.getObjectStore().createS3Bucket("b1");
     createS3Bucket("b1", CompressionType.GZIP, client.getObjectStore());
     OzoneBucket bucket = client.getObjectStore().getS3Bucket("b1");
     OzoneOutputStream keyStream =
@@ -90,6 +91,8 @@ public class TestCompressedBucket {
       CompressionType compressionType,
       ObjectStore objectStore
   ) throws IOException {
+    objectStore.createVolume(HddsClientUtils.getDefaultS3VolumeName(new OzoneConfiguration()));
+
     OzoneVolume volume = objectStore.getS3Volume();
     // Backwards compatibility:
     // When OM is pre-finalized for the bucket layout feature, it will block
@@ -125,9 +128,12 @@ public class TestCompressedBucket {
 
   @Test
   public void get() throws IOException, OS3Exception, ExecutionException {
-    assertThrows(OS3Exception.class, () ->
+    OS3Exception os3Exception = assertThrows(OS3Exception.class, () ->
         rest.get("b1", "key1", 0, null, 0, null)
     );
+
+    assertTrue(os3Exception.getErrorMessage() != null
+        && os3Exception.getErrorMessage().contains("Compressed bucket are not supported in S3"));
   }
 
   @Test

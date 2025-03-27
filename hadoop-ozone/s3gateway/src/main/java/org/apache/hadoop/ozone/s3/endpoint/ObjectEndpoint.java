@@ -54,6 +54,7 @@ import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.conf.StorageUnit;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.audit.S3GAction;
+import org.apache.hadoop.ozone.client.ObjectStore;
 import org.apache.hadoop.ozone.client.OzoneBucket;
 import org.apache.hadoop.ozone.client.OzoneKey;
 import org.apache.hadoop.ozone.client.OzoneKeyDetails;
@@ -250,7 +251,7 @@ public class ObjectEndpoint extends EndpointBase {
 
       // Normal put object
       OzoneBucket bucket = volume.getBucket(bucketName);
-      checkBucketNotCompressed(bucket);
+      checkBucketNotCompressed(getClient().getObjectStore(), bucket);
 
       ReplicationConfig replicationConfig =
           getReplicationConfig(bucket, storageType);
@@ -947,7 +948,7 @@ public class ObjectEndpoint extends EndpointBase {
       String storageType = headers.getHeaderString(STORAGE_CLASS_HEADER);
       final OzoneBucket ozoneBucket = volume.getBucket(bucket);
 
-      checkBucketNotCompressed(ozoneBucket);
+      checkBucketNotCompressed(getClient().getObjectStore(), ozoneBucket);
 
       ReplicationConfig replicationConfig =
           getReplicationConfig(ozoneBucket, storageType);
@@ -1102,8 +1103,18 @@ public class ObjectEndpoint extends EndpointBase {
     }
   }
 
-  private static void checkBucketNotCompressed(OzoneBucket ozoneBucket) throws OS3Exception {
+  private static void checkBucketNotCompressed(ObjectStore objectStore, OzoneBucket ozoneBucket) throws OS3Exception {
     checkBucketNotCompressed(ozoneBucket.getName(), ozoneBucket.getCompressionType());
+    if (ozoneBucket.isLink()) {
+      try {
+        OzoneVolume sourceVolume = objectStore.getVolume(ozoneBucket.getSourceVolume());
+        OzoneBucket linkedBucket = sourceVolume.getBucket(ozoneBucket.getSourceBucket());
+
+        checkBucketNotCompressed(linkedBucket.getName(), linkedBucket.getCompressionType());
+      } catch (IOException e) {
+        LOG.error("Failed to resolve bucket link", e);
+      }
+    }
   }
 
   private static void checkBucketNotCompressed(String bucketName, String compressionType) throws OS3Exception {
