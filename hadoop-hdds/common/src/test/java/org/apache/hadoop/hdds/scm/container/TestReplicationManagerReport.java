@@ -247,4 +247,11 @@ public class TestReplicationManagerReport {
     assertThrows(IllegalStateException.class, () -> report
         .setSample(HddsProtos.LifeCycleState.CLOSED.toString(), containers));
   }
+
+  @Test
+  public void testSmallReportSize() {
+    final int smallReportSize = 50;
+    final ReplicationManagerReport smallReport = new ReplicationManagerReport(smallReportSize);
+    assertEquals(smallReport.getReportSize(), ReplicationManagerReport.SAMPLE_LIMIT);
+  }
 }

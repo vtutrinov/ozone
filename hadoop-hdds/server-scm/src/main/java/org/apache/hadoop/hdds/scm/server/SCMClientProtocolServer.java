@@ -979,6 +979,16 @@ public class SCMClientProtocolServer implements
   }
 
   @Override
+  public ReplicationManagerReport orderContainerManagerReport(int count)
+      throws InterruptedException {
+    final Map<String, String> auditMap = Maps.newHashMap();
+    auditMap.put("count", String.valueOf(count));
+    AUDIT.logReadSuccess(buildAuditMessageForSuccess(
+        SCMAction.GET_REPLICATION_MANAGER_REPORT, auditMap));
+    return scm.getReplicationManager().orderContainerReport(count);
+  }
+
+  @Override
   public StatusAndMessages finalizeScmUpgrade(String upgradeClientID) throws
       IOException {
     // check admin authorization

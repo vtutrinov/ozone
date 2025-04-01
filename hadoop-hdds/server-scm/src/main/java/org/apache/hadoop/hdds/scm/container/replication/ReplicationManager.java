@@ -147,7 +147,7 @@ public class ReplicationManager implements SCMService {
   /**
    * Report object that is refreshed each time replication Manager runs.
    */
-  private ReplicationManagerReport containerReport;
+  private volatile ReplicationManagerReport containerReport;
 
   /**
    * Replication progress related metrics.
@@ -201,6 +201,7 @@ public class ReplicationManager implements SCMService {
   private final HealthCheck containerCheckChain;
   private final ReplicationQueue nullReplicationQueue =
       new NullReplicationQueue();
+  private int nextContainerReportSize = ReplicationManagerReport.SAMPLE_LIMIT;
 
   /**
    * Constructs ReplicationManager instance with the given configuration.
@@ -375,7 +376,7 @@ public class ReplicationManager implements SCMService {
     final long start = clock.millis();
     final List<ContainerInfo> containers =
         containerManager.getContainers();
-    ReplicationManagerReport report = new ReplicationManagerReport();
+    ReplicationManagerReport report = new ReplicationManagerReport(nextContainerReportSize);
     ReplicationQueue newRepQueue = new ReplicationQueue();
     for (ContainerInfo c : containers) {
       if (!shouldRun()) {
@@ -399,6 +400,8 @@ public class ReplicationManager implements SCMService {
     LOG.info("Replication Monitor Thread took {} milliseconds for" +
             " processing {} containers.", clock.millis() - start,
         containers.size());
+    nextContainerReportSize = ReplicationManagerReport.SAMPLE_LIMIT;
+    notifyAll();
   }
 
   public void sendCloseContainerEvent(ContainerID containerID) {
@@ -920,6 +923,23 @@ public class ReplicationManager implements SCMService {
     return containerReport;
   }
 
+  public synchronized ReplicationManagerReport orderContainerReport(int requiredSize)
+      throws InterruptedException {
+    ReplicationManagerReport curReport = containerReport;
+    nextContainerReportSize = Math.max(requiredSize, curReport.getReportSize());
+
+    if (requiredSize <= curReport.getReportSize()) {
+      return curReport;
+    }
+
+    while (requiredSize > curReport.getReportSize()) {
+      wait();
+      curReport = containerReport;
+    }
+
+    return curReport;
+  }
+
   /**
    * ReplicationMonitor thread runnable. This wakes up at configured
    * interval and processes all the containers in the system.
@@ -928,7 +948,11 @@ public class ReplicationManager implements SCMService {
     try {
       while (running) {
         processAll();
-        wait(rmConf.getInterval().toMillis());
+        long waitEnd = System.currentTimeMillis() + rmConf.getInterval().toMillis();
+        long remaining;
+        while ((remaining = waitEnd - System.currentTimeMillis()) > 0) {
+          wait(remaining);
+        }
       }
     } catch (Throwable t) {
       if (t instanceof InterruptedException) {
@@ -1510,7 +1534,7 @@ public class ReplicationManager implements SCMService {
         : new RatisContainerReplicaCount(container, replicas, pendingOps,
             redundancy, false);
   }
-  
+
   public ContainerReplicaPendingOps getContainerReplicaPendingOps() {
     return containerReplicaPendingOps;
   }
@@ -1555,6 +1579,11 @@ public class ReplicationManager implements SCMService {
     } catch (PipelineNotFoundException e) {
       return false;
     }
+  }
+
+  @VisibleForTesting
+  public int getNextContainerReportSize() {
+    return nextContainerReportSize;
   }
 }
 

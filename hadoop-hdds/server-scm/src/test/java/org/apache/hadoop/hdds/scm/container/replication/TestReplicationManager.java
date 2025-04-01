@@ -18,6 +18,10 @@
 package org.apache.hadoop.hdds.scm.container.replication;
 
 import com.google.common.collect.ImmutableList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdds.client.ECReplicationConfig;
 import org.apache.hadoop.hdds.client.RatisReplicationConfig;
@@ -56,6 +60,7 @@ import org.apache.hadoop.util.Lists;
 import org.apache.ozone.test.TestClock;
 import org.apache.ratis.protocol.exceptions.NotLeaderException;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -78,6 +83,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 
+import static java.lang.Thread.sleep;
 import static org.apache.hadoop.hdds.HddsConfigKeys.HDDS_SCM_WAIT_TIME_AFTER_SAFE_MODE_EXIT;
 import static org.apache.hadoop.hdds.protocol.proto.HddsProtos.NodeOperationalState.DECOMMISSIONING;
 import static org.apache.hadoop.hdds.protocol.proto.HddsProtos.NodeOperationalState.ENTERING_MAINTENANCE;
@@ -1741,6 +1747,44 @@ public class TestReplicationManager {
         (int) Math.ceil(healthyNodes
             * config.getDatanodeReplicationLimit() * 0.75),
         rm.getReplicationInFlightLimit());
+  }
+
+  @Test
+  public void testOrderContainerReport() throws Exception {
+    final int bigContainerReportSize = ReplicationManagerReport.SAMPLE_LIMIT * 2;
+    final ExecutorService executor = Executors.newFixedThreadPool(2);
+    final ReplicationManager mockedRM = Mockito.spy(replicationManager);
+
+    Mockito.when(containerManager.getContainers()).thenReturn(new ArrayList<>());
+    Mockito.when(mockedRM.shouldRun()).thenReturn(Boolean.TRUE);
+    try {
+      @SuppressWarnings("unchecked") final Future<ReplicationManagerReport> orderedReport =
+          executor.submit(() -> {
+            try {
+              return mockedRM.orderContainerReport(bigContainerReportSize);
+            } catch (InterruptedException e) {
+              throw new RuntimeException(e);
+            }
+          });
+      executor.execute(() -> {
+        try {
+          sleep(5000);
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+        mockedRM.processAll();
+      });
+
+      final ReplicationManagerReport rmReport = orderedReport.get(180, TimeUnit.SECONDS);
+      Assertions.assertEquals(bigContainerReportSize, rmReport.getReportSize());
+      Assertions.assertEquals(mockedRM.getNextContainerReportSize(), ReplicationManagerReport.SAMPLE_LIMIT);
+
+      final ReplicationManagerReport curReport = mockedRM.orderContainerReport(bigContainerReportSize);
+      Assertions.assertEquals(mockedRM.getNextContainerReportSize(), bigContainerReportSize);
+      Assertions.assertEquals(curReport.getReportSize(), bigContainerReportSize);
+    } finally {
+      executor.shutdownNow();
+    }
   }
 
   @SafeVarargs
