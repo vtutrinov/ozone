@@ -517,7 +517,7 @@ public class TestContainerCommandsEC {
         ContainerProtos.ReadChunkResponseProto readChunkResponseProto =
             ContainerProtocolCalls.readChunk(dnClient,
                 writeChunkRequest.getWriteChunk().getChunkData(),
-                blockID.getDatanodeBlockIDProtobufBuilder().setReplicaIndex(replicaIndex).build(), null,
+                blockID, null,
                 blockToken);
         ByteBuffer[] readOnlyByteBuffersArray = BufferUtils
             .getReadOnlyByteBuffersArray(
