@@ -81,6 +81,13 @@ public class ReplicationManagerReport {
     return sampleLimit;
   }
 
+  /**
+   * SDP (SDPOZN-1611): the number of container samples kept per state.
+   */
+  public int getReportSize() {
+    return sampleLimit;
+  }
+
   public void increment(ContainerHealthState stat) {
     increment(stat.name());
   }

@@ -141,7 +141,7 @@ public class ReplicationManager implements SCMService, ContainerReplicaPendingOp
   /**
    * Report object that is refreshed each time replication Manager runs.
    */
-  private ReplicationManagerReport containerReport;
+  private volatile ReplicationManagerReport containerReport;
 
   /**
    * Replication progress related metrics.
@@ -190,6 +190,14 @@ public class ReplicationManager implements SCMService, ContainerReplicaPendingOp
   private final HealthCheck containerCheckChain;
   private final ReplicationQueue noOpsReplicationQueue =
       new MonitoringReplicationQueue();
+
+  /**
+   * SDP (SDPOZN-1611): callers may order a container report with more samples
+   * than configured. They wait on this lock (not on the RM monitor, which is
+   * used to wake up the replication monitor thread) until such report exists.
+   */
+  private final Object containerReportLock = new Object();
+  private volatile int nextContainerReportSize = 0;
 
   /**
    * Constructs ReplicationManager instance with the given configuration.
@@ -365,7 +373,7 @@ public class ReplicationManager implements SCMService, ContainerReplicaPendingOp
     final List<ContainerInfo> containers =
         containerManager.getContainers();
     ReplicationManagerReport report = new ReplicationManagerReport(
-        rmConf.getContainerSampleLimit());
+        getNextContainerReportSize());
     ReplicationQueue newRepQueue = new ReplicationQueue();
     for (ContainerInfo c : containers) {
       if (!shouldRun()) {
@@ -385,6 +393,10 @@ public class ReplicationManager implements SCMService, ContainerReplicaPendingOp
     LOG.info("Replication Monitor Thread took {} milliseconds for" +
             " processing {} containers.", clock.millis() - start,
         containers.size());
+    synchronized (containerReportLock) {
+      nextContainerReportSize = 0;
+      containerReportLock.notifyAll();
+    }
   }
 
   public void sendCloseContainerEvent(ContainerID containerID) {
@@ -936,6 +948,29 @@ public class ReplicationManager implements SCMService, ContainerReplicaPendingOp
 
   public ReplicationManagerReport getContainerReport() {
     return containerReport;
+  }
+
+  /**
+   * Returns a container report with at least {@code requiredSize} samples per
+   * state, waiting for the next replication monitor run if the current report
+   * is smaller (SDP, SDPOZN-1611).
+   */
+  public ReplicationManagerReport orderContainerReport(int requiredSize)
+      throws InterruptedException {
+    synchronized (containerReportLock) {
+      ReplicationManagerReport curReport = containerReport;
+      nextContainerReportSize = Math.max(requiredSize, curReport.getReportSize());
+      while (requiredSize > curReport.getReportSize()) {
+        containerReportLock.wait();
+        curReport = containerReport;
+      }
+      return curReport;
+    }
+  }
+
+  @VisibleForTesting
+  public int getNextContainerReportSize() {
+    return Math.max(rmConf.getContainerSampleLimit(), nextContainerReportSize);
   }
 
   public boolean isThreadWaiting() {
@@ -1537,7 +1572,7 @@ public class ReplicationManager implements SCMService, ContainerReplicaPendingOp
         : new RatisContainerReplicaCount(container, replicas, pendingOps,
             redundancy, false);
   }
-  
+
   public ContainerReplicaPendingOps getContainerReplicaPendingOps() {
     return containerReplicaPendingOps;
   }

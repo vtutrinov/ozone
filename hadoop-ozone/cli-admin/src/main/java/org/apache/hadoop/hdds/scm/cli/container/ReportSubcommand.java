@@ -19,6 +19,7 @@ package org.apache.hadoop.hdds.scm.cli.container;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.hadoop.hdds.cli.HddsVersionProvider;
@@ -54,6 +55,19 @@ public class ReportSubcommand extends ScmSubcommand {
       defaultValue = "false",
       description = "Format output as JSON")
   private boolean json;
+
+  // SDP (SDPOZN-1611)
+  @CommandLine.Option(names = {"-c", "--count"},
+      description = "Maximum number of containers to list per state (orders a bigger report from " +
+          "Replication Manager if needed)")
+  private Integer targetSampleLimit;
+
+  // SDP (SDPOZN-1611)
+  @CommandLine.Option(names = {"-t", "--type"},
+      description = "Desired container health state to display ${COMPLETION-CANDIDATES}",
+      arity = "0..*",
+      paramLabel = "TYPE")
+  private List<ContainerHealthState> types;
 
   static class SuppressOptions {
     @CommandLine.Option(names = {"--suppress"},
@@ -109,7 +123,22 @@ public class ReportSubcommand extends ScmSubcommand {
   }
 
   private void printReport(ScmClient scmClient) throws IOException {
-    ReplicationManagerReport report = scmClient.getReplicationManagerReport();
+    if (types == null || types.isEmpty()) {
+      types = Arrays.asList(ContainerHealthState.values());
+    }
+
+    final ReplicationManagerReport report;
+    if (targetSampleLimit == null) {
+      report = scmClient.getReplicationManagerReport();
+    } else {
+      try {
+        report = scmClient.orderContainerManagerReport(targetSampleLimit);
+      } catch (InterruptedException e) {
+        output(e.getMessage());
+        Thread.currentThread().interrupt();
+        return;
+      }
+    }
     if (report.getReportTimeStamp() == 0) {
       System.err.println("The Container Report is not available until Replication Manager completes" +
           " its first run after startup or fail over. All values will be zero until that time.");
@@ -151,6 +180,9 @@ public class ReportSubcommand extends ScmSubcommand {
   private void outputContainerHealthStats(ReplicationManagerReport report) {
     outputHeading("Container Health Summary");
     for (ContainerHealthState state : ContainerHealthState.values()) {
+      if (!types.contains(state)) {
+        continue;
+      }
       long stat = report.getStat(state);
       if (stat != -1) {
         output(state + ": " + stat);
@@ -159,13 +191,18 @@ public class ReportSubcommand extends ScmSubcommand {
   }
 
   private void outputContainerSamples(ReplicationManagerReport report) {
+    final int limit = targetSampleLimit == null ? report.getSampleLimit() : targetSampleLimit;
     for (ContainerHealthState state : ContainerHealthState.values()) {
+      if (!types.contains(state)) {
+        continue;
+      }
       List<ContainerID> containers = report.getSample(state);
       if (!containers.isEmpty()) {
-        output("First " + report.getSampleLimit() + " " +
+        output("First " + limit + " " +
             state + " containers:");
         output(containers
             .stream()
+            .limit(limit)
             .map(ContainerID::toString)
             .collect(Collectors.joining(", ")));
         blankLine();
