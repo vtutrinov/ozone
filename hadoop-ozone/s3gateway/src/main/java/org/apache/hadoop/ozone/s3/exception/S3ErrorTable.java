@@ -139,6 +139,12 @@ public final class S3ErrorTable {
       "BucketAlreadyExists", "The requested bucket name is not available" +
       " as it already exists.", HTTP_CONFLICT);
 
+  public static final OS3Exception QUOTA_EXCEEDED = new OS3Exception(
+      "QuotaExceeded", "The quota has been exceeded. " +
+      "Please review your disk space or namespace usage and adjust accordingly.",
+      HTTP_FORBIDDEN
+  );
+
   public static OS3Exception newError(OS3Exception e, String resource) {
     return newError(e, resource, null);
   }

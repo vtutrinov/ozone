@@ -258,3 +258,16 @@ Create key twice with different content and expect different ETags
                                 Execute AWSS3Cli           rm s3://${BUCKET}/test_key_to_check_etag_differences
                                 Execute                    rm -rf /tmp/file1
                                 Execute                    rm -rf /tmp/file2
+
+Create bucket with quota try exceed it
+    ${rc} =    Run And Return RC    ozone sh bucket create /s3v/small-bucket --quota 10MB
+    Should Be Equal    ${rc}    ${0}    msg=Failed to create bucket
+
+    Run    head -c 6MiB /dev/urandom > /tmp/large-file1.txt
+    Run    head -c 6MiB /dev/urandom > /tmp/large-file2.txt
+
+    ${result} =    Execute AWSS3APICli and checkrc    put-object --bucket small-bucket --key ${PREFIX}/putobject/key=value/quota1 --body /tmp/large-file1.txt    0
+    Should Contain    ${result}    ETag    msg=First upload failed
+
+    ${result} =    Execute AWSS3APICli and checkrc    put-object --bucket small-bucket --key ${PREFIX}/putobject/key=value/quota2 --body /tmp/large-file2.txt    255
+    Should Contain    ${result}    QuotaExceeded    msg=Quota enforcement failed
