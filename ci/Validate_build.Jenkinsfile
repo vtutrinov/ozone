@@ -27,14 +27,11 @@ def acceptanceTests = [
     "MR",
     // "balancer",
     "cert-rotation",
-    "compat-new",
-    "compat-old",
     // "leadership",
     // "misc",
     // "s3a",
     // "secure",
     // "unsecure",
-    // "upgrade"
 ]
 
 STASH_NAME = "sources"
@@ -64,6 +61,9 @@ def acceptanceParallelTests(type, test) {
                 docker save apache/ozone-runner:20230615-1 -o ozone_runner.tar
                 docker save apache/hadoop:3.3.6 -o apache_hadoop.tar
                 docker save apache/ozone-testkrb5:20230318-1 -o ozone_testkrb5.tar
+                docker save apache/hadoop:3 -o apache_hadoop3.tar
+                docker save flokkr/hadoop:3.1.2 -o flokkr.tar
+                docker save apache/hadoop:2.10.2 -o hadoop2.tar
             """
             try {
                 configFileProvider([configFile(fileId: "${configFileMVN}", targetLocation: 'maven_settings.xml', variable: 'MAVEN_SETTINGS')]) {
@@ -74,6 +74,9 @@ def acceptanceParallelTests(type, test) {
                             && docker load -i ozone_runner.tar \
                             && docker load -i apache_hadoop.tar \
                             && docker load -i ozone_testkrb5.tar \
+                            && docker load -i apache_hadoop3.tar \
+                            && docker load -i flokkr.tar \
+                            && docker load -i hadoop2.tar \
                             && export OZONE_VOLUME_OWNER=1000 \
                             && export KEEP_IMAGE=false \
                             && export MAVEN_OPTS='-Duser.home=/var/build-cache ${Variables.mavenDistributionManagementString}' \
