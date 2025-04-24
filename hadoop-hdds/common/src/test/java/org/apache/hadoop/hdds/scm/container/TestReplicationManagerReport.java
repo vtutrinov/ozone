@@ -41,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class TestReplicationManagerReport {
 
   private ReplicationManagerReport report;
+  private static final int SAMPLES = 100;
 
   @BeforeEach
   public void setup() {
@@ -158,15 +159,15 @@ public class TestReplicationManagerReport {
 
   @Test
   public void testSamplesAreLimited() {
-    for (int i = 0; i < ReplicationManagerReport.SAMPLE_LIMIT * 2; i++) {
+    for (int i = 0; i < SAMPLES; i++) {
       report.incrementAndSample(
           ReplicationManagerReport.HealthState.UNDER_REPLICATED,
           new ContainerID(i));
     }
     List<ContainerID> sample =
         report.getSample(ReplicationManagerReport.HealthState.UNDER_REPLICATED);
-    assertEquals(ReplicationManagerReport.SAMPLE_LIMIT, sample.size());
-    for (int i = 0; i < ReplicationManagerReport.SAMPLE_LIMIT; i++) {
+    assertEquals(SAMPLES, sample.size());
+    for (int i = 0; i < SAMPLES; i++) {
       assertEquals(new ContainerID(i), sample.get(i));
     }
   }
@@ -246,12 +247,5 @@ public class TestReplicationManagerReport {
     report.setSample(HddsProtos.LifeCycleState.CLOSED.toString(), containers);
     assertThrows(IllegalStateException.class, () -> report
         .setSample(HddsProtos.LifeCycleState.CLOSED.toString(), containers));
-  }
-
-  @Test
-  public void testSmallReportSize() {
-    final int smallReportSize = 50;
-    final ReplicationManagerReport smallReport = new ReplicationManagerReport(smallReportSize);
-    assertEquals(smallReport.getReportSize(), ReplicationManagerReport.SAMPLE_LIMIT);
   }
 }

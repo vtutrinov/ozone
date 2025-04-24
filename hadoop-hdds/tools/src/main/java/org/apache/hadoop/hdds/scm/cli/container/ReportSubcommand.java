@@ -51,31 +51,19 @@ public class ReportSubcommand extends ScmSubcommand {
   private boolean json;
 
   @CommandLine.Option(names = {"-c", "--count"},
-      description = "Maximum number of containers to list",
-      showDefaultValue = CommandLine.Help.Visibility.ALWAYS)
-  private int targetSampleLimit = ReplicationManagerReport.SAMPLE_LIMIT;
+      defaultValue = "100",
+      description = "Number of container IDs to display for each health state.")
+  private int count;
 
-  @CommandLine.Option(names = {"-t", "--type"},
-      description = "Desired container health state to display ${COMPLETION-CANDIDATES}",
-      arity = "0..*",
-      paramLabel = "TYPE"
-  )
-  private List<ReplicationManagerReport.HealthState> types;
+  @CommandLine.Option(names = {"-s", "--state"},
+      split = ",",
+      description = "Filter the report by one or more health states (separated by comma)"
+                  + "(values: ${COMPLETION-CANDIDATES}). Default is all states.")
+  private List<ReplicationManagerReport.HealthState> states;
 
   @Override
   public void execute(ScmClient scmClient) throws IOException {
-    if (types == null) {
-      types = Arrays.asList(ReplicationManagerReport.HealthState.values());
-    }
-
-    final ReplicationManagerReport report;
-    try {
-      report = scmClient.orderContainerManagerReport(targetSampleLimit);
-    } catch (InterruptedException e) {
-      output(e.getMessage());
-      Thread.currentThread().interrupt();
-      return;
-    }
+    ReplicationManagerReport report = scmClient.getReplicationManagerReport();
 
     if (json) {
       output(JsonUtils.toJsonStringWithDefaultPrettyPrinter(report));
@@ -111,9 +99,6 @@ public class ReportSubcommand extends ScmSubcommand {
     outputHeading("Container Health Summary");
     for (ReplicationManagerReport.HealthState state
         : ReplicationManagerReport.HealthState.values()) {
-      if (!types.contains(state)) {
-        continue;
-      }
 
       long stat = report.getStat(state);
       if (stat != -1) {
@@ -123,18 +108,18 @@ public class ReportSubcommand extends ScmSubcommand {
   }
 
   private void outputContainerSamples(ReplicationManagerReport report) {
-    for (ReplicationManagerReport.HealthState state
-        : ReplicationManagerReport.HealthState.values()) {
+    Iterable<ReplicationManagerReport.HealthState> toShow =
+        (states == null)
+            ? Arrays.asList(ReplicationManagerReport.HealthState.values())
+            : states;
+    for (ReplicationManagerReport.HealthState state : toShow) {
       List<ContainerID> containers = report.getSample(state);
-      if (!types.contains(state)) {
-        continue;
-      }
       if (!containers.isEmpty()) {
-        output("First " + targetSampleLimit + " " +
-            state + " containers:");
+        int samples = Math.min(containers.size(), count);
+        output("First " + samples + " " + state + " containers:");
         output(containers
             .stream()
-            .limit(targetSampleLimit)
+            .limit(samples)
             .map(ContainerID::toString)
             .collect(Collectors.joining(", ")));
         blankLine();

@@ -50,9 +50,7 @@ import java.util.stream.Collectors;
  */
 public class ReplicationManagerReport {
 
-  public static final int SAMPLE_LIMIT = 100;
   private long reportTimeStamp;
-  private final int reportSize;
   /**
    * Enum representing various health states a container can be in.
    */
@@ -117,11 +115,6 @@ public class ReplicationManagerReport {
   }
 
   public ReplicationManagerReport() {
-    this(SAMPLE_LIMIT);
-  }
-
-  public ReplicationManagerReport(int sampleLimit) {
-    reportSize = Math.max(SAMPLE_LIMIT, sampleLimit);
     stats = createStatsMap();
   }
 
@@ -264,10 +257,6 @@ public class ReplicationManagerReport {
     }
   }
 
-  public int getReportSize() {
-    return reportSize;
-  }
-
   private void increment(String stat) {
     getStatAndEnsurePresent(stat).increment();
   }
@@ -285,9 +274,7 @@ public class ReplicationManagerReport {
     List<ContainerID> list = containerSample
         .computeIfAbsent(stat, k -> new ArrayList<>());
     synchronized (list) {
-      if (list.size() < getReportSize()) {
-        list.add(container);
-      }
+      list.add(container);
     }
   }
 

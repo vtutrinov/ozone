@@ -37,9 +37,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.mock;
 
 /**
@@ -49,7 +48,6 @@ public class TestReportSubCommand {
 
   private ReportSubcommand cmd;
   private static final int SEED = 10;
-  private static final int SMALL_REPORT_SIZE = 5;
   private final ByteArrayOutputStream outContent = new ByteArrayOutputStream();
   private final ByteArrayOutputStream errContent = new ByteArrayOutputStream();
   private final PrintStream originalOut = System.out;
@@ -70,10 +68,10 @@ public class TestReportSubCommand {
   }
 
   @Test
-  public void testCorrectValuesAppearInEmptyReport() throws IOException, InterruptedException {
+  public void testCorrectValuesAppearInEmptyReport() throws IOException {
     ScmClient scmClient = mock(ScmClient.class);
-    Mockito.when(scmClient.orderContainerManagerReport(ReplicationManagerReport.SAMPLE_LIMIT))
-        .thenAnswer(invocation -> new ReplicationManagerReport(ReplicationManagerReport.SAMPLE_LIMIT));
+    Mockito.when(scmClient.getReplicationManagerReport())
+        .thenAnswer(invocation -> new ReplicationManagerReport());
 
     cmd.execute(scmClient);
 
@@ -94,12 +92,12 @@ public class TestReportSubCommand {
   }
 
   @Test
-  public void testValidJsonOutput() throws IOException, InterruptedException {
+  public void testValidJsonOutput() throws IOException {
     // More complete testing of the Report JSON output is in
     // TestReplicationManagerReport.
     ScmClient scmClient = mock(ScmClient.class);
-    Mockito.when(scmClient.orderContainerManagerReport(ReplicationManagerReport.SAMPLE_LIMIT))
-        .thenAnswer(invocation -> new ReplicationManagerReport(ReplicationManagerReport.SAMPLE_LIMIT));
+    Mockito.when(scmClient.getReplicationManagerReport())
+        .thenAnswer(invocation -> new ReplicationManagerReport());
 
     CommandLine c = new CommandLine(cmd);
     c.parseArgs("--json");
@@ -114,9 +112,9 @@ public class TestReportSubCommand {
   }
 
   @Test
-  public void testCorrectValuesAppearInReport() throws IOException, InterruptedException {
+  public void testCorrectValuesAppearInReport() throws IOException {
     ScmClient scmClient = mock(ScmClient.class);
-    Mockito.when(scmClient.orderContainerManagerReport(ReplicationManagerReport.SAMPLE_LIMIT))
+    Mockito.when(scmClient.getReplicationManagerReport())
         .thenAnswer(invocation -> createReport());
 
     cmd.execute(scmClient);
@@ -144,43 +142,6 @@ public class TestReportSubCommand {
               + containerList(0, counter) + "$", Pattern.MULTILINE);
       m = p.matcher(outContent.toString(DEFAULT_ENCODING));
       assertTrue(m.find());
-      counter++;
-    }
-  }
-
-  @Test
-  public void testFilteredTruncatedReport() throws IOException, InterruptedException {
-    ScmClient scmClient = mock(ScmClient.class);
-    Mockito.when(scmClient.orderContainerManagerReport(SMALL_REPORT_SIZE))
-        .thenAnswer(invocation -> createReport());
-    CommandLine c = new CommandLine(cmd);
-    final ReplicationManagerReport.HealthState first = ReplicationManagerReport.HealthState.UNDER_REPLICATED;
-    final ReplicationManagerReport.HealthState second = ReplicationManagerReport.HealthState.MIS_REPLICATED;
-    c.parseArgs(
-        "-c ", String.valueOf(SMALL_REPORT_SIZE),
-        "-t ", first.toString(), second.toString()
-    );
-    cmd.execute(scmClient);
-
-    int counter = SEED;
-    final String out = outContent.toString(DEFAULT_ENCODING);
-    for (ReplicationManagerReport.HealthState state : ReplicationManagerReport.HealthState.values()) {
-      Pattern p1 = Pattern.compile("^" + state.toString() + ": " + counter + "$", Pattern.MULTILINE);
-      Matcher m1 = p1.matcher(out);
-      Pattern p2 = Pattern.compile(
-          "^First " + SMALL_REPORT_SIZE +
-              " " + state + " containers:\n" + containerList(0, SMALL_REPORT_SIZE) +
-              "$", Pattern.MULTILINE);
-      Matcher m2 = p2.matcher(out);
-
-      if (state == first || state == second) {
-        assertTrue(m1.find());
-        assertTrue(m2.find());
-      } else {
-        assertFalse(m1.find());
-        assertFalse(m2.find());
-      }
-
       counter++;
     }
   }
