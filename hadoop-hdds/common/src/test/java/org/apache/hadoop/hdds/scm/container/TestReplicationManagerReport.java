@@ -239,5 +239,4 @@ class TestReplicationManagerReport {
     assertThrows(IllegalStateException.class, () -> report
         .setSample(HddsProtos.LifeCycleState.CLOSED.toString(), containers));
   }
-
 }

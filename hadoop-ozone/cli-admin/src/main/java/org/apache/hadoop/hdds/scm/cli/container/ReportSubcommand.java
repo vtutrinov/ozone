@@ -56,18 +56,19 @@ public class ReportSubcommand extends ScmSubcommand {
       description = "Format output as JSON")
   private boolean json;
 
-  // SDP (SDPOZN-1611)
+  // SDP (SDPOZN-1611). The number of samples kept by SCM is bounded by
+  // hdds.scm.replication.container.sample.limit.
   @CommandLine.Option(names = {"-c", "--count"},
-      description = "Maximum number of containers to list per state (orders a bigger report from " +
-          "Replication Manager if needed)")
-  private Integer targetSampleLimit;
+      defaultValue = "100",
+      description = "Number of container IDs to display for each health state.")
+  private int count = 100;
 
   // SDP (SDPOZN-1611)
-  @CommandLine.Option(names = {"-t", "--type"},
-      description = "Desired container health state to display ${COMPLETION-CANDIDATES}",
-      arity = "0..*",
-      paramLabel = "TYPE")
-  private List<ContainerHealthState> types;
+  @CommandLine.Option(names = {"-s", "--state"},
+      split = ",",
+      description = "Filter the report by one or more health states (separated by comma)"
+          + " (values: ${COMPLETION-CANDIDATES}). Default is all states.")
+  private List<ContainerHealthState> states;
 
   static class SuppressOptions {
     @CommandLine.Option(names = {"--suppress"},
@@ -123,22 +124,7 @@ public class ReportSubcommand extends ScmSubcommand {
   }
 
   private void printReport(ScmClient scmClient) throws IOException {
-    if (types == null || types.isEmpty()) {
-      types = Arrays.asList(ContainerHealthState.values());
-    }
-
-    final ReplicationManagerReport report;
-    if (targetSampleLimit == null) {
-      report = scmClient.getReplicationManagerReport();
-    } else {
-      try {
-        report = scmClient.orderContainerManagerReport(targetSampleLimit);
-      } catch (InterruptedException e) {
-        output(e.getMessage());
-        Thread.currentThread().interrupt();
-        return;
-      }
-    }
+    ReplicationManagerReport report = scmClient.getReplicationManagerReport();
     if (report.getReportTimeStamp() == 0) {
       System.err.println("The Container Report is not available until Replication Manager completes" +
           " its first run after startup or fail over. All values will be zero until that time.");
@@ -179,10 +165,7 @@ public class ReportSubcommand extends ScmSubcommand {
 
   private void outputContainerHealthStats(ReplicationManagerReport report) {
     outputHeading("Container Health Summary");
-    for (ContainerHealthState state : ContainerHealthState.values()) {
-      if (!types.contains(state)) {
-        continue;
-      }
+    for (ContainerHealthState state : statesToShow()) {
       long stat = report.getStat(state);
       if (stat != -1) {
         output(state + ": " + stat);
@@ -191,11 +174,8 @@ public class ReportSubcommand extends ScmSubcommand {
   }
 
   private void outputContainerSamples(ReplicationManagerReport report) {
-    final int limit = targetSampleLimit == null ? report.getSampleLimit() : targetSampleLimit;
-    for (ContainerHealthState state : ContainerHealthState.values()) {
-      if (!types.contains(state)) {
-        continue;
-      }
+    final int limit = Math.min(count, report.getSampleLimit());
+    for (ContainerHealthState state : statesToShow()) {
       List<ContainerID> containers = report.getSample(state);
       if (!containers.isEmpty()) {
         output("First " + limit + " " +
@@ -208,6 +188,12 @@ public class ReportSubcommand extends ScmSubcommand {
         blankLine();
       }
     }
+  }
+
+  private Iterable<ContainerHealthState> statesToShow() {
+    return states == null || states.isEmpty()
+        ? Arrays.asList(ContainerHealthState.values())
+        : states;
   }
 
   private void blankLine() {

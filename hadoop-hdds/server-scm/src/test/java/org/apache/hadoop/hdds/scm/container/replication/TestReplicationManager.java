@@ -44,7 +44,6 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.isNull;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -62,10 +61,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -1806,41 +1801,4 @@ public class TestReplicationManager {
         });
   }
 
-
-  /**
-   * SDP (SDPOZN-1611): a caller can order a report bigger than configured and
-   * waits until the replication monitor produces it.
-   */
-  @Test
-  public void testOrderContainerReport() throws Exception {
-    final int defaultReportSize = replicationManager.getNextContainerReportSize();
-    final int bigContainerReportSize = defaultReportSize * 2;
-    final ExecutorService executor = Executors.newFixedThreadPool(2);
-    final ReplicationManager mockedRM = spy(replicationManager);
-
-    when(containerManager.getContainers()).thenReturn(new ArrayList<>());
-    when(mockedRM.shouldRun()).thenReturn(Boolean.TRUE);
-    try {
-      final Future<ReplicationManagerReport> orderedReport =
-          executor.submit(() -> mockedRM.orderContainerReport(bigContainerReportSize));
-      executor.execute(() -> {
-        try {
-          Thread.sleep(5000);
-        } catch (InterruptedException e) {
-          throw new RuntimeException(e);
-        }
-        mockedRM.processAll();
-      });
-
-      final ReplicationManagerReport rmReport = orderedReport.get(180, TimeUnit.SECONDS);
-      assertEquals(bigContainerReportSize, rmReport.getReportSize());
-      assertEquals(defaultReportSize, mockedRM.getNextContainerReportSize());
-
-      final ReplicationManagerReport curReport = mockedRM.orderContainerReport(bigContainerReportSize);
-      assertEquals(bigContainerReportSize, mockedRM.getNextContainerReportSize());
-      assertEquals(bigContainerReportSize, curReport.getReportSize());
-    } finally {
-      executor.shutdownNow();
-    }
-  }
 }
