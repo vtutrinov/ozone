@@ -80,7 +80,6 @@ class TestOzoneFsckHandlerWithStubs {
             new OzoneFsckPathPrefix(null, null, null),
             writerMock,
             verboseSettings,
-            true,
             clientStub,
             containerOperationStub,
             tempCheckpoint.toString()
