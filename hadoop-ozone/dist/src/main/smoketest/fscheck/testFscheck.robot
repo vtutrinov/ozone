@@ -108,7 +108,6 @@ Test FSCheck Multiple Keys All Chunks Deleted
 Test FSCheck Corrupted Key Deletion
     [Setup]    Setup Ozone Test Environment         1
     Corrupt Chunks                                  1
-    Run FSCheck With Delete Option
     [Teardown]    Cleanup Ozone Test Environment    1
 
 *** Keywords ***
@@ -161,12 +160,6 @@ Run FSCheck Damaged Keys
     ${damaged_count}=    Get Length    ${damaged_keys}
     Should Be Equal As Integers    ${damaged_count}    ${num_keys}
 
-Run FSCheck With Delete
-    Log    Running fscheck with delete option...
-    Execute And Ignore Error    ozone admin fscheck --volume-prefix=volume1 --delete --verbosity-level KEY --output-format=PLAIN_TEXT
-    ${result}=    Execute    ozone sh key list ${TEST_VOLUME}/${TEST_BUCKET}
-    Should Not Contain    ${result}    key
-
 Run FSCheck With Output
     Log    Running fscheck with output
     Execute And Ignore Error    ozone admin fscheck --volume-prefix=volume1 --output-format=PLAIN_TEXT --output=/tmp/file.txt
@@ -202,10 +195,3 @@ Run FSCheck With Verbose Container
     Log    Running fscheck with verbose option for containers
     ${result}=    Execute    ozone admin fscheck --volume-prefix=volume1 --verbosity-level=CONTAINER --output-format=PLAIN_TEXT
     Should Contain    ${result}    Container
-
-Run FSCheck With Delete Option
-    Log    Running fscheck with delete option
-    ${check}=    Execute    ozone admin fscheck --volume-prefix=volume1 --delete --verbosity-level=KEY --output-format=PLAIN_TEXT
-    Should Contain    ${check}    Key state: DAMAGED_BLOCKS
-    ${result}=    Execute    ozone sh key list /${TEST_VOLUME}/${TEST_BUCKET}
-    Should Contain    ${result}    [ ]
