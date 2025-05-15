@@ -70,7 +70,7 @@ import static org.apache.hadoop.hdds.protocol.proto.HddsProtos.ReplicationType.S
 
 /**
  * OzoneFsckHandler is responsible for checking the integrity of keys in an Ozone filesystem.
- * It traverses volumes, buckets, and keys to detect and optionally to delete corrupted keys.
+ * It traverses volumes, buckets, and keys to detect.
  */
 public class OzoneFsckHandler implements AutoCloseable {
 
@@ -79,8 +79,6 @@ public class OzoneFsckHandler implements AutoCloseable {
   private final OzoneFsckWriter writer;
 
   private final OzoneFsckVerboseSettings verboseSettings;
-
-  private final boolean deleteCorruptedKeys;
 
   private final Path checkpointPath;
 
@@ -103,7 +101,6 @@ public class OzoneFsckHandler implements AutoCloseable {
       OzoneFsckPathPrefix pathPrefix,
       OzoneFsckWriter writer,
       OzoneFsckVerboseSettings verboseSettings,
-      boolean deleteCorruptedKeys,
       OzoneClient client,
       ContainerOperationClient containerOperationClient,
       String checkpointPath
@@ -111,7 +108,6 @@ public class OzoneFsckHandler implements AutoCloseable {
     this.pathPrefix = pathPrefix;
     this.writer = writer;
     this.verboseSettings = verboseSettings;
-    this.deleteCorruptedKeys = deleteCorruptedKeys;
     this.client = client;
     this.checkpointPath = Paths.get(checkpointPath);
     this.omClient = client.getObjectStore().getClientProxy().getOzoneManagerClient();
@@ -294,10 +290,6 @@ public class OzoneFsckHandler implements AutoCloseable {
 
         if (!damagedBlocks.isEmpty()) {
           printKeyInformation(keyInfo, damagedBlocks, xceiverClient);
-
-          if (deleteCorruptedKeys) {
-            omClient.deleteKey(keyArgs);
-          }
         }
       } catch (Exception e) {
         throw new IOException("Can't sent request to Datanode.", e);

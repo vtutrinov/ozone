@@ -47,14 +47,13 @@ import java.nio.file.Paths;
  * The {@link OzoneFsckCommand} class is a command-line tool for performing file system checks within Ozone.
  * This tool supports various options to fine-tune the file system check process,
  * including filters for volumes, buckets, and keys.
- * It can also produce verbose output detailing keys, containers, blocks, and chunks as well as delete corrupted keys.
+ * It can also produce verbose output detailing keys, containers, blocks, and chunks.
  * <p>
  * Options:
  * <ul>
  * <li>`--volume-prefix`: Specifies the prefix for volumes that should be included in the check.
  * <li>`--bucket-prefix`: Specifies the prefix for buckets that should be included in the check.
  * <li>`--key-prefix`: Specifies the prefix for keys that should be included in the check.
- * <li>`--delete`: Deletes the corrupted keys.
  * <li>`--healthy-keys`: Displays information about good and healthy keys.
  * <li>`--verbosity-level`: Controls verbosity of the presented output.
  * <li>`--output` or `-o`: Specifies the file to output information about the scan process.
@@ -83,10 +82,6 @@ public class OzoneFsckCommand extends Handler implements SubcommandWithParent {
   @CommandLine.Option(names = {"--key-prefix"},
       description = "Specifies the prefix for keys that should be included in the check")
   private String keyPrefix;
-
-  @CommandLine.Option(names = {"--delete"},
-      description = "Deletes the corrupted keys")
-  private boolean delete;
 
   @CommandLine.Option(names = {"--verbosity-level"},
       defaultValue = "KEY",
@@ -145,7 +140,6 @@ public class OzoneFsckCommand extends Handler implements SubcommandWithParent {
              pathPrefix,
              writer,
              verboseSettings,
-             delete,
              client,
              containerOperationClient,
              checkpoint
