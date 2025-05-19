@@ -17,6 +17,9 @@
 
 package org.apache.hadoop.hdds.server.http;
 
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT_DEFAULT;
+
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.exporter.common.TextFormat;
 import java.io.IOException;
@@ -25,6 +28,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 
 /**
  * Servlet to publish hadoop metrics in prometheus format.
@@ -33,6 +37,7 @@ public class PrometheusServlet extends HttpServlet {
 
   public static final String SECURITY_TOKEN = "PROMETHEUS_SECURITY_TOKEN";
   public static final String BEARER = "Bearer ";
+  private static final OzoneConfiguration CONF = new OzoneConfiguration();
 
   public PrometheusMetricsSink getPrometheusSink() {
     return
@@ -43,6 +48,27 @@ public class PrometheusServlet extends HttpServlet {
   @Override
   protected void doGet(HttpServletRequest req, HttpServletResponse resp)
       throws ServletException, IOException {
+    if (!handleAuthHeader(req, resp)) {
+      return;
+    }
+    PrintWriter writer = resp.getWriter();
+    getPrometheusSink().writeMetrics(writer);
+    // SDP: ratis dropwizard metrics can be served by the isolated /prom_ratis endpoint instead
+    if (!CONF.getBoolean(OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT,
+        OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT_DEFAULT)) {
+      writer.write("\n\n#Dropwizard metrics\n\n");
+      //print out dropwizard metrics used by ratis.
+      TextFormat.write004(writer,
+          CollectorRegistry.defaultRegistry.metricFamilySamples());
+    }
+    writer.flush();
+  }
+
+  /**
+   * Checks the bearer token if one is configured.
+   * @return false if the request is rejected (the response status is set to 403)
+   */
+  protected boolean handleAuthHeader(HttpServletRequest req, HttpServletResponse resp) {
     String securityToken =
         (String) getServletContext().getAttribute(SECURITY_TOKEN);
     if (securityToken != null) {
@@ -52,15 +78,9 @@ public class PrometheusServlet extends HttpServlet {
           || !securityToken.equals(
               authorizationHeader.substring(BEARER.length()))) {
         resp.setStatus(HttpServletResponse.SC_FORBIDDEN);
-        return;
+        return false;
       }
     }
-    PrintWriter writer = resp.getWriter();
-    getPrometheusSink().writeMetrics(writer);
-    writer.write("\n\n#Dropwizard metrics\n\n");
-    //print out dropwizard metrics used by ratis.
-    TextFormat.write004(writer,
-        CollectorRegistry.defaultRegistry.metricFamilySamples());
-    writer.flush();
+    return true;
   }
 }
