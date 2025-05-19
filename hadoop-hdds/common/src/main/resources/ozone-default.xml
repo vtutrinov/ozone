@@ -4351,4 +4351,12 @@
       Can't been changed after cluster initialization.
     </description>
   </property>
+  <property>
+    <name>ozone.ratis.dropwizard.metrics.use.isolated.http.endpoint</name>
+    <value>false</value>
+    <tag>OM. DATANODE, SCM</tag>
+    <description>
+      Use isolated http endpoint (/prom_ratis) for ratis dropwizard metrics.
+    </description>
+  </property>
 </configuration>

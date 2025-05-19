@@ -679,6 +679,11 @@ public final class OzoneConfigKeys {
 
   public static final String OZONE_S3G_KEY_INFO_CACHE_IDLE_LIFETIME_DEFAULT = "120s";
 
+  public static final String OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT =
+      "ozone.ratis.dropwizard.metrics.use.isolated.http.endpoint";
+
+  public static final boolean OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT_DEFAULT = false;
+
   /**
    * There is no need to instantiate this class.
    */

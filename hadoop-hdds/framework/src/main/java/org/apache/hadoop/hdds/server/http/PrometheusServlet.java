@@ -24,10 +24,14 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.PrintWriter;
 
+import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.exporter.common.TextFormat;
+
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT_DEFAULT;
 
 /**
  * Servlet to publish hadoop metrics in prometheus format.
@@ -36,6 +40,7 @@ public class PrometheusServlet extends HttpServlet {
 
   public static final String SECURITY_TOKEN = "PROMETHEUS_SECURITY_TOKEN";
   public static final String BEARER = "Bearer";
+  private static final OzoneConfiguration CONF = new OzoneConfiguration();
 
   public PrometheusMetricsSink getPrometheusSink() {
     return
@@ -46,6 +51,21 @@ public class PrometheusServlet extends HttpServlet {
   @Override
   protected void doGet(HttpServletRequest req, HttpServletResponse resp)
       throws ServletException, IOException {
+    handleAuthHeader(req, resp);
+    DefaultMetricsSystem.instance().publishMetricsNow();
+    PrintWriter writer = resp.getWriter();
+    getPrometheusSink().writeMetrics(writer);
+    if (!CONF.getBoolean(OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT,
+        OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT_DEFAULT)) {
+      writer.write("\n\n#Dropwizard metrics\n\n");
+      //print out dropwizard metrics used by ratis.
+      TextFormat.write004(writer,
+          CollectorRegistry.defaultRegistry.metricFamilySamples());
+    }
+    writer.flush();
+  }
+
+  protected void handleAuthHeader(HttpServletRequest req, HttpServletResponse resp) {
     String securityToken =
         (String) getServletContext().getAttribute(SECURITY_TOKEN);
     if (securityToken != null) {
@@ -53,18 +73,10 @@ public class PrometheusServlet extends HttpServlet {
       if (authorizationHeader == null
           || !authorizationHeader.startsWith(BEARER)
           || !securityToken.equals(
-              authorizationHeader.substring(BEARER.length() + 1))) {
+          authorizationHeader.substring(BEARER.length() + 1))) {
         resp.setStatus(HttpServletResponse.SC_FORBIDDEN);
-        return;
       }
     }
-    DefaultMetricsSystem.instance().publishMetricsNow();
-    PrintWriter writer = resp.getWriter();
-    getPrometheusSink().writeMetrics(writer);
-    writer.write("\n\n#Dropwizard metrics\n\n");
-    //print out dropwizard metrics used by ratis.
-    TextFormat.write004(writer,
-        CollectorRegistry.defaultRegistry.metricFamilySamples());
-    writer.flush();
   }
+
 }

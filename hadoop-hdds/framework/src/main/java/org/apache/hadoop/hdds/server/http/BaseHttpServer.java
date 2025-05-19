@@ -53,6 +53,8 @@ import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_CLIENT_HTTPS_NEED_AU
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_CLIENT_HTTPS_NEED_AUTH_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTP_SECURITY_ENABLED_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTP_SECURITY_ENABLED_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_ENABLED_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_ENABLED_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SERVER_HTTPS_KEYPASSWORD_KEY;
@@ -163,12 +165,22 @@ public abstract class BaseHttpServer {
           // auth and hence SPNEGO should be disabled if security is enabled.
           httpServer.addInternalServlet("prometheus", "/prom",
               PrometheusServlet.class);
+          if (conf.getBoolean(OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT,
+              OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT_DEFAULT)) {
+            httpServer.addInternalServlet("prometheus_ratis", "/prom_ratis",
+                PrometheusRatisServlet.class);
+          }
         } else {
           // If token is not configured, keeping as regular servlet and not
           // internal servlet since we do not want to expose /prom endpoint
           // without authentication in a secure cluster.
           httpServer.addServlet("prometheus", "/prom",
               PrometheusServlet.class);
+          if (conf.getBoolean(OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT,
+              OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT_DEFAULT)) {
+            httpServer.addServlet("prometheus_ratis", "/prom_ratis",
+                PrometheusRatisServlet.class);
+          }
         }
       }
 
