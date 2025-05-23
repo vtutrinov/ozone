@@ -31,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.google.common.cache.LoadingCache;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -41,10 +42,14 @@ import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
 import javax.ws.rs.core.UriInfo;
+import org.apache.commons.lang3.tuple.Pair;
+import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.client.OzoneBucket;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientStub;
+import org.apache.hadoop.ozone.client.OzoneKeyDetails;
+import org.apache.hadoop.ozone.s3.OzoneCacheHolder;
 import org.apache.hadoop.ozone.s3.endpoint.BucketEndpoint;
 import org.apache.hadoop.ozone.s3.endpoint.CompleteMultipartUploadRequest;
 import org.apache.hadoop.ozone.s3.endpoint.EndpointBuilder;
@@ -99,6 +104,12 @@ public class TestS3GatewayMetrics {
         "STANDARD");
     keyEndpoint.setHeaders(headers);
     metrics = bucketEndpoint.getMetrics();
+
+    OzoneCacheHolder cacheHolder = new OzoneCacheHolder();
+
+    LoadingCache<Pair<String, String>, OzoneKeyDetails> keyDetailsCache =
+        cacheHolder.createCache(clientStub, new OzoneConfiguration());
+    keyEndpoint.setKeyDetailsCache(keyDetailsCache);
 
     context = mock(ContainerRequestContext.class);
     when(context.getUriInfo()).thenReturn(mock(UriInfo.class));

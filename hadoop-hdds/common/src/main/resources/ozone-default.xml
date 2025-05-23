@@ -4670,4 +4670,14 @@
       default value of DEFAULT_RACK is returned for all node names.
     </description>
   </property>
+  <property>
+    <name>ozone.s3g.key.info.cache.idle.lifetime</name>
+    <value>120s</value>
+    <tag>OZONE, S3GATEWAY</tag>
+    <description>
+      Cache lifetime of the ozone key details after the last request.
+      By the default a cache entry will be removed if it has been idle for 10s.
+      A key of the cache entry is a pair of bucket and the requested key path.
+    </description>
+  </property>
 </configuration>

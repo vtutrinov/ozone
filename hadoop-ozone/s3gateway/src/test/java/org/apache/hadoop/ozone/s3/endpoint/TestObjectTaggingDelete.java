@@ -32,6 +32,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.google.common.cache.LoadingCache;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import javax.ws.rs.container.ContainerRequestContext;
@@ -39,14 +40,17 @@ import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.ozone.client.ObjectStore;
 import org.apache.hadoop.ozone.client.OzoneBucket;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientStub;
+import org.apache.hadoop.ozone.client.OzoneKeyDetails;
 import org.apache.hadoop.ozone.client.OzoneVolume;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes;
+import org.apache.hadoop.ozone.s3.OzoneCacheHolder;
 import org.apache.hadoop.ozone.s3.exception.OS3Exception;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -79,6 +83,13 @@ public class TestObjectTaggingDelete {
         .setConfig(config)
         .setHeaders(headers)
         .build();
+
+    rest.setOzoneConfiguration(new OzoneConfiguration());
+    OzoneCacheHolder cacheHolder = new OzoneCacheHolder();
+
+    LoadingCache<Pair<String, String>, OzoneKeyDetails> keyDetailsCache =
+        cacheHolder.createCache(client, new OzoneConfiguration());
+    rest.setKeyDetailsCache(keyDetailsCache);
 
     body = new ByteArrayInputStream(CONTENT.getBytes(UTF_8));
     // Create a key with object tags
