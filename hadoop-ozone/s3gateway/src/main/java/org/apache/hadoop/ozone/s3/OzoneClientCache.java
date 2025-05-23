@@ -49,7 +49,7 @@ public final class OzoneClientCache {
       LoggerFactory.getLogger(OzoneClientCache.class);
   // single, cached OzoneClient established on first connection
   // for s3g gRPC OmTransport, OmRequest - OmResponse channel
-  private static OzoneClientCache instance;
+  private static volatile OzoneClientCache instance;
   private OzoneClient client;
   private SecurityConfig secConfig;
 
@@ -89,16 +89,20 @@ public final class OzoneClientCache {
     ozoneConfiguration.setBoolean(S3Auth.S3_AUTH_CHECK, true);
   }
 
-  public static OzoneClient getOzoneClientInstance(OzoneConfiguration
-                                                      ozoneConfiguration)
+  public static OzoneClient getOzoneClientInstance(OzoneConfiguration ozoneConfiguration)
       throws IOException {
     if (instance == null) {
-      instance = new OzoneClientCache(ozoneConfiguration);
+      synchronized (OzoneClientCache.class) {
+        if (instance == null) {
+          instance = new OzoneClientCache(ozoneConfiguration);
+        }
+      }
     }
+
     return instance.client;
   }
 
-  public static void closeClient() throws IOException {
+  public static synchronized void closeClient() throws IOException {
     if (instance != null) {
       instance.client.close();
       instance = null;

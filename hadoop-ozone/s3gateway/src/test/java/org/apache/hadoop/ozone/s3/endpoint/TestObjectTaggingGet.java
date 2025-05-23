@@ -27,16 +27,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import com.google.common.cache.LoadingCache;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.util.concurrent.ExecutionException;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientStub;
+import org.apache.hadoop.ozone.client.OzoneKeyDetails;
+import org.apache.hadoop.ozone.s3.OzoneCacheHolder;
 import org.apache.hadoop.ozone.s3.endpoint.S3Tagging.Tag;
 import org.apache.hadoop.ozone.s3.exception.OS3Exception;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,6 +73,13 @@ public class TestObjectTaggingGet {
         .setHeaders(headers)
         .build();
 
+    rest.setOzoneConfiguration(new OzoneConfiguration());
+    OzoneCacheHolder cacheHolder = new OzoneCacheHolder();
+
+    LoadingCache<Pair<String, String>, OzoneKeyDetails> keyDetailsCache =
+        cacheHolder.createCache(client, new OzoneConfiguration());
+    rest.setKeyDetailsCache(keyDetailsCache);
+
     ByteArrayInputStream body = new ByteArrayInputStream(CONTENT.getBytes(UTF_8));
     // Create a key with object tags
     Mockito.when(headers.getHeaderString(TAG_HEADER)).thenReturn("tag1=value1&tag2=value2");
@@ -83,7 +95,7 @@ public class TestObjectTaggingGet {
   }
 
   @Test
-  public void testGetTagging() throws IOException, OS3Exception {
+  public void testGetTagging() throws IOException, OS3Exception, ExecutionException {
     //WHEN
     Response response = rest.get(BUCKET_NAME, KEY_WITH_TAG,  0, null, 0, null, "");
 

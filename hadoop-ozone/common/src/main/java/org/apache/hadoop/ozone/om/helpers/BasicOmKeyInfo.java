@@ -42,6 +42,7 @@ public final class BasicOmKeyInfo {
   private final boolean isFile;
   private final String eTag;
   private String ownerName;
+  private long updateId;
 
   private BasicOmKeyInfo(Builder b) {
     this.volumeName = b.volumeName;
@@ -54,6 +55,7 @@ public final class BasicOmKeyInfo {
     this.isFile = b.isFile;
     this.eTag = StringUtils.isNotEmpty(b.eTag) ? b.eTag : null;
     this.ownerName = b.ownerName;
+    this.updateId = b.updateId;
   }
 
   private BasicOmKeyInfo(OmKeyInfo b) {
@@ -67,6 +69,7 @@ public final class BasicOmKeyInfo {
     this.isFile = b.isFile();
     this.eTag = b.getMetadata().get(ETAG);
     this.ownerName = b.getOwnerName();
+    this.updateId = b.getUpdateID();
   }
 
   public String getVolumeName() {
@@ -113,6 +116,10 @@ public final class BasicOmKeyInfo {
     return QuotaUtil.getReplicatedSize(getDataSize(), replicationConfig);
   }
 
+  public long getUpdateId() {
+    return updateId;
+  }
+
   /**
    * Builder of BasicOmKeyInfo.
    */
@@ -127,6 +134,7 @@ public final class BasicOmKeyInfo {
     private boolean isFile;
     private String eTag;
     private String ownerName;
+    private long updateId;
 
     public Builder setVolumeName(String volumeName) {
       this.volumeName = volumeName;
@@ -178,6 +186,11 @@ public final class BasicOmKeyInfo {
       return this;
     }
 
+    public Builder setUpdateId(long updateId) {
+      this.updateId = updateId;
+      return this;
+    }
+
     public BasicOmKeyInfo build() {
       return new BasicOmKeyInfo(this);
     }
@@ -202,6 +215,7 @@ public final class BasicOmKeyInfo {
     if (StringUtils.isNotEmpty(eTag)) {
       builder.setETag(eTag);
     }
+    builder.setUpdateID(updateId);
 
     return builder.build();
   }
@@ -228,7 +242,8 @@ public final class BasicOmKeyInfo {
             basicKeyInfo.getEcReplicationConfig()))
         .setETag(basicKeyInfo.getETag())
         .setIsFile(!keyName.endsWith("/"))
-        .setOwnerName(basicKeyInfo.getOwnerName());
+        .setOwnerName(basicKeyInfo.getOwnerName())
+        .setUpdateId(basicKeyInfo.getUpdateID());
 
     return builder.build();
   }
@@ -254,7 +269,8 @@ public final class BasicOmKeyInfo {
             basicKeyInfo.getEcReplicationConfig()))
         .setETag(basicKeyInfo.getETag())
         .setIsFile(!keyName.endsWith("/"))
-        .setOwnerName(basicKeyInfo.getOwnerName());
+        .setOwnerName(basicKeyInfo.getOwnerName())
+        .setUpdateId(basicKeyInfo.getUpdateID());
 
     return builder.build();
   }
@@ -277,7 +293,8 @@ public final class BasicOmKeyInfo {
         replicationConfig.equals(basicOmKeyInfo.replicationConfig) &&
         Objects.equals(eTag, basicOmKeyInfo.eTag) &&
         isFile == basicOmKeyInfo.isFile &&
-        ownerName.equals(basicOmKeyInfo.ownerName);
+        ownerName.equals(basicOmKeyInfo.ownerName) &&
+        updateId == basicOmKeyInfo.updateId;
   }
 
   @Override

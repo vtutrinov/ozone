@@ -1725,7 +1725,8 @@ public class RpcClient implements ClientProtocol {
               key.getModificationTime(),
               key.getReplicationConfig(),
               key.isFile(),
-              key.getOwnerName()))
+              key.getOwnerName(),
+              key.getUpdateId()))
           .collect(Collectors.toList());
     } else {
       List<OmKeyInfo> keys = ozoneManagerClient.listKeys(
@@ -1738,7 +1739,8 @@ public class RpcClient implements ClientProtocol {
               key.getModificationTime(),
               key.getReplicationConfig(),
               key.isFile(),
-              key.getOwnerName()))
+              key.getOwnerName(),
+              key.getUpdateID()))
           .collect(Collectors.toList());
     }
   }
@@ -1772,7 +1774,8 @@ public class RpcClient implements ClientProtocol {
         keyInfo.getFileEncryptionInfo(),
         () -> getInputStreamWithRetryFunction(keyInfo), keyInfo.isFile(),
         keyInfo.getOwnerName(), keyInfo.getTags(),
-        keyInfo.getGeneration()
+        keyInfo.getGeneration(),
+        keyInfo.getUpdateID()
     );
   }
 

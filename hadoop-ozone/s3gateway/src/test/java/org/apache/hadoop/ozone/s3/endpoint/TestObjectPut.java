@@ -45,6 +45,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.cache.LoadingCache;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -59,6 +60,7 @@ import javax.ws.rs.core.Response;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdds.client.ECReplicationConfig;
 import org.apache.hadoop.hdds.client.RatisReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
@@ -102,6 +104,7 @@ class TestObjectPut {
   private HttpHeaders headers;
   private OzoneBucket bucket;
   private OzoneBucket fsoBucket;
+  private LoadingCache<Pair<String, String>, OzoneKeyDetails> keyDetailsCache;
 
   static Stream<Arguments> argumentsForPutObject() {
     ReplicationConfig ratis3 = RatisReplicationConfig.getInstance(HddsProtos.ReplicationFactor.THREE);
@@ -136,6 +139,9 @@ class TestObjectPut {
         .build();
 
     objectEndpoint = spy(objectEndpoint);
+
+    keyDetailsCache = mock(LoadingCache.class);
+    objectEndpoint.setKeyDetailsCache(keyDetailsCache);
 
     String volumeName = config.get(OzoneConfigKeys.OZONE_S3_VOLUME_NAME,
         OzoneConfigKeys.OZONE_S3_VOLUME_NAME_DEFAULT);

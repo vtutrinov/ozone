@@ -30,20 +30,25 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.google.common.cache.LoadingCache;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ExecutionException;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.ozone.client.OzoneBucket;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientStub;
+import org.apache.hadoop.ozone.client.OzoneKeyDetails;
 import org.apache.hadoop.ozone.client.io.OzoneInputStream;
+import org.apache.hadoop.ozone.s3.OzoneCacheHolder;
 import org.apache.hadoop.ozone.s3.exception.OS3Exception;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -88,6 +93,12 @@ public class TestObjectGet {
         .setClient(client)
         .setHeaders(headers)
         .build();
+    rest.setOzoneConfiguration(new OzoneConfiguration());
+    OzoneCacheHolder cacheHolder = new OzoneCacheHolder();
+
+    LoadingCache<Pair<String, String>, OzoneKeyDetails> keyDetailsCache =
+        cacheHolder.createCache(client, new OzoneConfiguration());
+    rest.setKeyDetailsCache(keyDetailsCache);
 
     ByteArrayInputStream body = new ByteArrayInputStream(CONTENT.getBytes(UTF_8));
     rest.put(BUCKET_NAME, KEY_NAME, CONTENT.length(),
@@ -105,7 +116,7 @@ public class TestObjectGet {
   }
 
   @Test
-  public void get() throws IOException, OS3Exception {
+  public void get() throws IOException, OS3Exception, ExecutionException {
     //WHEN
     Response response = rest.get(BUCKET_NAME, KEY_NAME, 0, null, 0, null, null);
 
@@ -127,7 +138,7 @@ public class TestObjectGet {
   }
 
   @Test
-  public void getKeyWithTag() throws IOException, OS3Exception {
+  public void getKeyWithTag() throws IOException, OS3Exception, ExecutionException {
     //WHEN
     Response response = rest.get(BUCKET_NAME, KEY_WITH_TAG, 0, null, 0, null, null);
 
@@ -148,7 +159,7 @@ public class TestObjectGet {
   }
 
   @Test
-  public void inheritRequestHeader() throws IOException, OS3Exception {
+  public void inheritRequestHeader() throws IOException, OS3Exception, ExecutionException {
     setDefaultHeader();
 
     Response response = rest.get(BUCKET_NAME, KEY_NAME, 0, null, 0, null, null);
@@ -168,7 +179,7 @@ public class TestObjectGet {
   }
 
   @Test
-  public void overrideResponseHeader() throws IOException, OS3Exception {
+  public void overrideResponseHeader() throws IOException, OS3Exception, ExecutionException {
     setDefaultHeader();
 
     MultivaluedHashMap<String, String> queryParameter =
@@ -201,7 +212,7 @@ public class TestObjectGet {
   }
 
   @Test
-  public void getRangeHeader() throws IOException, OS3Exception {
+  public void getRangeHeader() throws IOException, OS3Exception, ExecutionException {
     Response response;
     when(headers.getHeaderString(RANGE_HEADER)).thenReturn("bytes=0-0");
 
@@ -222,7 +233,7 @@ public class TestObjectGet {
   }
 
   @Test
-  public void getStatusCode() throws IOException, OS3Exception {
+  public void getStatusCode() throws IOException, OS3Exception, ExecutionException {
     Response response;
     response = rest.get(BUCKET_NAME, KEY_NAME, 0, null, 0, null, null);
     assertEquals(response.getStatus(),
@@ -272,4 +283,5 @@ public class TestObjectGet {
     assertEquals(NO_SUCH_KEY.getCode(), ex.getCode());
     bucket.deleteKey(keyPath);
   }
+
 }

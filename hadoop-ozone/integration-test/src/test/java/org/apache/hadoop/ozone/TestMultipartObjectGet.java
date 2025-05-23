@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.core.HttpHeaders;
@@ -165,7 +166,7 @@ public class TestMultipartObjectGet {
   }
 
   private void getObjectMultipart(int partNumber, long bytes)
-      throws IOException, OS3Exception {
+      throws IOException, OS3Exception, ExecutionException {
     Response response =
         REST.get(BUCKET, KEY, partNumber, null, 100, null, null);
     assertEquals(200, response.getStatus());
