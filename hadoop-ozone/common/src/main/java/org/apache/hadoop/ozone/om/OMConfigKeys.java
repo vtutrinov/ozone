@@ -724,6 +724,14 @@ public final class OMConfigKeys {
       "ozone.om.ratis.events.max.limit";
   public static final int OZONE_OM_RATIS_EVENTS_MAX_LIMIT_DEFAULT = 100;
 
+  public static final String OZONE_OM_MULTI_RAFT_BUCKET_GROUPS =
+          "ozone.om.multi.raft.bucket.groups";
+  public static final int OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT = 4;
+
+  public static final String OZONE_OM_MULTI_RAFT_BUCKET_ENABLED =
+          "ozone.om.multi.raft.bucket.enabled";
+  public static final boolean OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT = false;
+
   /**
    * Never constructed.
    */

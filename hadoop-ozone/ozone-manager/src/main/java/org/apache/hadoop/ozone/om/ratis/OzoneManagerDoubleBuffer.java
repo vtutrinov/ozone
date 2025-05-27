@@ -95,6 +95,8 @@ public final class OzoneManagerDoubleBuffer {
 
   private final boolean isTracingEnabled;
 
+  private final String transactionInfoKey;
+
   private final OzoneManagerDoubleBufferMetrics metrics = OzoneManagerDoubleBufferMetrics.create();
 
   /** Accumulative count (for testing and debug only). */
@@ -132,8 +134,18 @@ public final class OzoneManagerDoubleBuffer {
     private FlushNotifier flushNotifier;
     private S3SecretManager s3SecretManager;
     private String threadPrefix = "";
+    private String transactionInfoKey = TRANSACTION_INFO_KEY;
 
     private Builder() { }
+
+    /**
+     * SDP (multi-raft): key of the TransactionInfo written on flush; each raft group
+     * of the OM must persist its applied index under its own key.
+     */
+    public Builder setTransactionInfoKey(String key) {
+      this.transactionInfoKey = key;
+      return this;
+    }
 
     public Builder setOmMetadataManager(OMMetadataManager omMetadataManager) {
       this.omMetadataManager = omMetadataManager;
@@ -196,6 +208,7 @@ public final class OzoneManagerDoubleBuffer {
     this.omMetadataManager = b.omMetadataManager;
     this.s3SecretManager = b.s3SecretManager;
     this.updateLastAppliedIndex = b.updateLastAppliedIndex;
+    this.transactionInfoKey = b.transactionInfoKey;
     this.flushNotifier = b.flushNotifier;
     this.unFlushedTransactions = newSemaphore(b.maxUnFlushedTransactionCount);
 
@@ -373,7 +386,7 @@ public final class OzoneManagerDoubleBuffer {
       addToBatchTransactionInfoWithTrace(lastTraceId,
           lastTransaction.getIndex(),
           () -> omMetadataManager.getTransactionInfoTable().putWithBatch(
-              batchOperation, TRANSACTION_INFO_KEY, TransactionInfo.valueOf(lastTransaction)));
+              batchOperation, transactionInfoKey, TransactionInfo.valueOf(lastTransaction)));
 
       long startTime = Time.monotonicNow();
       flushBatchWithTrace(lastTraceId, buffer.size(),

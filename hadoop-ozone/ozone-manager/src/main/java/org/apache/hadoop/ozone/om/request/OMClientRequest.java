@@ -78,11 +78,12 @@ public abstract class OMClientRequest implements RequestAuditor {
   private InetAddress inetAddress;
   private final OMLockDetails omLockDetails = new OMLockDetails();
   private final OMAuditLogger.Builder auditBuilder = OMAuditLogger.newBuilder();
+  // SDP (multi-raft): bucket of a write request, used to route it to the bucket raft group
+  private String writeBucketName;
 
   public OMAuditLogger.Builder getAuditBuilder() {
     return auditBuilder;
   }
-
   /**
    * Stores the result of request execution in
    * OMClientRequest#validateAndUpdateCache.
@@ -577,5 +578,13 @@ public abstract class OMClientRequest implements RequestAuditor {
 
   public void mergeOmLockDetails(OMLockDetails details) {
     omLockDetails.merge(details);
+  }
+
+  public String getWriteReqBucketName() {
+    return writeBucketName;
+  }
+
+  public void setWriteReqBucketName(String bucketName) {
+    this.writeBucketName = bucketName;
   }
 }

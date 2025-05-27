@@ -441,7 +441,7 @@ public class BaseFreonGenerator implements FreonSubcommand {
     }
 
     OmTransport transport = OmTransportFactory.create(conf, ugi, omServiceID);
-    return new OzoneManagerProtocolClientSideTranslatorPB(transport, clientId);
+    return new OzoneManagerProtocolClientSideTranslatorPB(transport, clientId, conf, ugi, omServiceID);
   }
 
   public StorageContainerLocationProtocol createStorageContainerLocationClient(

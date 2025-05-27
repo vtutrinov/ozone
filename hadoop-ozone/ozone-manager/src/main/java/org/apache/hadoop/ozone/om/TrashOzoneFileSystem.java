@@ -21,6 +21,7 @@ import static org.apache.hadoop.ozone.OzoneConsts.OZONE_O3TRASH_URI_SCHEME;
 import static org.apache.hadoop.ozone.OzoneConsts.OZONE_URI_DELIMITER;
 import static org.apache.hadoop.ozone.om.helpers.OzoneFSUtils.addTrailingSlashIfNeeded;
 import static org.apache.hadoop.ozone.om.helpers.OzoneFSUtils.pathToKey;
+import static org.apache.hadoop.ozone.util.OzoneMultiRaftUtils.isMultiRaftEnabled;
 
 import com.google.common.base.Preconditions;
 import java.io.IOException;
@@ -52,6 +53,7 @@ import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.OzoneFileStatus;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
+import org.apache.hadoop.ozone.om.request.key.OMKeyRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Progressable;
@@ -88,12 +90,20 @@ public class TrashOzoneFileSystem extends FileSystem {
   }
 
   private void submitRequest(OzoneManagerProtocolProtos.OMRequest omRequest)
-      throws Exception {
+          throws Exception {
     ozoneManager.getMetrics().incNumTrashWriteRequests();
     // perform preExecute as ratis submit do no perform preExecute
     OMClientRequest omClientRequest = OzoneManagerRatisUtils.createClientRequest(omRequest, ozoneManager);
     omRequest = omClientRequest.preExecute(ozoneManager);
-    OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, CLIENT_ID, runCount.getAndIncrement());
+    // SDP (multi-raft): bucket write requests go to the raft group of the bucket
+    String bucketName = omClientRequest instanceof OMKeyRequest
+        ? ((OMKeyRequest) omClientRequest).getWriteReqBucketName() : null;
+    if (bucketName != null && isMultiRaftEnabled()) {
+      OzoneManagerRatisUtils.submitWriteRequest(
+          ozoneManager, omRequest, CLIENT_ID, runCount.getAndIncrement(), bucketName);
+    } else {
+      OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, CLIENT_ID, runCount.getAndIncrement());
+    }
   }
 
   @Override

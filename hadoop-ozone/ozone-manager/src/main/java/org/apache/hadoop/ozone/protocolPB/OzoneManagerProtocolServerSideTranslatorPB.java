@@ -22,6 +22,7 @@ import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServe
 import static org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils.createErrorResponse;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type.PrepareStatus;
 import static org.apache.hadoop.ozone.util.MetricUtil.captureLatencyNs;
+import static org.apache.hadoop.ozone.util.OzoneMultiRaftUtils.isMultiRaftEnabled;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.RpcController;
@@ -192,6 +193,13 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
 
       if (OmUtils.isReadOnly(request)) {
         return submitReadRequestToOM(request);
+      }
+
+      // SDP (multi-raft): the target raft group of a bucket write request is known only after the
+      // client request is created; its leader status and retry cache are checked in OMExecutionFlow.
+      if (isMultiRaftEnabled()) {
+        this.lastRequestToSubmit = request;
+        return ozoneManager.getOmExecutionFlow().submitMultiRaftWrite(request, !s3Auth);
       }
 
       // To validate credentials we have already verified leader status.

@@ -20,6 +20,7 @@ package org.apache.hadoop.ozone.om.ratis;
 import static org.apache.hadoop.ozone.OzoneConsts.TRANSACTION_INFO_KEY;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status.INTERNAL_ERROR;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status.METADATA_ERROR;
+import static org.apache.hadoop.ozone.util.OzoneMultiRaftUtils.isMultiRaftEnabled;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -104,6 +105,8 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   private final boolean isTracingEnabled;
   private final AtomicInteger statePausedCount = new AtomicInteger(0);
   private final String threadPrefix;
+  /** SDP (multi-raft): the raft group of this state machine, known before Ratis initializes it. */
+  private final RaftGroupId raftGroupId;
 
   /** The last {@link TermIndex} received from {@link #notifyTermIndexUpdated(long, long)}. */
   private volatile TermIndex lastNotifiedTermIndex = TermIndex.valueOf(0, RaftLog.INVALID_LOG_INDEX);
@@ -113,12 +116,22 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   private final NettyMetrics nettyMetrics;
 
   public OzoneManagerStateMachine(OzoneManagerRatisServer ratisServer,
-      boolean isTracingEnabled) throws IOException {
+      RaftGroupId raftGroupId, boolean isTracingEnabled) throws IOException {
+    this(ratisServer.getOzoneManager(), raftGroupId, "", isTracingEnabled);
+  }
+
+  /**
+   * SDP (multi-raft): state machine of the given raft group.
+   * @param threadSuffix appended to the OM thread name prefix to tell the groups apart
+   */
+  protected OzoneManagerStateMachine(OzoneManager ozoneManager, RaftGroupId raftGroupId,
+      String threadSuffix, boolean isTracingEnabled) throws IOException {
     this.isTracingEnabled = isTracingEnabled;
-    this.ozoneManager = ratisServer.getOzoneManager();
+    this.ozoneManager = ozoneManager;
+    this.raftGroupId = raftGroupId;
 
     loadSnapshotInfoFromDB();
-    this.threadPrefix = ozoneManager.getThreadNamePrefix();
+    this.threadPrefix = ozoneManager.getThreadNamePrefix() + threadSuffix;
 
     this.ozoneManagerDoubleBuffer = buildDoubleBufferForRatis();
     this.handler = new OzoneManagerRequestHandler(ozoneManager);
@@ -144,6 +157,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     this.isTracingEnabled = false;
     this.ozoneManager = ozoneManager;
     this.threadPrefix = "";
+    this.raftGroupId = null;
     this.ozoneManagerDoubleBuffer = doubleBuffer;
     this.handler = handler;
     this.executorService = executorService;
@@ -181,7 +195,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
 
   @Override
   public SnapshotInfo getLatestSnapshot() {
-    final SnapshotInfo snapshotInfo = ozoneManager.getTransactionInfo().toSnapshotInfo();
+    final SnapshotInfo snapshotInfo = getGroupTransactionInfo().toSnapshotInfo();
     LOG.debug("Latest Snapshot Info {}", snapshotInfo);
     return snapshotInfo;
   }
@@ -349,7 +363,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     case SUCCESS:
     case SNAPSHOT_UNAVAILABLE:
       // Currently, only trigger for the one who installed snapshot
-      if (ozoneManager.getOmRatisServer().getServerDivision().getPeer().equals(peer)) {
+      if (getServerDivision().getPeer().equals(peer)) {
         ozoneManager.getOmSnapshotProvider().init();
       }
       break;
@@ -562,6 +576,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
         .setUpdateLastAppliedIndex(this::updateLastAppliedTermIndex)
         .setMaxUnFlushedTransactionCount(maxUnFlushedTransactionCount)
         .setThreadPrefix(threadPrefix)
+        .setTransactionInfoKey(getTransactionInfoKey())
         .setS3SecretManager(ozoneManager.getS3SecretManager())
         .enableTracing(isTracingEnabled)
         .build()
@@ -600,8 +615,8 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
 
     long startTime = Time.monotonicNow();
     final TransactionInfo transactionInfo = TransactionInfo.valueOf(snapshot);
-    ozoneManager.setTransactionInfo(transactionInfo);
-    ozoneManager.getMetadataManager().getTransactionInfoTable().put(TRANSACTION_INFO_KEY, transactionInfo);
+    setGroupTransactionInfo(transactionInfo);
+    ozoneManager.getMetadataManager().getTransactionInfoTable().put(getTransactionInfoKey(), transactionInfo);
     ozoneManager.getMetadataManager().getStore().flushDB();
     LOG.info("{}: taking snapshot. applied = {}, skipped = {}, " +
         "notified = {}, current snapshot index = {}, took {} ms",
@@ -634,7 +649,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     return CompletableFuture.supplyAsync(
         () -> {
           try {
-            return ozoneManager.installSnapshotFromLeader(leaderNodeId);
+            return ozoneManager.installSnapshotFromLeader(raftGroupId, leaderNodeId);
           } catch (IOException e) {
             throw new CompletionException(e);
           }
@@ -672,6 +687,11 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
           request, context, ozoneManagerDoubleBuffer);
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
       OMResponse omResponse = omClientResponse.getOMResponse();
+      if (request.hasCreateBucketRequest() && isMultiRaftEnabled()) {
+        String bucketName = request.getCreateBucketRequest().getBucketInfo().getBucketName();
+        LOG.trace("Creating raft group while runCommand {}", bucketName);
+        ozoneManager.createRaftGroupForBucket(bucketName);
+      }
       if (omLockDetails != null) {
         return omResponse.toBuilder()
             .setOmLockDetails(omLockDetails.toProtobufBuilder()).build();
@@ -710,14 +730,13 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     // This is done, as we have a check in Ratis for not throwing
     // LeaderNotReadyException, it checks stateMachineIndex >= raftLog
     // nextIndex (placeHolderIndex).
-    TransactionInfo transactionInfo =
-        TransactionInfo.readTransactionInfo(
-            ozoneManager.getMetadataManager());
+    TransactionInfo transactionInfo = ozoneManager.getMetadataManager()
+        .getTransactionInfoTable().getSkipCache(getTransactionInfoKey());
     if (transactionInfo != null) {
       final TermIndex ti =  transactionInfo.getTermIndex();
       setLastAppliedTermIndex(ti);
-      ozoneManager.setTransactionInfo(transactionInfo);
-      LOG.info("LastAppliedIndex is set from TransactionInfo from OM DB as {}", ti);
+      setGroupTransactionInfo(transactionInfo);
+      LOG.info("{}: LastAppliedIndex is set from TransactionInfo from OM DB as {}", raftGroupId, ti);
     } else {
       LOG.info("TransactionInfo not found in OM DB.");
     }
@@ -770,5 +789,34 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   @VisibleForTesting
   public OzoneManagerDoubleBuffer getOzoneManagerDoubleBuffer() {
     return ozoneManagerDoubleBuffer;
+  }
+
+  // ---- SDP (multi-raft) ----
+
+  /** @return the raft group of this state machine. */
+  public RaftGroupId getRaftGroupId() {
+    return raftGroupId;
+  }
+
+  /** @return the key the applied TransactionInfo of this raft group is persisted under. */
+  protected String getTransactionInfoKey() {
+    return TRANSACTION_INFO_KEY;
+  }
+
+  protected TransactionInfo getGroupTransactionInfo() {
+    return ozoneManager.getTransactionInfo();
+  }
+
+  protected void setGroupTransactionInfo(TransactionInfo info) {
+    ozoneManager.setTransactionInfo(info);
+  }
+
+  /** @return the division of the OM raft server for the raft group of this state machine. */
+  protected RaftServer.Division getServerDivision() {
+    return ozoneManager.getOmRatisServer().getServerDivision();
+  }
+
+  protected OzoneManager getOzoneManager() {
+    return ozoneManager;
   }
 }
