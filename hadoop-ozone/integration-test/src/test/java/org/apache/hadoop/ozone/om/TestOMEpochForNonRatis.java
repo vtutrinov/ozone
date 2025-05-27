@@ -105,7 +105,7 @@ public class TestOMEpochForNonRatis {
     OzoneManagerProtocolClientSideTranslatorPB omClient =
         new OzoneManagerProtocolClientSideTranslatorPB(
             OmTransportFactory.create(conf, ugi, null),
-            RandomStringUtils.randomAscii(5));
+            RandomStringUtils.randomAscii(5), conf, ugi, omId);
 
     objectStore.createVolume(volumeName);
 
@@ -169,7 +169,7 @@ public class TestOMEpochForNonRatis {
     OzoneManagerProtocolClientSideTranslatorPB omClient =
         new OzoneManagerProtocolClientSideTranslatorPB(
             OmTransportFactory.create(conf, ugi, null),
-            RandomStringUtils.randomAscii(5));
+            RandomStringUtils.randomAscii(5), conf, ugi, omId);
 
     long volObjId = omClient.getVolumeInfo(volumeName).getObjectID();
     long epochInVolObjId = volObjId >> EPOCH_ID_SHIFT;

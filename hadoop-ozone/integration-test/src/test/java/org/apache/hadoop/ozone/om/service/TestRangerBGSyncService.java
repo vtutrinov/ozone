@@ -220,7 +220,7 @@ public class TestRangerBGSyncService {
     OzoneManagerRatisServer omRatisServer = mock(OzoneManagerRatisServer.class);
     when(omRatisServer.getRaftPeerId())
         .thenReturn(RaftPeerId.valueOf("peerId"));
-    when(omRatisServer.getRaftGroupId())
+    when(omRatisServer.getCurrentRaftGroupId())
         .thenReturn(RaftGroupId.randomId());
 
     when(ozoneManager.getOmRatisServer()).thenReturn(omRatisServer);
@@ -234,7 +234,7 @@ public class TestRangerBGSyncService {
         ozoneManager.getMetadataManager().getMetaTable().put(
             OzoneConsts.RANGER_OZONE_SERVICE_VERSION_KEY, String.valueOf(v));
         return null;
-      }).when(omRatisServer).submitRequest(Mockito.any(), Mockito.any());
+      }).when(omRatisServer).submitRequest(Mockito.any());
     } catch (ServiceException e) {
       throw new RuntimeException(e);
     }

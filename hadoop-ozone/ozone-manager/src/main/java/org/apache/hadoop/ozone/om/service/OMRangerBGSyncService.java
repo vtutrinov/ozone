@@ -55,6 +55,7 @@ import org.apache.hadoop.ozone.om.multitenant.InMemoryMultiTenantAccessControlle
 import org.apache.hadoop.ozone.om.multitenant.MultiTenantAccessController;
 import org.apache.hadoop.ozone.om.multitenant.MultiTenantAccessController.Policy;
 import org.apache.hadoop.ozone.om.multitenant.MultiTenantAccessController.Role;
+import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.SetRangerServiceVersionRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type;
@@ -379,7 +380,7 @@ public class OMRangerBGSyncService extends BackgroundService {
     return RaftClientRequest.newBuilder()
         .setClientId(CLIENT_ID)
         .setServerId(ozoneManager.getOmRatisServer().getRaftPeerId())
-        .setGroupId(ozoneManager.getOmRatisServer().getRaftGroupId())
+        .setGroupId(ozoneManager.getOmRatisServer().getCurrentRaftGroupId())
         .setCallId(runCount.get())
         .setMessage(
             Message.valueOf(
@@ -402,9 +403,7 @@ public class OMRangerBGSyncService extends BackgroundService {
         .build();
 
     try {
-      RaftClientRequest raftClientRequest = newRaftClientRequest(omRequest);
-      ozoneManager.getOmRatisServer().submitRequest(omRequest,
-          raftClientRequest);
+      OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, CLIENT_ID, runCount.get());
     } catch (ServiceException e) {
       LOG.error("SetRangerServiceVersion request failed. "
           + "Will retry at next run.");

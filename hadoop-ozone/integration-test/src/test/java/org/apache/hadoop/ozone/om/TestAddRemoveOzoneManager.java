@@ -147,7 +147,7 @@ public class TestAddRemoveOzoneManager {
   private File[] getRatisLogFiles(OzoneManager om) {
     OzoneManagerRatisServer newOMRatisServer = om.getOmRatisServer();
     File ratisDir = new File(newOMRatisServer.getRatisStorageDir(),
-        newOMRatisServer.getRaftGroupId().getUuid().toString());
+        newOMRatisServer.getCurrentRaftGroupId().getUuid().toString());
     File ratisLogDir = new File(ratisDir, Storage.STORAGE_DIR_CURRENT);
     return ratisLogDir.listFiles(new FileFilter() {
       @Override

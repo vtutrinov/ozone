@@ -17,6 +17,7 @@
 package org.apache.hadoop.ozone.om.ratis;
 
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.hdds.utils.TransactionInfo;
 import org.apache.hadoop.ozone.common.ha.ratis.RatisSnapshotInfo;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OMMetadataManager;
@@ -35,19 +36,20 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Prepare
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.UserInfo;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.ratis.proto.RaftProtos;
+import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.protocol.exceptions.StateMachineException;
 import org.apache.ratis.statemachine.TransactionContext;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.Mockito;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -64,8 +66,8 @@ public class TestOzoneManagerStateMachine {
   @BeforeEach
   public void setup() throws Exception {
     OzoneManagerRatisServer ozoneManagerRatisServer =
-        Mockito.mock(OzoneManagerRatisServer.class);
-    OzoneManager ozoneManager = Mockito.mock(OzoneManager.class);
+        mock(OzoneManagerRatisServer.class);
+    OzoneManager ozoneManager = mock(OzoneManager.class);
     // Allow testing of prepare pre-append gate.
     when(ozoneManager.isAdmin(any(UserGroupInformation.class)))
         .thenReturn(true);
@@ -83,11 +85,12 @@ public class TestOzoneManagerStateMachine {
     when(ozoneManager.getPrepareState()).thenReturn(prepareState);
 
     when(ozoneManagerRatisServer.getOzoneManager()).thenReturn(ozoneManager);
+    when(ozoneManager.getTransactionInfo(any(RaftGroupId.class))).thenReturn(mock(TransactionInfo.class));
     when(ozoneManager.getSnapshotInfo()).thenReturn(
-        Mockito.mock(RatisSnapshotInfo.class));
+        mock(RatisSnapshotInfo.class));
     when(ozoneManager.getConfiguration()).thenReturn(conf);
     ozoneManagerStateMachine =
-        new OzoneManagerStateMachine(ozoneManagerRatisServer, false);
+        new OzoneManagerStateMachine(ozoneManagerRatisServer, mock(RaftGroupId.class), false);
     ozoneManagerStateMachine.notifyTermIndexUpdated(0, 0);
   }
 
@@ -341,7 +344,7 @@ public class TestOzoneManagerStateMachine {
             .setLogData(OMRatisHelper.convertRequestToByteString(request))
             .build();
 
-    TransactionContext mockTrx = Mockito.mock(TransactionContext.class);
+    TransactionContext mockTrx = mock(TransactionContext.class);
     when(mockTrx.getStateMachineLogEntry()).thenReturn(logEntry);
     when(mockTrx.getStateMachineContext()).thenReturn(request);
 

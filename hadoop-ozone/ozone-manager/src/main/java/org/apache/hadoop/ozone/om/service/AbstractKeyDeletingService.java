@@ -51,6 +51,7 @@ import org.apache.ratis.protocol.ClientId;
 import org.apache.ratis.protocol.Message;
 import org.apache.ratis.protocol.RaftClientRequest;
 import org.apache.ratis.util.Preconditions;
+import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -247,10 +248,7 @@ public abstract class AbstractKeyDeletingService extends BackgroundService
 
     // Submit PurgeKeys request to OM
     try {
-      RaftClientRequest raftClientRequest =
-          createRaftClientRequestForPurge(omRequest);
-      ozoneManager.getOmRatisServer().submitRequest(omRequest,
-          raftClientRequest);
+      OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, runCount.get());
     } catch (ServiceException e) {
       LOG.error("PurgeKey request failed. Will retry at next run.");
       return 0;
@@ -264,7 +262,7 @@ public abstract class AbstractKeyDeletingService extends BackgroundService
     return RaftClientRequest.newBuilder()
         .setClientId(clientId)
         .setServerId(ozoneManager.getOmRatisServer().getRaftPeerId())
-        .setGroupId(ozoneManager.getOmRatisServer().getRaftGroupId())
+        .setGroupId(ozoneManager.getOmRatisServer().getCurrentRaftGroupId())
         .setCallId(runCount.get())
         .setMessage(
             Message.valueOf(
@@ -312,13 +310,9 @@ public abstract class AbstractKeyDeletingService extends BackgroundService
     // Submit Purge paths request to OM
     try {
       if (isRatisEnabled()) {
-        RaftClientRequest raftClientRequest =
-            createRaftClientRequestForPurge(omRequest);
-        ozoneManager.getOmRatisServer().submitRequest(omRequest,
-            raftClientRequest);
+        OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, runCount.get());
       } else {
-        getOzoneManager().getOmServerProtocol()
-            .submitRequest(null, omRequest);
+        getOzoneManager().getOmServerProtocol().submitRequest(null, omRequest);
       }
     } catch (ServiceException e) {
       LOG.error("PurgePaths request failed. Will retry at next run.");

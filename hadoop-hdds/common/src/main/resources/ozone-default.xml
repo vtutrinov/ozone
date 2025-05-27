@@ -4334,4 +4334,21 @@
       If set, then only files having an extension from this list will be compressed.
     </description>
   </property>
+  <property>
+    <name>ozone.om.multi.raft.bucket.enabled</name>
+    <value>false</value>
+    <tag>OZONE, OM</tag>
+    <description>
+      Is multi Raft groups for bucket enabled. If it enabled it can be disabled.
+    </description>
+  </property>
+  <property>
+    <name>ozone.om.multi.raft.bucket.groups</name>
+    <value>4</value>
+    <tag>OZONE, OM</tag>
+    <description>
+      Multi Raft groups max amount for processing bucket write requests in OzoneManager side.
+      Can't been changed after cluster initialization.
+    </description>
+  </property>
 </configuration>

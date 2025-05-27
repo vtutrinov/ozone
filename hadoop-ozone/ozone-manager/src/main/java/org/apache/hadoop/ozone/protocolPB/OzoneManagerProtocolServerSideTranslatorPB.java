@@ -20,7 +20,12 @@ import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServe
 import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER;
 import static org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils.createClientRequest;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type.PrepareStatus;
+import static org.apache.hadoop.ozone.util.OzoneMultiRaftUtils.isMultiRaftEnabled;
+import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateLimitedRaftGroupId;
+import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateRaftGroupId;
 import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
+
+import org.apache.ratis.protocol.RaftGroupId;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
@@ -211,14 +216,23 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
         return submitReadRequestToOM(request);
       }
 
-      // To validate credentials we have already verified leader status.
-      // This will skip of checking leader status again if request has S3Auth.
-      if (!s3Auth) {
-        OzoneManagerRatisUtils.checkLeaderStatus(ozoneManager);
-      }
       OMRequest requestToSubmit;
       try {
         omClientRequest = createClientRequest(request, ozoneManager);
+        // check retry cache
+        RaftGroupId raftGroupId;
+        String bucketName = omClientRequest.getWriteReqBucketName();
+        LOG.trace("Continue internal processing request {}, bucket {}", request.getCmdType(), bucketName);
+        if (bucketName != null && isMultiRaftEnabled()) {
+          raftGroupId = generateLimitedRaftGroupId(bucketName);
+        } else {
+          raftGroupId = generateRaftGroupId(ozoneManager.getOMServiceId());
+        }
+        // To validate credentials we have already verified leader status.
+        // This will skip of checking leader status again if request has S3Auth.
+        if (!s3Auth) {
+          OzoneManagerRatisUtils.checkLeaderStatus(raftGroupId, ozoneManager);
+        }
         // TODO: Note: Due to HDDS-6055, createClientRequest() could now
         //  return null, which triggered the findbugs warning.
         //  Added the assertion.
@@ -232,7 +246,16 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
         return createErrorResponse(request, ex);
       }
 
-      OMResponse response = submitRequestToRatis(requestToSubmit);
+      final OMResponse response;
+      if (omClientRequest.getWriteReqBucketName() != null && isMultiRaftEnabled()) {
+        response = omRatisServer.submitBucketWriteRequest(
+                requestToSubmit,
+                omClientRequest.getWriteReqBucketName()
+        );
+      } else {
+        response = omRatisServer.submitRequest(requestToSubmit);
+      }
+
       if (!response.getSuccess()) {
         omClientRequest.handleRequestFailure(ozoneManager);
       }
@@ -248,30 +271,20 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
         () -> finalOmClientRequest.preExecute(ozoneManager));
   }
 
-  /**
-   * Submits request to OM's Ratis server.
-   */
-  private OMResponse submitRequestToRatis(OMRequest request)
-      throws ServiceException {
-    return omRatisServer.submitRequest(request);
-  }
-
   private OMResponse submitReadRequestToOM(OMRequest request)
       throws ServiceException {
-    // Check if this OM is the leader.
-    RaftServerStatus raftServerStatus = omRatisServer.checkLeaderStatus();
-    if (raftServerStatus == LEADER_AND_READY ||
-        request.getCmdType().equals(PrepareStatus)) {
+    RaftServerStatus raftServerStatus = omRatisServer.checkOmLeaderStatus();
+    if (raftServerStatus == LEADER_AND_READY || request.getCmdType().equals(PrepareStatus)) {
       return handler.handleReadRequest(request);
     } else {
-      throw createLeaderErrorException(raftServerStatus);
+      throw createLeaderErrorException(omRatisServer.getCurrentRaftGroupId(), raftServerStatus);
     }
   }
 
   private ServiceException createLeaderErrorException(
-      RaftServerStatus raftServerStatus) {
+          RaftGroupId raftGroupId, RaftServerStatus raftServerStatus) {
     if (raftServerStatus == NOT_LEADER) {
-      return createNotLeaderException();
+      return new ServiceException(omRatisServer.newOMNotLeaderException(raftGroupId));
     } else {
       return createLeaderNotReadyException();
     }

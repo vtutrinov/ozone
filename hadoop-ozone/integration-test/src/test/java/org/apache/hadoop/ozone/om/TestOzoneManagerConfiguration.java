@@ -167,7 +167,7 @@ public class TestOzoneManagerConfiguration {
 
     assertEquals(LifeCycle.State.RUNNING, om.getOmRatisServerState());
     // OM's Ratis server should have only 1 peer (itself) in its RaftGroup
-    Collection<RaftPeer> peers = omRatisServer.getRaftGroup().getPeers();
+    Collection<RaftPeer> peers = omRatisServer.getCurrentRaftGroup().getPeers();
     assertEquals(1, peers.size());
 
     // The RaftPeer id should match OM_DEFAULT_NODE_ID
@@ -219,7 +219,7 @@ public class TestOzoneManagerConfiguration {
     assertEquals(LifeCycle.State.RUNNING, om.getOmRatisServerState());
 
     // OM's Ratis server should have 3 peers in its RaftGroup
-    Collection<RaftPeer> peers = omRatisServer.getRaftGroup().getPeers();
+    Collection<RaftPeer> peers = omRatisServer.getCurrentRaftGroup().getPeers();
     assertEquals(3, peers.size());
 
     // Ratis server RaftPeerId should match with omNode2 ID as node2 is the
@@ -301,7 +301,7 @@ public class TestOzoneManagerConfiguration {
     assertEquals(LifeCycle.State.RUNNING, om.getOmRatisServerState());
 
     // OM's Ratis server should have 3 peers in its RaftGroup
-    Collection<RaftPeer> peers = omRatisServer.getRaftGroup().getPeers();
+    Collection<RaftPeer> peers = omRatisServer.getCurrentRaftGroup().getPeers();
     assertEquals(3, peers.size());
 
     // Ratis server RaftPeerId should match with omNode2 ID as node2 is the
@@ -469,7 +469,7 @@ public class TestOzoneManagerConfiguration {
     assertEquals(LifeCycle.State.RUNNING, om.getOmRatisServerState());
 
     // OM's Ratis server should have 3 peers in its RaftGroup
-    Collection<RaftPeer> peers = omRatisServer.getRaftGroup().getPeers();
+    Collection<RaftPeer> peers = omRatisServer.getCurrentRaftGroup().getPeers();
     assertEquals(3, peers.size());
 
     // Verify that the serviceId and nodeId match the node with the localhost

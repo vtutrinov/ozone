@@ -54,12 +54,14 @@ import org.apache.hadoop.security.ssl.KeyStoreTestUtil;
 import org.apache.hadoop.security.token.SecretManager;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Time;
+import org.apache.ratis.protocol.RaftGroupId;
 
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_RATIS_ENABLE_KEY;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMTokenProto.Type.S3AUTHINFO;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -184,7 +186,7 @@ public class TestOzoneDelegationTokenSecretManager {
     secretManager = createSecretManager(conf, TOKEN_MAX_LIFETIME,
         expiryTime, TOKEN_REMOVER_SCAN_INTERVAL);
     Mockito.doThrow(new OMNotLeaderException(RaftPeerId.valueOf("om")))
-        .when(om).checkLeaderStatus();
+        .when(om).checkLeaderStatus(any(RaftGroupId.class));
     OzoneTokenIdentifier identifier = new OzoneTokenIdentifier();
     try {
       secretManager.retrievePassword(identifier);
@@ -195,7 +197,7 @@ public class TestOzoneDelegationTokenSecretManager {
     }
 
     Mockito.doThrow(new OMLeaderNotReadyException("Leader not ready"))
-        .when(om).checkLeaderStatus();
+        .when(om).checkLeaderStatus(any(RaftGroupId.class));
     try {
       secretManager.retrievePassword(identifier);
     } catch (Exception e) {
@@ -204,7 +206,7 @@ public class TestOzoneDelegationTokenSecretManager {
           e.getCause().getClass());
     }
 
-    Mockito.doNothing().when(om).checkLeaderStatus();
+    Mockito.doNothing().when(om).checkLeaderStatus(any(RaftGroupId.class));
     try {
       secretManager.retrievePassword(identifier);
     } catch (Exception e) {

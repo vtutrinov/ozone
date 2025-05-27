@@ -21,11 +21,11 @@ import org.apache.hadoop.hdds.protocol.StorageType;
 import org.apache.hadoop.ozone.ClientVersion;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.OzoneTestUtils;
+import org.apache.hadoop.ozone.client.BucketArgs;
 import org.apache.hadoop.ozone.client.ObjectStore;
 import org.apache.hadoop.ozone.client.OzoneBucket;
-import org.apache.hadoop.ozone.client.BucketArgs;
-import org.apache.hadoop.ozone.client.OzoneVolume;
 import org.apache.hadoop.ozone.client.OzoneClient;
+import org.apache.hadoop.ozone.client.OzoneVolume;
 import org.apache.hadoop.ozone.client.VolumeArgs;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.ha.HadoopRpcOMFailoverProxyProvider;
@@ -373,7 +373,7 @@ class TestOzoneManagerHAWithAllRunning extends TestOzoneManagerHA {
       }
     }
     assertNotNull(followerOM);
-    Assertions.assertSame(followerOM.getOmRatisServer().checkLeaderStatus(),
+    Assertions.assertSame(followerOM.getOmRatisServer().checkOmLeaderStatus(),
         OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER);
 
     OzoneManagerProtocolProtos.OMRequest writeRequest =
@@ -433,8 +433,8 @@ class TestOzoneManagerHAWithAllRunning extends TestOzoneManagerHA {
         getCluster().getOzoneManager(0).getOmRatisServer();
     ObjectName oname = new ObjectName(RATIS_APPLICATION_NAME_METRICS, "name",
         RATIS_APPLICATION_NAME_METRICS + ".log_worker." +
-            ratisServer.getRaftPeerId().toString() +
-            "@" + ratisServer.getRaftGroup().getGroupId() + ".flushCount");
+        ratisServer.getRaftPeerId().toString() +
+        "@" + ratisServer.getCurrentRaftGroup().getGroupId() + ".flushCount");
     MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
     MBeanInfo mBeanInfo = mBeanServer.getMBeanInfo(oname);
     assertNotNull(mBeanInfo);
@@ -490,7 +490,7 @@ class TestOzoneManagerHAWithAllRunning extends TestOzoneManagerHA {
         raftServer.submitClientRequest(RaftClientRequest.newBuilder()
             .setClientId(clientId)
             .setServerId(raftServer.getId())
-            .setGroupId(ozoneManagerRatisServer.getRaftGroup().getGroupId())
+            .setGroupId(ozoneManagerRatisServer.getCurrentRaftGroup().getGroupId())
             .setCallId(callId)
             .setMessage(
                 Message.valueOf(
@@ -509,7 +509,7 @@ class TestOzoneManagerHAWithAllRunning extends TestOzoneManagerHA {
         raftServer.submitClientRequest(RaftClientRequest.newBuilder()
             .setClientId(clientId)
             .setServerId(raftServer.getId())
-            .setGroupId(ozoneManagerRatisServer.getRaftGroup().getGroupId())
+            .setGroupId(ozoneManagerRatisServer.getCurrentRaftGroup().getGroupId())
             .setCallId(callId)
             .setMessage(
                 Message.valueOf(
@@ -533,7 +533,7 @@ class TestOzoneManagerHAWithAllRunning extends TestOzoneManagerHA {
         raftServer.submitClientRequest(RaftClientRequest.newBuilder()
             .setClientId(clientId)
             .setServerId(raftServer.getId())
-            .setGroupId(ozoneManagerRatisServer.getRaftGroup().getGroupId())
+            .setGroupId(ozoneManagerRatisServer.getCurrentRaftGroup().getGroupId())
             .setCallId(callId)
             .setMessage(
                 Message.valueOf(

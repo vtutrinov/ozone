@@ -138,7 +138,7 @@ public class TestTransferLeadershipShell {
   private void assertOMResetPriorities() throws IOException {
     OzoneManagerRatisServer ratisServer = cluster.getOMLeader()
         .getOmRatisServer();
-    RaftGroupId raftGroupId = ratisServer.getRaftGroupId();
+    RaftGroupId raftGroupId = ratisServer.getCurrentRaftGroupId();
     Collection<RaftPeer> raftPeers = ratisServer
         .getServer()
         .getDivision(raftGroupId)
