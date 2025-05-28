@@ -73,8 +73,9 @@ public class PlainTextOzoneFsckWriter implements OzoneFsckWriter {
       printLine("Key state: %s", DAMAGED_BLOCKS);
       printLine("Damaged blocks:");
       for (BlockID blockID : damagedBlocks) {
-        printLine("  containerID: %d", blockID.getContainerBlockID().getContainerID());
+        printLine("  containerID: %s", blockID.getContainerBlockID().getContainerID());
         printLine("  localID: %s", blockID.getContainerBlockID().getLocalID());
+        subsectionSeparator();
       }
     }
   }
