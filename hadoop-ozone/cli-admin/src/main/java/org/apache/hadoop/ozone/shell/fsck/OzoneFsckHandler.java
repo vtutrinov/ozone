@@ -28,7 +28,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -39,7 +38,6 @@ import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.client.StandaloneReplicationConfig;
 import org.apache.hadoop.hdds.protocol.DatanodeDetails;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.BlockData;
-import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.ChunkInfo;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.ContainerDataProto;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.GetBlockResponseProto;
 import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.ReadContainerResponseProto;
@@ -243,27 +241,21 @@ public class OzoneFsckHandler implements AutoCloseable {
 
   private void scanKey(OzoneKey key) throws IOException {
     OmKeyArgs keyArgs = createKeyArgs(key);
-
     KeyInfoWithVolumeContext keyInfoWithContext = omClient.getKeyInfo(keyArgs, false);
-
     OmKeyInfo keyInfo = keyInfoWithContext.getKeyInfo();
+    OmKeyLocationInfoGroup locationInfo = keyInfo.getLatestVersionLocations();
 
-    OmKeyLocationInfoGroup latestKeyInfo = keyInfo.getLatestVersionLocations();
-
-    if (latestKeyInfo == null) {
+    if (locationInfo == null) {
       writer.writeCorruptedKey(keyInfo);
       return;
     }
 
-    List<OmKeyLocationInfo> locations = latestKeyInfo.getBlocksLatestVersionOnly();
-
+    List<OmKeyLocationInfo> locations = locationInfo.getBlocksLatestVersionOnly();
     Set<BlockID> damagedBlocks = new HashSet<>();
 
     for (OmKeyLocationInfo location : locations) {
       Pipeline pipeline = getKeyPipeline(location.getPipeline());
-
       XceiverClientSpi xceiverClient = xceiverClientManager.acquireClientForReadData(pipeline);
-
       BlockID blockID = location.getBlockID().getProtobuf();
 
       try (ContainerMultinodeApi containerClient = new ContainerMultinodeApiImpl(xceiverClient)) {
@@ -281,65 +273,58 @@ public class OzoneFsckHandler implements AutoCloseable {
               break;
             }
           }
-
-          if (!damagedBlocks.contains(blockID) && verboseSettings.printHealthyKeys()) {
-            printKeyInformation(keyInfo, Collections.emptySet(), xceiverClient);
-          }
         }
-
-        if (!damagedBlocks.isEmpty()) {
-          printKeyInformation(keyInfo, damagedBlocks, xceiverClient);
-        }
-      } catch (Exception e) {
-        throw new IOException("Can't sent request to Datanode.", e);
+      } catch (Exception ex) {
+        throw new IOException("Can't sent request to Datanode.", ex);
       } finally {
         xceiverClientManager.releaseClientForReadData(xceiverClient, false);
       }
     }
+    printKeyInformation(keyInfo, damagedBlocks);
   }
 
-  private void printKeyInformation(OmKeyInfo keyInfo, Set<BlockID> damagedBlocks, XceiverClientSpi xceiverClient)
-      throws IOException {
-    boolean healthyKey = damagedBlocks.isEmpty();
-    if (!healthyKey || verboseSettings.printHealthyKeys()) {
-      writer.writeKeyInfo(keyInfo, () -> {
-        writer.writeDamagedBlocks(damagedBlocks);
-
-        printKeyDetails(keyInfo, xceiverClient);
-      });
+  private void printKeyInformation(OmKeyInfo keyInfo, Set<BlockID> damagedBlocks) throws IOException {
+    if (damagedBlocks.isEmpty()) {
+      return;
     }
+
+    writer.writeKeyInfo(keyInfo, () -> {
+      writer.writeDamagedBlocks(damagedBlocks);
+      printKeyDetails(keyInfo, damagedBlocks);
+    });
   }
 
-  private void printKeyDetails(OmKeyInfo keyInfo, XceiverClientSpi xceiverClient) throws IOException {
-    if (verboseSettings.printContainers()) {
-      OmKeyLocationInfoGroup locationInfoGroup = Objects.requireNonNull(keyInfo.getLatestVersionLocations());
+  private void printKeyDetails(OmKeyInfo keyInfo, Set<BlockID> damagedBlocks) throws IOException {
+    if (!verboseSettings.printContainers()) {
+      return;
+    }
 
-      for (OmKeyLocationInfo locationInfo : locationInfoGroup.getBlocksLatestVersionOnly()) {
-        Pipeline pipeline = locationInfo.getPipeline();
+    OmKeyLocationInfoGroup locations = Objects.requireNonNull(keyInfo.getLatestVersionLocations());
 
-        if (pipeline.getType() != ReplicationType.STAND_ALONE && pipeline.getType() != ReplicationType.EC) {
-          pipeline = pipeline.toBuilder()
-              .setReplicationConfig(
-                  StandaloneReplicationConfig.getInstance(
-                      ReplicationConfig.getLegacyFactor(pipeline.getReplicationConfig())))
-              .build();
+    Set<Long> printedContainers = new HashSet<>();
+
+    for (OmKeyLocationInfo location : locations.getBlocksLatestVersionOnly()) {
+      Pipeline pipeline = getKeyPipeline(location.getPipeline());
+
+      Map<DatanodeDetails, ReadContainerResponseProto> containers = readContainerInfos(location, pipeline);
+
+      for (Map.Entry<DatanodeDetails, ReadContainerResponseProto> entry : containers.entrySet()) {
+        ContainerDataProto containerInfo = entry.getValue().getContainerData();
+        long containerID = containerInfo.getContainerID();
+
+        if (printedContainers.contains(containerID)) {
+          continue;
         }
 
-        writer.writeLocationInfo(locationInfo);
-
-        Map<DatanodeDetails, ReadContainerResponseProto> readContainerResponses =
-            readContainerInfos(locationInfo, pipeline);
-
-        for (Map.Entry<DatanodeDetails, ReadContainerResponseProto> entry : readContainerResponses.entrySet()) {
-          ContainerDataProto containerInfo = entry.getValue().getContainerData();
-          DatanodeDetails datanodeDetails = entry.getKey();
-
-          writer.writeContainerInfo(
-              containerInfo,
-              datanodeDetails,
-              () -> printContainerDetails(locationInfo, xceiverClient)
-          );
+        boolean damaged = damagedBlocks.stream()
+                .anyMatch(b -> b.getContainerBlockID().getContainerID() == containerID);
+        if (!damaged && !verboseSettings.printHealthyKeys()) {
+          continue;
         }
+        DatanodeDetails dn = entry.getKey();
+        writer.writeContainerInfo(containerInfo, dn, () -> printContainerDetails(location));
+
+        printedContainers.add(containerID);
       }
     }
   }
@@ -353,27 +338,25 @@ public class OzoneFsckHandler implements AutoCloseable {
     }
   }
 
-  private void printContainerDetails(OmKeyLocationInfo locationInfo, XceiverClientSpi xceiverClient)
+  private void printContainerDetails(OmKeyLocationInfo locationInfo)
       throws IOException {
     if (verboseSettings.printBlocks()) {
-      BlockData blockInfo = getChunksForLocation(locationInfo, xceiverClient);
-
-      writer.writeBlockInfo(blockInfo, () -> printBlockDetails(blockInfo));
+      BlockData block = getChunksForLocation(locationInfo);
+      writer.writeBlockInfo(block, () -> printBlockDetails(block));
     }
   }
 
   private void printBlockDetails(BlockData blockInfo) throws IOException {
     if (verboseSettings.printChunks()) {
-      List<ChunkInfo> chunkList = blockInfo.getChunksList();
-
-      writer.writeChunkInfo(chunkList);
+      writer.writeChunkInfo(blockInfo.getChunksList());
     }
   }
 
-  private BlockData getChunksForLocation(OmKeyLocationInfo keyLocationInfo, XceiverClientSpi xceiverClient)
+  private BlockData getChunksForLocation(OmKeyLocationInfo keyLocationInfo)
       throws IOException {
     Token<OzoneBlockTokenIdentifier> token = keyLocationInfo.getToken();
     Pipeline pipeline = keyLocationInfo.getPipeline();
+    XceiverClientSpi xceiverClient = xceiverClientManager.acquireClientForReadData(pipeline);
 
     if (pipeline.getType() != ReplicationType.STAND_ALONE && pipeline.getType() != ReplicationType.EC) {
       pipeline = pipeline.toBuilder()
@@ -382,14 +365,17 @@ public class OzoneFsckHandler implements AutoCloseable {
           .build();
     }
 
-    GetBlockResponseProto response = ContainerProtocolCalls.getBlock(
-        xceiverClient,
-        keyLocationInfo.getBlockID(),
-        token,
-        pipeline.getReplicaIndexes()
-    );
-
-    return response.getBlockData();
+    try {
+      GetBlockResponseProto response = ContainerProtocolCalls.getBlock(
+          xceiverClient,
+          keyLocationInfo.getBlockID(),
+          token,
+          pipeline.getReplicaIndexes()
+      );
+      return response.getBlockData();
+    } finally {
+      xceiverClientManager.releaseClientForReadData(xceiverClient, false);
+    }
   }
 
   private Pipeline getKeyPipeline(Pipeline keyPipeline) {
