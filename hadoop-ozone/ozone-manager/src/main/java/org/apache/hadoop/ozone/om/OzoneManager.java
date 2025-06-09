@@ -75,6 +75,8 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_KEY_PATH_LOCK_ENA
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_KEY_PATH_LOCK_ENABLED_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_METRICS_SAVE_INTERVAL;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_METRICS_SAVE_INTERVAL_DEFAULT;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_NAMESPACE_STRICT_S3;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_NAMESPACE_STRICT_S3_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_READ_THREADPOOL_DEFAULT;
@@ -108,8 +110,6 @@ import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SE
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerInterServiceProtocolProtos.OzoneManagerInterService;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OzoneManagerService;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.PrepareStatusResponse.PrepareStatus;
-import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateLimitedRaftGroupId;
-import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateRaftGroupId;
 import static org.apache.hadoop.security.UserGroupInformation.getCurrentUser;
 import static org.apache.hadoop.util.ExitUtil.terminate;
 import static org.apache.hadoop.util.Time.monotonicNow;
@@ -130,6 +130,7 @@ import java.io.UncheckedIOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -342,6 +343,7 @@ import org.apache.hadoop.ozone.snapshot.SubmitSnapshotDiffResponse;
 import org.apache.hadoop.ozone.storage.proto.OzoneManagerStorageProtos.PersistedUserVolumeInfo;
 import org.apache.hadoop.ozone.upgrade.UpgradeFinalization.StatusAndMessages;
 import org.apache.hadoop.ozone.upgrade.UpgradeFinalizer;
+import org.apache.hadoop.ozone.util.OmRatisGroupManager;
 import org.apache.hadoop.ozone.util.OzoneNetUtils;
 import org.apache.hadoop.ozone.util.OzoneVersionInfo;
 import org.apache.hadoop.ozone.util.ShutdownHookManager;
@@ -533,6 +535,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private final OMServiceManager serviceManager;
 
   // SDP (multi-raft): raft groups and state machines hosted by the OM raft server
+  private final boolean isMultiRaftEnabled;
+  private final OmRatisGroupManager omRatisGroupManager;
   private BiFunction<RaftPeer, GrpcTlsConfig, RaftClient> raftClientProvider;
   private final Map<RaftGroupId, RaftGroup> omRaftGroups = new ConcurrentHashMap<>();
   private final Map<RaftGroupId, StateMachine> omStateMachines = new ConcurrentHashMap<>();
@@ -594,6 +598,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
           omNodeDetails.getRatisPort(), omNodeDetails.isRatisListener());
     }
     this.threadPrefix = omNodeDetails.threadNamePrefix();
+    isMultiRaftEnabled = configuration.getBoolean(
+        OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
+        OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT);
+    omRatisGroupManager = new OmRatisGroupManager(configuration, isMultiRaftEnabled, getOMServiceId());
     loginOMUserIfSecurityEnabled(conf);
     setInstanceVariablesFromConf();
 
@@ -823,7 +831,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
   public InitBucketResult initBucketRaftGroupAndStateMachine(String bucketName) {
     RaftGroup bucketRaftGroup;
-    RaftGroupId raftGroupId = generateLimitedRaftGroupId(bucketName);
+    RaftGroupId raftGroupId = ratisGroupName(bucketName);
     if (omRaftGroups.containsKey(raftGroupId)) {
       return new InitBucketResult(false, omRaftGroups.get(raftGroupId));
     }
@@ -2539,17 +2547,33 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
   /**
    * SDP (multi-raft): bucket raft group ids are derived from the group number,
-   * see {@link org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator#generateLimitedRaftGroupId}.
+   * see {@link OmRatisGroupManager#ratisGroupName}.
    */
   private boolean isBucketRaftGroupDir(String dirName) {
     int groups = configuration.getInt(OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
         OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
     for (int i = 0; i < groups; i++) {
-      if (generateRaftGroupId(String.valueOf(i)).getUuid().toString().equals(dirName)) {
+      if (UUID.nameUUIDFromBytes(String.valueOf(i).getBytes(StandardCharsets.UTF_8)).toString().equals(dirName)) {
         return true;
       }
     }
     return false;
+  }
+
+  /**
+   * @return true if Multiraft is enabled, false otherwise.
+   */
+  public boolean isMultiRaftEnabled() {
+    return isMultiRaftEnabled;
+  }
+
+  public RaftGroupId ratisGroupName() {
+    return ratisGroupName(null);
+  }
+
+  /** @return the raft group of the bucket, or the OM raft group if multi-raft is off or no bucket is given. */
+  public RaftGroupId ratisGroupName(String bucketName) {
+    return omRatisGroupManager.ratisGroupName(bucketName);
   }
 
   /** SDP (multi-raft): applied TransactionInfo of a bucket raft group. */

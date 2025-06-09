@@ -20,7 +20,6 @@ package org.apache.hadoop.ozone.om.ratis;
 import static org.apache.hadoop.ozone.OzoneConsts.TRANSACTION_INFO_KEY;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status.INTERNAL_ERROR;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status.METADATA_ERROR;
-import static org.apache.hadoop.ozone.util.OzoneMultiRaftUtils.isMultiRaftEnabled;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -687,7 +686,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
           request, context, ozoneManagerDoubleBuffer);
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
       OMResponse omResponse = omClientResponse.getOMResponse();
-      if (request.hasCreateBucketRequest() && isMultiRaftEnabled()) {
+      if (request.hasCreateBucketRequest() && ozoneManager.isMultiRaftEnabled()) {
         String bucketName = request.getCreateBucketRequest().getBucketInfo().getBucketName();
         LOG.trace("Creating raft group while runCommand {}", bucketName);
         ozoneManager.createRaftGroupForBucket(bucketName);

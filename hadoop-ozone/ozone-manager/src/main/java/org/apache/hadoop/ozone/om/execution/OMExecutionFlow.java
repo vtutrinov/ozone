@@ -18,7 +18,6 @@
 package org.apache.hadoop.ozone.om.execution;
 
 import static org.apache.hadoop.ozone.util.MetricUtil.captureLatencyNs;
-import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateLimitedRaftGroupId;
 
 import com.google.protobuf.ServiceException;
 import java.io.IOException;
@@ -78,7 +77,7 @@ public class OMExecutionFlow {
       assert (omClientRequest != null);
       bucketName = omClientRequest.getWriteReqBucketName();
       final RaftGroupId raftGroupId = bucketName != null
-          ? generateLimitedRaftGroupId(bucketName) : ratisServer.getRaftGroupId();
+          ? ozoneManager.ratisGroupName(bucketName) : ratisServer.getRaftGroupId();
       LOG.trace("Continue internal processing request {}, bucket {}, group {}",
           request.getCmdType(), bucketName, raftGroupId);
       if (checkLeader) {

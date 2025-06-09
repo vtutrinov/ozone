@@ -22,7 +22,6 @@ import static org.apache.hadoop.ipc_.RpcConstants.INVALID_CALL_ID;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_HA_PREFIX;
 import static org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils.createServerTlsConfig;
 import static org.apache.hadoop.ozone.util.MetricUtil.captureLatencyNs;
-import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateLimitedRaftGroupId;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -352,7 +351,7 @@ public final class OzoneManagerRatisServer {
    */
   public OMResponse submitBucketWriteRequest(OMRequest omRequest, String raftGroupName)
       throws ServiceException {
-    RaftGroupId bucketRaftGroupId = generateLimitedRaftGroupId(raftGroupName);
+    RaftGroupId bucketRaftGroupId = ozoneManager.ratisGroupName(raftGroupName);
     if (ozoneManager.getPrepareState().requestAllowed(omRequest.getCmdType())) {
       RaftClientRequest raftClientRequest = createRaftRequest(omRequest, true, bucketRaftGroupId);
       RaftClientReply raftClientReply = submitRequestToRatis(raftClientRequest);
@@ -369,7 +368,7 @@ public final class OzoneManagerRatisServer {
       throws ServiceException {
     LOG.trace("Submit write request to Ratis Server {} - {} - {} - {}",
         omRequest.getCmdType(), cliId, callId, bucketName);
-    return submitRequest(omRequest, cliId, callId, generateLimitedRaftGroupId(bucketName));
+    return submitRequest(omRequest, cliId, callId, ozoneManager.ratisGroupName(bucketName));
   }
 
   /**
@@ -1130,6 +1129,17 @@ public final class OzoneManagerRatisServer {
 
   public RaftGroup getCurrentRaftGroup() {
     return raftGroup;
+  }
+
+  /** @return the double buffer of the state machine of the given raft group. */
+  public OzoneManagerDoubleBuffer getOmDoubleBuffer(RaftGroupId groupId) {
+    if (ozoneManager.isMultiRaftEnabled()) {
+      BucketStateMachine bucketStateMachine = getBucketStateMachine(groupId);
+      if (bucketStateMachine != null) {
+        return bucketStateMachine.getOzoneManagerDoubleBuffer();
+      }
+    }
+    return getOmStateMachine().getOzoneManagerDoubleBuffer();
   }
 
   public BucketStateMachine getBucketStateMachine(RaftGroupId groupId) {

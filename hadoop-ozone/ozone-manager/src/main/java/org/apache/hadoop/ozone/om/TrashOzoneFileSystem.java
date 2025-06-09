@@ -21,7 +21,6 @@ import static org.apache.hadoop.ozone.OzoneConsts.OZONE_O3TRASH_URI_SCHEME;
 import static org.apache.hadoop.ozone.OzoneConsts.OZONE_URI_DELIMITER;
 import static org.apache.hadoop.ozone.om.helpers.OzoneFSUtils.addTrailingSlashIfNeeded;
 import static org.apache.hadoop.ozone.om.helpers.OzoneFSUtils.pathToKey;
-import static org.apache.hadoop.ozone.util.OzoneMultiRaftUtils.isMultiRaftEnabled;
 
 import com.google.common.base.Preconditions;
 import java.io.IOException;
@@ -98,7 +97,7 @@ public class TrashOzoneFileSystem extends FileSystem {
     // SDP (multi-raft): bucket write requests go to the raft group of the bucket
     String bucketName = omClientRequest instanceof OMKeyRequest
         ? ((OMKeyRequest) omClientRequest).getWriteReqBucketName() : null;
-    if (bucketName != null && isMultiRaftEnabled()) {
+    if (bucketName != null && ozoneManager.isMultiRaftEnabled()) {
       OzoneManagerRatisUtils.submitWriteRequest(
           ozoneManager, omRequest, CLIENT_ID, runCount.getAndIncrement(), bucketName);
     } else {

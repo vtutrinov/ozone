@@ -49,6 +49,7 @@ import org.apache.hadoop.ozone.dn.DatanodeTestUtils;
 import org.apache.hadoop.util.ExitUtil;
 import org.apache.ozone.test.GenericTestUtils;
 import org.apache.ozone.test.GenericTestUtils.LogCapturer;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,6 +57,7 @@ import org.junit.jupiter.api.Test;
 /**
  * This class tests datanode can tolerate configured num of failed volumes.
  */
+@Unhealthy
 public class TestDatanodeHddsVolumeFailureToleration {
 
   private MiniOzoneCluster cluster;
