@@ -41,6 +41,7 @@ import picocli.CommandLine;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Spec;
 
+import java.io.IOException;
 import java.util.Collection;
 
 /**
@@ -118,8 +119,15 @@ public class OMAdmin extends GenericCli implements SubcommandWithParent {
     String clientId = ClientId.randomId().toString();
     if (!forceHA || (forceHA && OmUtils.isOmHAServiceId(conf, omServiceID))) {
       OmTransport omTransport = new Hadoop3OmTransportFactory().createOmTransport(conf, parent.getUser(), omServiceID);
+      String finalOmServiceID = omServiceID;
       return new OzoneManagerProtocolClientSideTranslatorPB(
-              omTransport, clientId, conf, parent.getUser(), omServiceID
+              omTransport, clientId, conf, () -> {
+        try {
+          return new Hadoop3OmTransportFactory().createOmTransport(conf, parent.getUser(), finalOmServiceID);
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+      }
       );
     } else {
       throw new OzoneClientException("This command works only on OzoneManager" +

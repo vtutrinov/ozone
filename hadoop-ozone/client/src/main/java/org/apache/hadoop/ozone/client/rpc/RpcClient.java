@@ -255,7 +255,13 @@ public class RpcClient implements ClientProtocol {
     OzoneManagerProtocolClientSideTranslatorPB
         ozoneManagerProtocolClientSideTranslatorPB =
         new OzoneManagerProtocolClientSideTranslatorPB(omTransport,
-        clientId.toString(), conf, ugi, omServiceId);
+        clientId.toString(), conf, () -> {
+          try {
+            return createOmTransport(omServiceId);
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        });
     this.ozoneManagerClient = TracingUtil.createProxy(
         ozoneManagerProtocolClientSideTranslatorPB,
         OzoneManagerClientProtocol.class, conf);

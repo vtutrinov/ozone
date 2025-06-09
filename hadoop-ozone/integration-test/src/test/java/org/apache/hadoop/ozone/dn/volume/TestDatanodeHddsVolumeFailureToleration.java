@@ -33,11 +33,14 @@ import org.apache.hadoop.ozone.dn.DatanodeTestUtils;
 import org.apache.hadoop.util.ExitUtil;
 import org.apache.ozone.test.GenericTestUtils;
 import org.apache.ozone.test.GenericTestUtils.LogCapturer;
+import org.apache.ozone.test.UnhealthyTest;
+import org.apache.ozone.test.tag.Unhealthy;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.TestRule;
 import org.junit.rules.Timeout;
 import org.apache.ozone.test.JUnit5AwareTimeout;
@@ -63,6 +66,7 @@ import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_REPLICATION;
 /**
  * This class tests datanode can tolerate configured num of failed volumes.
  */
+@Category(UnhealthyTest.class) @Unhealthy
 public class TestDatanodeHddsVolumeFailureToleration {
   /**
    * Set a timeout for each test.

@@ -20,9 +20,6 @@ import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServe
 import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER;
 import static org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils.createClientRequest;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type.PrepareStatus;
-import static org.apache.hadoop.ozone.util.OzoneMultiRaftUtils.isMultiRaftEnabled;
-import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateLimitedRaftGroupId;
-import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateRaftGroupId;
 import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 
 import org.apache.ratis.protocol.RaftGroupId;
@@ -220,14 +217,11 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
       try {
         omClientRequest = createClientRequest(request, ozoneManager);
         // check retry cache
-        RaftGroupId raftGroupId;
         String bucketName = omClientRequest.getWriteReqBucketName();
+
         LOG.trace("Continue internal processing request {}, bucket {}", request.getCmdType(), bucketName);
-        if (bucketName != null && isMultiRaftEnabled()) {
-          raftGroupId = generateLimitedRaftGroupId(bucketName);
-        } else {
-          raftGroupId = generateRaftGroupId(ozoneManager.getOMServiceId());
-        }
+
+        RaftGroupId raftGroupId = ozoneManager.ratisGroupName(bucketName);
         // To validate credentials we have already verified leader status.
         // This will skip of checking leader status again if request has S3Auth.
         if (!s3Auth) {
@@ -247,7 +241,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
       }
 
       final OMResponse response;
-      if (omClientRequest.getWriteReqBucketName() != null && isMultiRaftEnabled()) {
+      if (omClientRequest.getWriteReqBucketName() != null && ozoneManager.isMultiRaftEnabled()) {
         response = omRatisServer.submitBucketWriteRequest(
                 requestToSubmit,
                 omClientRequest.getWriteReqBucketName()

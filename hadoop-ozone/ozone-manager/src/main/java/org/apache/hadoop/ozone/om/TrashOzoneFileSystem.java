@@ -59,7 +59,6 @@ import static org.apache.hadoop.ozone.OzoneConsts.OZONE_O3TRASH_URI_SCHEME;
 import static org.apache.hadoop.ozone.OzoneConsts.OZONE_URI_DELIMITER;
 import static org.apache.hadoop.ozone.om.helpers.OzoneFSUtils.addTrailingSlashIfNeeded;
 import static org.apache.hadoop.ozone.om.helpers.OzoneFSUtils.pathToKey;
-import static org.apache.hadoop.ozone.util.OzoneMultiRaftUtils.isMultiRaftEnabled;
 
 /**
  * FileSystem to be used by the Trash Emptier.
@@ -105,7 +104,7 @@ public class TrashOzoneFileSystem extends FileSystem {
 
       OMKeyRequest omKeyRequest = (OMKeyRequest) omClientRequest;
       String bucketName = omKeyRequest.getWriteReqBucketName();
-      if (bucketName != null && isMultiRaftEnabled()) {
+      if (bucketName != null && ozoneManager.isMultiRaftEnabled()) {
         OzoneManagerRatisUtils.submitWriteRequest(
                 ozoneManager, omRequest, CLIENT_ID, runCount.getAndIncrement(), bucketName
         );

@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.ozone.om;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.UUID;
 
@@ -105,7 +106,13 @@ public class TestOMEpochForNonRatis {
     OzoneManagerProtocolClientSideTranslatorPB omClient =
         new OzoneManagerProtocolClientSideTranslatorPB(
             OmTransportFactory.create(conf, ugi, null),
-            RandomStringUtils.randomAscii(5), conf, ugi, omId);
+            RandomStringUtils.randomAscii(5), conf, () -> {
+          try {
+            return OmTransportFactory.create(conf, ugi, null);
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        });
 
     objectStore.createVolume(volumeName);
 
@@ -169,7 +176,13 @@ public class TestOMEpochForNonRatis {
     OzoneManagerProtocolClientSideTranslatorPB omClient =
         new OzoneManagerProtocolClientSideTranslatorPB(
             OmTransportFactory.create(conf, ugi, null),
-            RandomStringUtils.randomAscii(5), conf, ugi, omId);
+            RandomStringUtils.randomAscii(5), conf, () -> {
+          try {
+            return OmTransportFactory.create(conf, ugi, null);
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        });
 
     long volObjId = omClient.getVolumeInfo(volumeName).getObjectID();
     long epochInVolObjId = volObjId >> EPOCH_ID_SHIFT;

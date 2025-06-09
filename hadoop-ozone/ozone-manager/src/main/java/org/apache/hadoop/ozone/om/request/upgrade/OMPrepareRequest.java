@@ -45,9 +45,6 @@ import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import static org.apache.hadoop.ozone.util.OzoneMultiRaftUtils.isMultiRaftEnabled;
-import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateLimitedRaftGroupId;
-import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateRaftGroupId;
 
 /**
  * OM Request used to flush all transactions to disk, take a DB snapshot, and
@@ -96,21 +93,15 @@ public class OMPrepareRequest extends OMClientRequest {
       response = new OMPrepareResponse(responseBuilder.build(),
           transactionLogIndex);
 
+      String bucketName = OzoneMultiRaftUtils.getBucketName(omRequest);
+
+      RaftGroupId raftGroupId = ozoneManager.ratisGroupName(bucketName);
+      OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
+
       // Add response to double buffer before clearing logs.
       // This guarantees the log index of this request will be the same as
       // the snapshot index in the prepared state.
-      OzoneManagerDoubleBuffer doubleBuffer;
-
-      OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
-      String bucketName = OzoneMultiRaftUtils.getBucketName(omRequest);
-      RaftGroupId raftGroupId;
-      if (bucketName != null && isMultiRaftEnabled()) {
-        raftGroupId = generateLimitedRaftGroupId(bucketName);
-        doubleBuffer = ozoneManager.getOmRatisServer().getBucketStateMachine(raftGroupId).getOzoneManagerDoubleBuffer();
-      } else {
-        raftGroupId = generateRaftGroupId(ozoneManager.getOMServiceId());
-        doubleBuffer = ozoneManager.getOmRatisServer().getOmStateMachine().getOzoneManagerDoubleBuffer();
-      }
+      OzoneManagerDoubleBuffer doubleBuffer = omRatisServer.getOmDoubleBuffer(raftGroupId);
       doubleBuffer.add(response, transactionLogIndex);
       final RaftServer.Division division = omRatisServer.getServerDivision(raftGroupId);
 

@@ -80,7 +80,6 @@ import org.slf4j.LoggerFactory;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status.INTERNAL_ERROR;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status.METADATA_ERROR;
 import static org.apache.hadoop.ozone.OzoneConsts.TRANSACTION_INFO_KEY;
-import static org.apache.hadoop.ozone.util.OzoneMultiRaftUtils.isMultiRaftEnabled;
 
 /**
  * The OM StateMachine is the state machine for OM Ratis server. It is
@@ -597,7 +596,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
           handler.handleWriteRequest(request, trxLogIndex);
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
       OMResponse omResponse = omClientResponse.getOMResponse();
-      if (request.hasCreateBucketRequest() && isMultiRaftEnabled()) {
+      if (request.hasCreateBucketRequest() && ozoneManager.isMultiRaftEnabled()) {
         String bucketName = request.getCreateBucketRequest().getBucketInfo().getBucketName();
         LOG.trace("Creating raft group while runCommand {}", bucketName);
         ozoneManager.createRaftGroupForBucket(bucketName);
