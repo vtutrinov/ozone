@@ -41,11 +41,13 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import static java.util.Arrays.asList;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -293,7 +295,7 @@ public class TestOMMetadataReader {
 
   @Test
   public void testGetContentSummaryForBucketSnapshotDir() throws IOException {
-    // when
+    // given
     List<OmVolumeArgs> listOfSingleVolume = listOfVolumesOfSize(1);
     OzoneManager om = mock(OzoneManager.class);
 
@@ -344,6 +346,72 @@ public class TestOMMetadataReader {
     assertEquals(4, contentSummary.getFileCount()); // 1 bucket * 4 keys per bucket
     assertEquals(1, contentSummary.getDirectoryCount()); // 1 directory in the snapshot-1
     assertEquals(8192, contentSummary.getLength()); // 4 keys * 2KB
+  }
+
+  @Test
+  public void testGetContentSummaryForBucketWithEmptyDirectories() throws IOException {
+    // given
+    KeyManager keyManager = mock(KeyManager.class);
+    PrefixManager prefixManager = mock(PrefixManager.class);
+    OzoneManager om = mock(OzoneManager.class);
+    OmMetadataReaderMetrics omMetadataReaderMetrics = mock(OmMetadataReaderMetrics.class);
+
+    OzoneConfiguration configuration = mock(OzoneConfiguration.class);
+    when(om.getConfiguration()).thenReturn(configuration);
+    when(configuration.getInt(anyString(), anyInt())).thenReturn(1000);
+
+    ReferenceCounted<IOmMetadataReader> omMetadataReaderReferenceCounted = mock(ReferenceCounted.class);
+    when(om.getReader(any(OmKeyArgs.class))).thenReturn(omMetadataReaderReferenceCounted);
+    IOmMetadataReader fileStatusesReader = mock(IOmMetadataReader.class);
+    when(omMetadataReaderReferenceCounted.get()).thenReturn(fileStatusesReader);
+
+    stubDirectoriesInsideBucket(fileStatusesReader);
+
+    try {
+      // when
+      ContentSummary contentSummary = new OmMetadataReader(keyManager, prefixManager, om,
+          LoggerFactory.getLogger(OmMetadataReader.class), mock(AuditLogger.class), omMetadataReaderMetrics,
+          null).getContentSummary(new OmKeyArgs.Builder().setVolumeName("vol1")
+          .setBucketName("bucket1").build(), "ozone");
+
+      // then
+      assertEquals(0, contentSummary.getFileCount());
+      assertEquals(4, contentSummary.getDirectoryCount());
+    } catch (NullPointerException npe) {
+      fail("Content summary for an empty directory can't be null", npe);
+    }
+  }
+
+  @Test
+  public void testGetContentSummaryForAnEmptyDirectoryInsideBucket() throws IOException {
+    // given
+    KeyManager keyManager = mock(KeyManager.class);
+    PrefixManager prefixManager = mock(PrefixManager.class);
+    OzoneManager om = mock(OzoneManager.class);
+    OmMetadataReaderMetrics omMetadataReaderMetrics = mock(OmMetadataReaderMetrics.class);
+
+    OzoneConfiguration configuration = mock(OzoneConfiguration.class);
+    when(om.getConfiguration()).thenReturn(configuration);
+    when(configuration.getInt(anyString(), anyInt())).thenReturn(1000);
+
+    ReferenceCounted<IOmMetadataReader> omMetadataReaderReferenceCounted = mock(ReferenceCounted.class);
+    when(om.getReader(any(OmKeyArgs.class))).thenReturn(omMetadataReaderReferenceCounted);
+    IOmMetadataReader fileStatusesReader = mock(IOmMetadataReader.class);
+    when(omMetadataReaderReferenceCounted.get()).thenReturn(fileStatusesReader);
+
+    when(fileStatusesReader.listStatusLight(any(OmKeyArgs.class), anyBoolean(), anyString(), anyLong(), anyBoolean()))
+        .thenReturn(Collections.emptyList());
+
+    // when
+    ContentSummary contentSummary = new OmMetadataReader(keyManager, prefixManager, om,
+        LoggerFactory.getLogger(OmMetadataReader.class), mock(AuditLogger.class), omMetadataReaderMetrics,
+        null).getContentSummary(new OmKeyArgs.Builder().setVolumeName("vol1")
+        .setBucketName("bucket1").build(), "ozone");
+
+    // then
+    assertNotNull(contentSummary);
+    assertEquals(0, contentSummary.getFileCount());
+    assertEquals(0, contentSummary.getDirectoryCount());
   }
 
   /**
@@ -408,16 +476,16 @@ public class TestOMMetadataReader {
                                                   List<OmBucketInfo> omBucketInfos) throws IOException {
     List<List<OzoneFileStatusLight>> listOfOFSPerIteration = new ArrayList<>(omBucketInfos.size() * 5);
     for (OmBucketInfo bucket: omBucketInfos) {
-      List<OzoneFileStatusLight> list1 = stubTheNextListOfKeyStatuses(bucket, Arrays.asList(
+      List<OzoneFileStatusLight> list1 = stubTheNextListOfKeyStatuses(bucket, asList(
           Pair.of("k1", false), Pair.of("k2", false), Pair.of("sub", true)));
       List<OzoneFileStatusLight> list2 = stubTheNextListOfKeyStatuses(bucket, Collections.singletonList(
           Pair.of("sub/dir", true)));
-      List<OzoneFileStatusLight> list3 = stubTheNextListOfKeyStatuses(bucket, Arrays.asList(
+      List<OzoneFileStatusLight> list3 = stubTheNextListOfKeyStatuses(bucket, asList(
           Pair.of("sub/dir/k3", false), Pair.of("sub/dir/k4", false), Pair.of("sub/dir/k5", false),
           Pair.of("sub/dir/k6", false), Pair.of("sub/dir/level", true)));
       List<OzoneFileStatusLight> list4 = stubTheNextListOfKeyStatuses(bucket, Collections.singletonList(
           Pair.of("sub/dir/level/deeper", true)));
-      List<OzoneFileStatusLight> list5 = stubTheNextListOfKeyStatuses(bucket, Arrays.asList(
+      List<OzoneFileStatusLight> list5 = stubTheNextListOfKeyStatuses(bucket, asList(
           Pair.of("sub/dir/level/deeper/k7", false), Pair.of("sub/dir/level/deeper/k8", false),
           Pair.of("sub/dir/level/deeper/k9", false), Pair.of("sub/dir/level/deeper/k10", false),
           Pair.of("sub/dir/level/deeper/k11", false), Pair.of("sub/dir/level/deeper/k12", false),
@@ -437,6 +505,19 @@ public class TestOMMetadataReader {
     }
   }
 
+  private void stubDirectoriesInsideBucket(IOmMetadataReader fileStatusesReader) throws IOException {
+    OmBucketInfo bucket = new OmBucketInfo.Builder().setBucketName("bucket1").setVolumeName("vol1").build();
+    List<OzoneFileStatusLight> ozoneFileStatusLights = stubTheNextListOfKeyStatuses(bucket, asList(
+        Pair.of("dir1", true),
+        Pair.of("dir2", true),
+        Pair.of("dir3", true),
+        Pair.of("dir4", true)
+    ));
+    OngoingStubbing<List<OzoneFileStatusLight>> keyStatusListStub = when(fileStatusesReader.listStatusLight(
+        any(OmKeyArgs.class), anyBoolean(), anyString(), anyLong(), anyBoolean()));
+    keyStatusListStub.thenReturn(ozoneFileStatusLights).thenReturn(Collections.emptyList());
+  }
+
   /**
    * Stub the snapshot structure for the buckets.
    * .snapshot/snapshot-1/key1
@@ -452,10 +533,10 @@ public class TestOMMetadataReader {
                                       List<OmBucketInfo> omBucketInfos) throws IOException {
     List<List<OzoneFileStatusLight>> listOfOFSPerIteration = new ArrayList<>(omBucketInfos.size());
     for (OmBucketInfo bucket: omBucketInfos) {
-      List<OzoneFileStatusLight> list1 = stubTheNextListOfKeyStatuses(bucket, Arrays.asList(
+      List<OzoneFileStatusLight> list1 = stubTheNextListOfKeyStatuses(bucket, asList(
           Pair.of(".snapshot/snapshot-1/key1", false), Pair.of(".snapshot/snapshot-1/key2", false),
           Pair.of(".snapshot/snapshot-1/dir1", true)));
-      List<OzoneFileStatusLight> list2 = stubTheNextListOfKeyStatuses(bucket, Arrays.asList(
+      List<OzoneFileStatusLight> list2 = stubTheNextListOfKeyStatuses(bucket, asList(
           Pair.of(".snapshot/snapshot-1/dir1/key3", false), Pair.of(".snapshot/snapshot-1/dir1/key4", false)));
       listOfOFSPerIteration.add(list1);
       listOfOFSPerIteration.add(list2);

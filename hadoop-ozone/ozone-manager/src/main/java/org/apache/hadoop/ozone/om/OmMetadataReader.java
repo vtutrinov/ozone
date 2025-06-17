@@ -516,7 +516,7 @@ public class OmMetadataReader implements IOmMetadataReader, Auditor {
         resultContentSummary = resultContentSummary.combine(contentSummary);
       }
     }
-    return resultContentSummary;
+    return resultContentSummary != null ? resultContentSummary : new ContentSummary.Builder().build();
   }
 
   private Iterator<OzoneFileStatusLight> getListStatusLight(OmKeyArgs keyArgs, String startPath, int listSize) {
