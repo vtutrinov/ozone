@@ -295,7 +295,7 @@ public class TestOMMetadataReader {
 
   @Test
   public void testGetContentSummaryForBucketSnapshotDir() throws IOException {
-    // given
+    // when
     List<OmVolumeArgs> listOfSingleVolume = listOfVolumesOfSize(1);
     OzoneManager om = mock(OzoneManager.class);
 

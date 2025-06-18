@@ -493,7 +493,7 @@ public class OmMetadataReader implements IOmMetadataReader, Auditor {
     int listSize = ozoneManager.getConfiguration().getInt(OZONE_FS_LISTING_PAGE_SIZE_MAX,
         OZONE_FS_MAX_LISTING_PAGE_SIZE);
     Iterator<OzoneFileStatusLight> ozoneFileStatusLights = getListStatusLight(args, startPath, listSize);
-    ContentSummary resultContentSummary = null;
+    ContentSummary resultContentSummary = new ContentSummary.Builder().build();
     while (ozoneFileStatusLights.hasNext()) {
       OzoneFileStatusLight status = ozoneFileStatusLights.next();
       ContentSummary contentSummary;
@@ -510,13 +510,9 @@ public class OmMetadataReader implements IOmMetadataReader, Auditor {
                 .directoryCount(status.isDirectory() ? 1 : 0)
                 .build();
       }
-      if (resultContentSummary == null) {
-        resultContentSummary = contentSummary;
-      } else {
-        resultContentSummary = resultContentSummary.combine(contentSummary);
-      }
+      resultContentSummary = resultContentSummary.combine(contentSummary);
     }
-    return resultContentSummary != null ? resultContentSummary : new ContentSummary.Builder().build();
+    return resultContentSummary;
   }
 
   private Iterator<OzoneFileStatusLight> getListStatusLight(OmKeyArgs keyArgs, String startPath, int listSize) {
