@@ -3447,6 +3447,16 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   }
 
   @Override
+  public String getMainRatisRole() {
+    final OzoneManagerRatisServer ratisServer = omRatisServer;
+    if (null == ratisServer) {
+      return "Server is shutting down";
+    }
+    OzoneManagerRatisServer.RaftServerStatus status = ratisServer.getLeaderStatus();
+    return status == OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER ? "FOLLOWER" : "LEADER";
+  }
+
+  @Override
   public List<List<String>> getRatisRoles() {
     int port = omNodeDetails.getRatisPort();
     if (null == omRatisServer) {
