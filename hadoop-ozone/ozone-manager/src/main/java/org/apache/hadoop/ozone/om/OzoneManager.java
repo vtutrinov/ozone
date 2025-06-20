@@ -3183,6 +3183,20 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   }
 
   @Override
+  public String getMainRatisRole() {
+    if (isRatisEnabled) {
+      if (null == omRatisServer) {
+        return "Server is shutting down";
+      }
+      OzoneManagerRatisServer.RaftServerStatus status =
+          omRatisServer.checkLeaderStatus(omRatisServer.getCurrentRaftGroupId());
+      return status == OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER ? "FOLLOWER" : "LEADER";
+    } else {
+      return "Ratis Disabled";
+    }
+  }
+
+  @Override
   public List<List<String>> getRatisRoles() {
     List<ServiceInfo> serviceList;
     List<List<String>> resultList = new ArrayList<>();
