@@ -104,9 +104,10 @@ public class TrashOzoneFileSystem extends FileSystem {
 
       OMKeyRequest omKeyRequest = (OMKeyRequest) omClientRequest;
       String bucketName = omKeyRequest.getWriteReqBucketName();
+      String volumeName = omKeyRequest.getWriteReqVolumeName();
       if (bucketName != null && ozoneManager.isMultiRaftEnabled()) {
         OzoneManagerRatisUtils.submitWriteRequest(
-                ozoneManager, omRequest, CLIENT_ID, runCount.getAndIncrement(), bucketName
+                ozoneManager, omRequest, CLIENT_ID, runCount.getAndIncrement(), volumeName, bucketName
         );
       } else {
         OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, CLIENT_ID, runCount.getAndIncrement());

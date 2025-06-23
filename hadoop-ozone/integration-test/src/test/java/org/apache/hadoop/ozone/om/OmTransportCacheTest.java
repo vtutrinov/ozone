@@ -19,16 +19,22 @@ import org.apache.hadoop.ozone.om.helpers.OmVolumeArgs;
 import org.apache.hadoop.ozone.om.protocolPB.OmTransportFactory;
 import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerProtocolClientSideTranslatorPB;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.mapping;
+import static java.util.stream.Collectors.toSet;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,16 +44,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 @Timeout(240)
 public class OmTransportCacheTest {
-  private static MiniOzoneHAClusterImpl cluster = null;
-  private static OzoneConfiguration conf;
-  private static String clusterId;
-  private static String scmId;
-  private static OzoneClient client;
-  private static String omServiceId;
-  private static String scmServiceId;
+  private MiniOzoneHAClusterImpl cluster = null;
+  private OzoneConfiguration conf;
+  private String clusterId;
+  private String scmId;
+  private OzoneClient client;
+  private String omServiceId;
+  private String scmServiceId;
 
-  @BeforeAll
-  public static void init() throws Exception {
+  @BeforeEach
+  public void init() throws Exception {
     conf = new OzoneConfiguration();
     clusterId = UUID.randomUUID().toString();
     scmId = UUID.randomUUID().toString();
@@ -73,8 +79,8 @@ public class OmTransportCacheTest {
   /**
    * Shutdown MiniDFSCluster.
    */
-  @AfterAll
-  public static void shutdown() {
+  @AfterEach
+  public void shutdown() {
     IOUtils.closeQuietly(client);
     if (cluster != null) {
       cluster.shutdown();
@@ -127,23 +133,21 @@ public class OmTransportCacheTest {
     assertEquals(3, bucketTrxnIndex);
 
     String data = "random data";
-    OzoneOutputStream ozoneOutputStream1 = ozoneVolume.getBucket(bucketName1)
-        .createKey(keyName, data.length(), ReplicationType.RATIS,
-            ReplicationFactor.ONE, new HashMap<>());
-    ozoneOutputStream1.write(data.getBytes(UTF_8), 0, data.length());
-    ozoneOutputStream1.close();
+    try (OzoneOutputStream ozoneOutputStream1 = ozoneVolume.getBucket(bucketName1)
+        .createKey(keyName, data.length(), ReplicationType.RATIS, ReplicationFactor.ONE, new HashMap<>())) {
+      ozoneOutputStream1.write(data.getBytes(UTF_8), 0, data.length());
+    }
 
-    OzoneOutputStream ozoneOutputStream2 = ozoneVolume.getBucket(bucketName2)
-        .createKey(keyName, data.length(), ReplicationType.RATIS,
-            ReplicationFactor.ONE, new HashMap<>());
-    ozoneOutputStream2.write(data.getBytes(UTF_8), 0, data.length());
-    ozoneOutputStream2.close();
+    try (OzoneOutputStream ozoneOutputStream2 = ozoneVolume.getBucket(bucketName2)
+        .createKey(keyName, data.length(), ReplicationType.RATIS, ReplicationFactor.ONE, new HashMap<>())) {
+      ozoneOutputStream2.write(data.getBytes(UTF_8), 0, data.length());
+    }
 
-    OzoneOutputStream ozoneOutputStream3 = ozoneVolume.getBucket(bucketName3)
-        .createKey(keyName, data.length(), ReplicationType.RATIS,
-            ReplicationFactor.ONE, new HashMap<>());
-    ozoneOutputStream3.write(data.getBytes(UTF_8), 0, data.length());
-    ozoneOutputStream3.close();
+    try (OzoneOutputStream ozoneOutputStream3 =
+             ozoneVolume.getBucket(bucketName3)
+                 .createKey(keyName, data.length(), ReplicationType.RATIS, ReplicationFactor.ONE, new HashMap<>())) {
+      ozoneOutputStream3.write(data.getBytes(UTF_8), 0, data.length());
+    }
 
     // Verify last transactionIndex is 1 as we are in a separate statemachine.
     OmKeyInfo omKeyInfo1 = omClient.lookupKey(new OmKeyArgs.Builder()
@@ -174,5 +178,40 @@ public class OmTransportCacheTest {
     long keyTrxnIndex3 = OmUtils.getTxIdFromObjectId(
         omKeyInfo3.getObjectID());
     assertEquals(1, keyTrxnIndex3);
+  }
+
+  @Test
+  public void testBucketDistribution() throws Exception {
+    String volumeName = "volume" + RandomStringUtils.randomNumeric(5);
+
+    String keyName = "key" + RandomStringUtils.randomNumeric(5);
+
+    ObjectStore objectStore = client.getObjectStore();
+
+    objectStore.createVolume(volumeName);
+
+    OzoneVolume ozoneVolume = objectStore.getVolume(volumeName);
+
+    int bucketCount = 100;
+    String data = "random data";
+
+    for (int i = 0; i < bucketCount; i++) {
+      String bucketName = "bucket" + i;
+      ozoneVolume.createBucket(bucketName);
+      try (OzoneOutputStream createKeyOutputStream = ozoneVolume.getBucket(bucketName)
+          .createKey(keyName, data.length(), ReplicationType.RATIS, ReplicationFactor.ONE, new HashMap<>())) {
+        createKeyOutputStream.write(data.getBytes(UTF_8), 0, data.length());
+      }
+    }
+
+    OmRatisGroupManager groupManager = cluster.getOMLeader().getOmRatisGroupManager();
+    Map<String, UUID> bucketRatisGroups = groupManager.getBucketRatisGroups();
+    Map<UUID, Set<String>> buUUID =
+        bucketRatisGroups.entrySet().stream()
+            .collect(groupingBy(Map.Entry::getValue, mapping(Map.Entry::getKey, toSet())));
+    assertEquals(2, buUUID.size());
+    Iterator<Map.Entry<UUID, Set<String>>> iterator = buUUID.entrySet().iterator();
+    assertEquals(50, iterator.next().getValue().size());
+    assertEquals(50, iterator.next().getValue().size());
   }
 }

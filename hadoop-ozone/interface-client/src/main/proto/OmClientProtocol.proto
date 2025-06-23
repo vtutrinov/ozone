@@ -734,6 +734,7 @@ message BucketInfo {
     optional string owner = 19;
     optional hadoop.hdds.DefaultReplicationConfig defaultReplicationConfig = 20;
     optional string compressionType = 21;
+    optional hadoop.hdds.UUID raftGroup = 22;
 }
 
 enum StorageTypeProto {

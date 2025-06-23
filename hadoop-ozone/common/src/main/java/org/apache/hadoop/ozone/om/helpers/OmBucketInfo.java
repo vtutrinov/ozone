@@ -25,8 +25,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.apache.hadoop.hdds.HddsUtils;
 import org.apache.hadoop.hdds.client.DefaultReplicationConfig;
 import org.apache.hadoop.hdds.protocol.StorageType;
 import org.apache.hadoop.hdds.utils.db.Codec;
@@ -112,6 +114,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, Bucke
 
   private String compressionType;
 
+  private UUID raftGroup;
+
   /**
    * Private constructor, constructed via builder.
    * @param volumeName - Volume name.
@@ -154,7 +158,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, Bucke
       BucketLayout bucketLayout,
       String owner,
       DefaultReplicationConfig defaultReplicationConfig,
-      String compressionType) {
+      String compressionType,
+      UUID raftGroup) {
     this.volumeName = volumeName;
     this.bucketName = bucketName;
     this.acls = acls;
@@ -176,6 +181,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, Bucke
     this.owner = owner;
     this.defaultReplicationConfig = defaultReplicationConfig;
     this.compressionType = compressionType;
+    this.raftGroup = raftGroup;
   }
 
   @Override
@@ -350,6 +356,14 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, Bucke
     this.owner = ownerName;
   }
 
+  public UUID getRaftGroup() {
+    return raftGroup;
+  }
+
+  public void setRaftGroup(UUID raftGroup) {
+    this.raftGroup = raftGroup;
+  }
+
   /**
    * Returns new builder class that builds a OmBucketInfo.
    *
@@ -444,7 +458,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, Bucke
         .setBucketLayout(bucketLayout)
         .setOwner(owner)
         .setDefaultReplicationConfig(defaultReplicationConfig)
-        .setCompressionType(compressionType);
+        .setCompressionType(compressionType)
+        .setRaftGroup(raftGroup);
   }
 
   /**
@@ -472,6 +487,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, Bucke
     private String owner;
     private DefaultReplicationConfig defaultReplicationConfig;
     private String compressionType;
+    private UUID raftGroup;
 
     public Builder() {
       //Default values
@@ -612,6 +628,11 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, Bucke
       return this;
     }
 
+    public Builder setRaftGroup(UUID raftGroup) {
+      this.raftGroup = raftGroup;
+      return this;
+    }
+
     /**
      * Constructs the OmBucketInfo.
      * @return instance of OmBucketInfo.
@@ -626,7 +647,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, Bucke
           storageType, creationTime, modificationTime, objectID, updateID,
           metadata, bekInfo, sourceVolume, sourceBucket, usedBytes,
           usedNamespace, quotaInBytes, quotaInNamespace, bucketLayout, owner,
-          defaultReplicationConfig, compressionType);
+          defaultReplicationConfig, compressionType, raftGroup);
     }
   }
 
@@ -670,9 +691,11 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, Bucke
     if (compressionType != null) {
       bib.setCompressionType(compressionType);
     }
+    if (raftGroup != null) {
+      bib.setRaftGroup(HddsUtils.toProtobuf(raftGroup));
+    }
     return bib.build();
   }
-
 
   /**
    * Parses BucketInfo protobuf and creates OmBucketInfo.
@@ -737,6 +760,9 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, Bucke
     if (bucketInfo.hasOwner()) {
       obib.setOwner(bucketInfo.getOwner());
     }
+    if (bucketInfo.hasRaftGroup()) {
+      obib.setRaftGroup(HddsUtils.fromProtobuf(bucketInfo.getRaftGroup()));
+    }
     return obib.build();
   }
 
@@ -759,6 +785,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, Bucke
         ", bucketLayout='" + bucketLayout + '\'' +
         ", defaultReplicationConfig='" + defaultReplicationConfig + '\'' +
         ", compressionType='" + compressionType + '\'' +
+        ", raftGroup='" + raftGroup + '\'' +
         sourceInfo +
         '}';
   }
@@ -789,7 +816,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, Bucke
         Objects.equals(bekInfo, that.bekInfo) &&
         Objects.equals(owner, that.owner) &&
         Objects.equals(defaultReplicationConfig, that.defaultReplicationConfig) &&
-        Objects.equals(compressionType, this.compressionType);
+        Objects.equals(compressionType, that.compressionType) &&
+        Objects.equals(raftGroup, that.raftGroup);
   }
 
   @Override
@@ -820,6 +848,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, Bucke
         ", owner=" + owner +
         ", defaultReplicationConfig=" + defaultReplicationConfig +
         ", compressionType=" + compressionType +
+        ", raftGroup=" + raftGroup +
         '}';
   }
 }

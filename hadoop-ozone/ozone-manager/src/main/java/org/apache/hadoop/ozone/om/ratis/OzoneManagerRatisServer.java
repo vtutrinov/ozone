@@ -151,7 +151,7 @@ public final class OzoneManagerRatisServer {
         conf, port, ratisStorageDir);
 
     this.raftPeerId = localRaftPeerId;
-    this.currentRaftGroupId = om.ratisGroupName();
+    this.currentRaftGroupId = om.omRatisGroupName();
     this.raftPeerMap = Maps.newHashMap();
     peers.forEach(e -> raftPeerMap.put(e.getId().toString(), e));
     this.currentRaftGroup = RaftGroup.valueOf(currentRaftGroupId, peers);
@@ -309,11 +309,11 @@ public final class OzoneManagerRatisServer {
    * @throws ServiceException throw when applying Ratis request
    */
   public OMResponse submitBucketWriteRequest(
-          OMRequest omRequest, String raftGroupName
+          OMRequest omRequest, String volumeName, String bucketName
   ) throws ServiceException {
     return commonSubmitRequest(
             omRequest,
-            ozoneManager.ratisGroupName(raftGroupName)
+            ozoneManager.ratisGroupName(volumeName, bucketName)
     );
   }
 
@@ -353,12 +353,12 @@ public final class OzoneManagerRatisServer {
    * @throws ServiceException thrown when problems with leader or processing Raft reply
    */
   public OMResponse submitWriteRequest(
-          OMRequest omRequest, ClientId clientId, long callId, String bucketName
+          OMRequest omRequest, ClientId clientId, long callId, String volumeName, String bucketName
   ) throws ServiceException {
     LOG.trace("Submit write request to Ratis Server {} - {} - {} - {}",
             omRequest.getCmdType(), clientId, callId, bucketName
     );
-    return submitRequest(omRequest, clientId, callId, ozoneManager.ratisGroupName(bucketName));
+    return submitRequest(omRequest, clientId, callId, ozoneManager.ratisGroupName(volumeName, bucketName));
   }
 
   public OMResponse submitRequest(

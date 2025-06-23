@@ -597,9 +597,10 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
       OMResponse omResponse = omClientResponse.getOMResponse();
       if (request.hasCreateBucketRequest() && ozoneManager.isMultiRaftEnabled()) {
+        String volumeName = request.getCreateBucketRequest().getBucketInfo().getVolumeName();
         String bucketName = request.getCreateBucketRequest().getBucketInfo().getBucketName();
         LOG.trace("Creating raft group while runCommand {}", bucketName);
-        ozoneManager.createRaftGroupForBucket(bucketName);
+        ozoneManager.createRaftGroupForBucket(volumeName, bucketName);
       }
       if (omLockDetails != null) {
         return omResponse.toBuilder()

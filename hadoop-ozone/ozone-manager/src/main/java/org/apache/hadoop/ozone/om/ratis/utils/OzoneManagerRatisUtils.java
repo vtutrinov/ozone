@@ -345,6 +345,7 @@ public final class OzoneManagerRatisUtils {
         volumeName, bucketName, omRequest, ozoneManager.getMetadataManager());
     if (!bucketName.isEmpty()) {
       request.setWriteReqBucketName(bucketName);
+      request.setWriteReqVolumeName(volumeName);
     }
     return request;
   }
@@ -500,13 +501,15 @@ public final class OzoneManagerRatisUtils {
     }
   }
 
-  public static void checkLeaderStatus(RaftGroupId raftGroupId, OzoneManager ozoneManager)
+  public static void checkLeaderStatus(String volumeName, String bucketName, OzoneManager ozoneManager)
       throws ServiceException {
-    LOG.trace("Check leader status for {}", raftGroupId);
+    RaftGroupId ratisGroupId = ozoneManager.ratisGroupName(volumeName, bucketName);
+
+    LOG.trace("Check leader status for {}", ratisGroupId);
     try {
-      ozoneManager.checkLeaderStatus(raftGroupId);
+      ozoneManager.checkLeaderStatus(ratisGroupId);
     } catch (OMNotLeaderException | OMLeaderNotReadyException e) {
-      LOG.error("{} For group {}", e.getMessage(), raftGroupId);
+      LOG.error("{} For group {}", e.getMessage(), ratisGroupId);
       throw new ServiceException(e);
     }
   }
@@ -523,10 +526,10 @@ public final class OzoneManagerRatisUtils {
   }
 
   public static OzoneManagerProtocolProtos.OMResponse submitWriteRequest(
-      OzoneManager om, OMRequest omRequest, ClientId clientId, long callId, String bucketName)
+      OzoneManager om, OMRequest omRequest, ClientId clientId, long callId, String volumeName, String bucketName)
       throws ServiceException {
     LOG.trace("Submit write request {}", omRequest.getCmdType());
-    return om.getOmRatisServer().submitWriteRequest(omRequest, clientId, callId, bucketName);
+    return om.getOmRatisServer().submitWriteRequest(omRequest, clientId, callId, volumeName, bucketName);
   }
 
   public static OzoneManagerProtocolProtos.OMResponse submitRequest(

@@ -217,22 +217,20 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
       try {
         omClientRequest = createClientRequest(request, ozoneManager);
         // check retry cache
+        String volumeName = omClientRequest.getWriteReqVolumeName();
         String bucketName = omClientRequest.getWriteReqBucketName();
 
         LOG.trace("Continue internal processing request {}, bucket {}", request.getCmdType(), bucketName);
-
-        RaftGroupId raftGroupId = ozoneManager.ratisGroupName(bucketName);
         // To validate credentials we have already verified leader status.
         // This will skip of checking leader status again if request has S3Auth.
         if (!s3Auth) {
-          OzoneManagerRatisUtils.checkLeaderStatus(raftGroupId, ozoneManager);
+          OzoneManagerRatisUtils.checkLeaderStatus(volumeName, bucketName, ozoneManager);
         }
         // TODO: Note: Due to HDDS-6055, createClientRequest() could now
         //  return null, which triggered the findbugs warning.
         //  Added the assertion.
         assert (omClientRequest != null);
-        OMClientRequest finalOmClientRequest = omClientRequest;
-        requestToSubmit = preExecute(finalOmClientRequest);
+        requestToSubmit = preExecute(omClientRequest);
       } catch (IOException ex) {
         if (omClientRequest != null) {
           omClientRequest.handleRequestFailure(ozoneManager);
@@ -244,6 +242,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
       if (omClientRequest.getWriteReqBucketName() != null && ozoneManager.isMultiRaftEnabled()) {
         response = omRatisServer.submitBucketWriteRequest(
                 requestToSubmit,
+                omClientRequest.getWriteReqVolumeName(),
                 omClientRequest.getWriteReqBucketName()
         );
       } else {

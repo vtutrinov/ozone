@@ -93,9 +93,10 @@ public class OMPrepareRequest extends OMClientRequest {
       response = new OMPrepareResponse(responseBuilder.build(),
           transactionLogIndex);
 
+      String volumeName = OzoneMultiRaftUtils.getVolumeName(omRequest);
       String bucketName = OzoneMultiRaftUtils.getBucketName(omRequest);
 
-      RaftGroupId raftGroupId = ozoneManager.ratisGroupName(bucketName);
+      RaftGroupId raftGroupId = ozoneManager.ratisGroupName(volumeName, bucketName);
       OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
 
       // Add response to double buffer before clearing logs.
