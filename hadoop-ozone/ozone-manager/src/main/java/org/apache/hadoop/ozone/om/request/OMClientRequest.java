@@ -80,6 +80,7 @@ public abstract class OMClientRequest implements RequestAuditor {
   private final OMAuditLogger.Builder auditBuilder = OMAuditLogger.newBuilder();
   // SDP (multi-raft): bucket of a write request, used to route it to the bucket raft group
   private String writeBucketName;
+  private String writeVolumeName;
 
   public OMAuditLogger.Builder getAuditBuilder() {
     return auditBuilder;
@@ -582,6 +583,14 @@ public abstract class OMClientRequest implements RequestAuditor {
 
   public String getWriteReqBucketName() {
     return writeBucketName;
+  }
+
+  public String getWriteReqVolumeName() {
+    return writeVolumeName;
+  }
+
+  public void setWriteReqVolumeName(String volumeName) {
+    this.writeVolumeName = volumeName;
   }
 
   public void setWriteReqBucketName(String bucketName) {

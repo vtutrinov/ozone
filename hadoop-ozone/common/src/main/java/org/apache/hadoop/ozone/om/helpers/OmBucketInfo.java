@@ -22,7 +22,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
+import org.apache.hadoop.hdds.HddsUtils;
 import org.apache.hadoop.hdds.client.DefaultReplicationConfig;
 import org.apache.hadoop.hdds.protocol.StorageType;
 import org.apache.hadoop.hdds.utils.db.Codec;
@@ -113,6 +115,9 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
    */
   private final String compressionType;
 
+  // SDP multi-raft: raft group the bucket is assigned to
+  private final UUID raftGroup;
+
   private OmBucketInfo(Builder b) {
     super(b);
     this.volumeName = b.volumeName;
@@ -134,6 +139,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     this.bucketLayout = b.bucketLayout;
     this.owner = b.owner;
     this.compressionType = b.compressionType;
+    this.raftGroup = b.raftGroup;
     this.defaultReplicationConfig = b.defaultReplicationConfig;
   }
 
@@ -319,6 +325,10 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     return compressionType;
   }
 
+  public UUID getRaftGroup() {
+    return raftGroup;
+  }
+
   /**
    * Returns new builder class that builds a OmBucketInfo.
    *
@@ -396,7 +406,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
         .setBucketLayout(bucketLayout)
         .setOwner(owner)
         .setDefaultReplicationConfig(defaultReplicationConfig)
-        .setCompressionType(compressionType);
+        .setCompressionType(compressionType)
+        .setRaftGroup(raftGroup);
   }
 
   /**
@@ -420,6 +431,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     private BucketLayout bucketLayout = BucketLayout.DEFAULT;
     private String owner;
     private String compressionType;
+    private UUID raftGroup;
     private DefaultReplicationConfig defaultReplicationConfig;
     private long snapshotUsedBytes;
     private long snapshotUsedNamespace;
@@ -568,6 +580,11 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
       return this;
     }
 
+    public Builder setRaftGroup(UUID group) {
+      this.raftGroup = group;
+      return this;
+    }
+
     public Builder setDefaultReplicationConfig(
         DefaultReplicationConfig defaultReplConfig) {
       this.defaultReplicationConfig = defaultReplConfig;
@@ -630,6 +647,9 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     }
     if (compressionType != null) {
       bib.setCompressionType(compressionType);
+    }
+    if (raftGroup != null) {
+      bib.setRaftGroup(HddsUtils.toProtobuf(raftGroup));
     }
     return bib.build();
   }
@@ -702,6 +722,9 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     }
     if (bucketInfo.hasCompressionType()) {
       obib.setCompressionType(bucketInfo.getCompressionType());
+    }
+    if (bucketInfo.hasRaftGroup()) {
+      obib.setRaftGroup(HddsUtils.fromProtobuf(bucketInfo.getRaftGroup()));
     }
     return obib;
   }
@@ -776,7 +799,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
         Objects.equals(bekInfo, that.bekInfo) &&
         Objects.equals(owner, that.owner) &&
         Objects.equals(defaultReplicationConfig, that.defaultReplicationConfig) &&
-        Objects.equals(compressionType, that.compressionType);
+        Objects.equals(compressionType, that.compressionType) &&
+        Objects.equals(raftGroup, that.raftGroup);
   }
 
   @Override
@@ -809,6 +833,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
         ", owner=" + owner +
         ", defaultReplicationConfig=" + defaultReplicationConfig +
         ", compressionType=" + compressionType +
+        ", raftGroup=" + raftGroup +
         '}';
   }
 }

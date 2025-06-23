@@ -29,6 +29,7 @@ import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMResponse;
+import org.apache.hadoop.ozone.util.OzoneMultiRaftUtils;
 import org.apache.ratis.protocol.RaftGroupId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,31 +63,39 @@ public class OMExecutionFlow {
 
   /**
    * SDP (multi-raft): write request handling when bucket raft groups are enabled.
-   * The raft group of a request is known only after the client request is created:
-   * bucket write requests go to the raft group of the bucket, others to the OM raft group.
+   * Bucket write requests go to the raft group of the bucket, others to the OM raft group;
+   * leader status and retry cache are those of the target raft group.
    *
    * @param checkLeader whether to check that this OM is the leader of the target raft group
    */
   public OMResponse submitMultiRaftWrite(OMRequest request, boolean checkLeader) throws ServiceException {
     final OzoneManagerRatisServer ratisServer = ozoneManager.getOmRatisServer();
+    // The target raft group is derived from the raw request, so that the leader status is checked before the
+    // request is created: creating it reads the bucket from the local DB, which may lag on a follower.
+    final String rawBucketName = OzoneMultiRaftUtils.getBucketName(request);
+    final String bucketName = rawBucketName == null || rawBucketName.isEmpty() ? null : rawBucketName;
+    final String volumeName = bucketName == null ? null : OzoneMultiRaftUtils.getVolumeName(request);
+    final RaftGroupId raftGroupId = bucketName != null
+        ? ozoneManager.ratisGroupName(volumeName, bucketName) : ratisServer.getRaftGroupId();
+    LOG.trace("Continue internal processing request {}, bucket {}, group {}",
+        request.getCmdType(), bucketName, raftGroupId);
+    if (checkLeader) {
+      if (bucketName != null) {
+        OzoneManagerRatisUtils.checkLeaderStatus(volumeName, bucketName, ozoneManager);
+      } else {
+        OzoneManagerRatisUtils.checkLeaderStatus(ozoneManager);
+      }
+    }
+    final OMResponse cached = ratisServer.checkRetryCache(raftGroupId);
+    if (cached != null) {
+      return cached;
+    }
+
     OMClientRequest omClientRequest = null;
     final OMRequest requestToSubmit;
-    final String bucketName;
     try {
       omClientRequest = OzoneManagerRatisUtils.createClientRequest(request, ozoneManager);
       assert (omClientRequest != null);
-      bucketName = omClientRequest.getWriteReqBucketName();
-      final RaftGroupId raftGroupId = bucketName != null
-          ? ozoneManager.ratisGroupName(bucketName) : ratisServer.getRaftGroupId();
-      LOG.trace("Continue internal processing request {}, bucket {}, group {}",
-          request.getCmdType(), bucketName, raftGroupId);
-      if (checkLeader) {
-        OzoneManagerRatisUtils.checkLeaderStatus(raftGroupId, ozoneManager);
-      }
-      final OMResponse cached = ratisServer.checkRetryCache(raftGroupId);
-      if (cached != null) {
-        return cached;
-      }
       final OMClientRequest finalOmClientRequest = omClientRequest;
       requestToSubmit = captureLatencyNs(perfMetrics.getPreExecuteLatencyNs(),
           () -> finalOmClientRequest.preExecute(ozoneManager));
@@ -99,7 +108,7 @@ public class OMExecutionFlow {
     }
 
     final OMResponse response = bucketName != null
-        ? ratisServer.submitBucketWriteRequest(requestToSubmit, bucketName)
+        ? ratisServer.submitBucketWriteRequest(requestToSubmit, volumeName, bucketName)
         : ratisServer.submitRequest(requestToSubmit, true);
     if (!response.getSuccess()) {
       omClientRequest.handleRequestFailure(ozoneManager);

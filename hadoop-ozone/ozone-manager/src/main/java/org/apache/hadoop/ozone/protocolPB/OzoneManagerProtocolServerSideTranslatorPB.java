@@ -194,8 +194,8 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
         return submitReadRequestToOM(request);
       }
 
-      // SDP (multi-raft): the target raft group of a bucket write request is known only after the
-      // client request is created; its leader status and retry cache are checked in OMExecutionFlow.
+      // SDP (multi-raft): bucket write requests go to the raft group of the bucket;
+      // the leader status and retry cache of the target raft group are checked in OMExecutionFlow.
       if (ozoneManager.isMultiRaftEnabled()) {
         this.lastRequestToSubmit = request;
         return ozoneManager.getOmExecutionFlow().submitMultiRaftWrite(request, !s3Auth);

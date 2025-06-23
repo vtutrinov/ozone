@@ -343,7 +343,6 @@ import org.apache.hadoop.ozone.snapshot.SubmitSnapshotDiffResponse;
 import org.apache.hadoop.ozone.storage.proto.OzoneManagerStorageProtos.PersistedUserVolumeInfo;
 import org.apache.hadoop.ozone.upgrade.UpgradeFinalization.StatusAndMessages;
 import org.apache.hadoop.ozone.upgrade.UpgradeFinalizer;
-import org.apache.hadoop.ozone.util.OmRatisGroupManager;
 import org.apache.hadoop.ozone.util.OzoneNetUtils;
 import org.apache.hadoop.ozone.util.OzoneVersionInfo;
 import org.apache.hadoop.ozone.util.ShutdownHookManager;
@@ -536,7 +535,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
   // SDP (multi-raft): raft groups and state machines hosted by the OM raft server
   private final boolean isMultiRaftEnabled;
-  private final OmRatisGroupManager omRatisGroupManager;
+  private OmRatisGroupManager omRatisGroupManager;
   private BiFunction<RaftPeer, GrpcTlsConfig, RaftClient> raftClientProvider;
   private final Map<RaftGroupId, RaftGroup> omRaftGroups = new ConcurrentHashMap<>();
   private final Map<RaftGroupId, StateMachine> omStateMachines = new ConcurrentHashMap<>();
@@ -601,7 +600,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     isMultiRaftEnabled = configuration.getBoolean(
         OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
         OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT);
-    omRatisGroupManager = new OmRatisGroupManager(configuration, isMultiRaftEnabled, getOMServiceId());
     loginOMUserIfSecurityEnabled(conf);
     setInstanceVariablesFromConf();
 
@@ -795,8 +793,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    * SDP (multi-raft): create the raft group of the bucket on this OM and on its peers.
    */
   @SuppressWarnings("checkstyle:EmptyBlock")
-  public void createRaftGroupForBucket(String bucketName) {
-    InitBucketResult initBucketResult = initBucketRaftGroupAndStateMachine(bucketName);
+  public void createRaftGroupForBucket(String volumeName, String bucketName) {
+    InitBucketResult initBucketResult = initBucketRaftGroupAndStateMachine(volumeName, bucketName);
     if (!initBucketResult.getResult()) {
       LOG.trace("Skipping creating raft group for bucket {}", bucketName);
       return;
@@ -829,9 +827,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
   }
 
-  public InitBucketResult initBucketRaftGroupAndStateMachine(String bucketName) {
+  public InitBucketResult initBucketRaftGroupAndStateMachine(String volumeName, String bucketName) {
     RaftGroup bucketRaftGroup;
-    RaftGroupId raftGroupId = ratisGroupName(bucketName);
+    RaftGroupId raftGroupId = ratisGroupName(volumeName, bucketName);
     if (omRaftGroups.containsKey(raftGroupId)) {
       return new InitBucketResult(false, omRaftGroups.get(raftGroupId));
     }
@@ -1092,6 +1090,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     volumeManager = new VolumeManagerImpl(metadataManager);
 
     bucketManager = new BucketManagerImpl(this, metadataManager);
+    omRatisGroupManager = new OmRatisGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
 
     Class<? extends S3SecretStoreProvider> storeProviderClass =
         configuration.getClass(
@@ -2567,13 +2566,17 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return isMultiRaftEnabled;
   }
 
-  public RaftGroupId ratisGroupName() {
-    return ratisGroupName(null);
+  public RaftGroupId omRatisGroupName() {
+    return ratisGroupName(null, null);
+  }
+
+  public OmRatisGroupManager getOmRatisGroupManager() {
+    return omRatisGroupManager;
   }
 
   /** @return the raft group of the bucket, or the OM raft group if multi-raft is off or no bucket is given. */
-  public RaftGroupId ratisGroupName(String bucketName) {
-    return omRatisGroupManager.ratisGroupName(bucketName);
+  public RaftGroupId ratisGroupName(String volumeName, String bucketName) {
+    return omRatisGroupManager.ratisGroupName(volumeName, bucketName);
   }
 
   /** SDP (multi-raft): applied TransactionInfo of a bucket raft group. */

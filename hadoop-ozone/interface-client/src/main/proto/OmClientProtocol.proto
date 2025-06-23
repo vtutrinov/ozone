@@ -800,8 +800,10 @@ message BucketInfo {
     optional uint64 snapshotUsedBytes = 21;
     optional uint64 snapshotUsedNamespace = 22;
 
-    // SDP extension (SDP numbers are kept in the 1000+ range)
+    // SDP extensions (SDP numbers are kept in the 1000+ range)
     optional string compressionType = 1001;
+    // SDP multi-raft: raft group of the bucket (was 22 on SDP 1.4)
+    optional hadoop.hdds.UUID raftGroup = 1002;
 }
 
 enum BucketLayoutProto {
