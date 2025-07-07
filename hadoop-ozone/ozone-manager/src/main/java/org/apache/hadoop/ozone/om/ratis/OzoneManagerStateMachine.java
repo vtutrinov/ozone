@@ -598,7 +598,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
    */
   private OMResponse runCommand(OMRequest request, long trxLogIndex) {
     try {
-      LOG.error("Run command {} - {}", request.getCmdType(), trxLogIndex);
+      LOG.trace("Run command {} - {}", request.getCmdType(), trxLogIndex);
       OMClientResponse omClientResponse =
           handler.handleWriteRequest(request, trxLogIndex);
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
