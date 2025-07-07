@@ -60,12 +60,15 @@ public class S3MultipartUploadCommitPartResponse extends OmKeyResponse {
   private OmKeyInfo openPartKeyInfoToBeDeleted;
   private boolean isRatisEnabled;
   private OmBucketInfo omBucketInfo;
+  private boolean isMultiRaftEnabled;
+  private long multiRaftTerm;
 
   /**
    * Regular response.
    * 1. Update MultipartKey in MultipartInfoTable with new PartKeyInfo
    * 2. Delete openKey from OpenKeyTable
    * 3. If old PartKeyInfo exists, put it in DeletedKeyTable
+   *
    * @param omResponse
    * @param multipartKey
    * @param openKey
@@ -74,15 +77,19 @@ public class S3MultipartUploadCommitPartResponse extends OmKeyResponse {
    * @param openPartKeyInfoToBeDeleted
    * @param isRatisEnabled
    * @param omBucketInfo
+   * @param multiRaftEnabled
+   * @param currentMultiRaftTerm
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   public S3MultipartUploadCommitPartResponse(@Nonnull OMResponse omResponse,
-      String multipartKey, String openKey,
-      @Nullable OmMultipartKeyInfo omMultipartKeyInfo,
-      @Nullable OzoneManagerProtocolProtos.PartKeyInfo oldPartKeyInfo,
-      @Nullable OmKeyInfo openPartKeyInfoToBeDeleted,
-      boolean isRatisEnabled, @Nonnull OmBucketInfo omBucketInfo,
-      @Nonnull BucketLayout bucketLayout) {
+                                             String multipartKey, String openKey,
+                                             @Nullable OmMultipartKeyInfo omMultipartKeyInfo,
+                                             @Nullable OzoneManagerProtocolProtos.PartKeyInfo oldPartKeyInfo,
+                                             @Nullable OmKeyInfo openPartKeyInfoToBeDeleted,
+                                             boolean isRatisEnabled, @Nonnull OmBucketInfo omBucketInfo,
+                                             @Nonnull BucketLayout bucketLayout,
+                                             boolean multiRaftEnabled,
+                                             long currentMultiRaftTerm) {
     super(omResponse, bucketLayout);
     this.multipartKey = multipartKey;
     this.openKey = openKey;
@@ -91,6 +98,8 @@ public class S3MultipartUploadCommitPartResponse extends OmKeyResponse {
     this.openPartKeyInfoToBeDeleted = openPartKeyInfoToBeDeleted;
     this.isRatisEnabled = isRatisEnabled;
     this.omBucketInfo = omBucketInfo;
+    this.isMultiRaftEnabled = multiRaftEnabled;
+    this.multiRaftTerm = currentMultiRaftTerm;
   }
 
   @Override
@@ -104,7 +113,7 @@ public class S3MultipartUploadCommitPartResponse extends OmKeyResponse {
       RepeatedOmKeyInfo repeatedOmKeyInfo =
           OmUtils.prepareKeyForDelete(openPartKeyInfoToBeDeleted,
               openPartKeyInfoToBeDeleted.getUpdateID(),
-              isRatisEnabled);
+              isRatisEnabled, isMultiRaftEnabled, multiRaftTerm);
       // multi-part key format is volumeName/bucketName/keyName/uploadId
       String deleteKey = omMetadataManager.getOzoneDeletePathKey(
           openPartKeyInfoToBeDeleted.getObjectID(), multipartKey);
@@ -137,7 +146,7 @@ public class S3MultipartUploadCommitPartResponse extends OmKeyResponse {
 
       RepeatedOmKeyInfo repeatedOmKeyInfo = OmUtils.prepareKeyForDelete(
           partKeyToBeDeleted,
-          omMultipartKeyInfo.getUpdateID(), isRatisEnabled);
+          omMultipartKeyInfo.getUpdateID(), isRatisEnabled, isMultiRaftEnabled, multiRaftTerm);
       // multi-part key format is volumeName/bucketName/keyName/uploadId
       String deleteKey = omMetadataManager.getOzoneDeletePathKey(
           partKeyToBeDeleted.getObjectID(), multipartKey);

@@ -473,7 +473,7 @@ public final class OmUtils {
    * @return {@link RepeatedOmKeyInfo}
    */
   public static RepeatedOmKeyInfo prepareKeyForDelete(OmKeyInfo keyInfo,
-      long trxnLogIndex, boolean isRatisEnabled) {
+      long trxnLogIndex, boolean isRatisEnabled, boolean multiRaftEnabled, long currentMultiRaftTerm) {
     // If this key is in a GDPR enforced bucket, then before moving
     // KeyInfo to deletedTable, remove the GDPR related metadata and
     // FileEncryptionInfo from KeyInfo.
@@ -487,7 +487,7 @@ public final class OmUtils {
     }
 
     // Set the updateID
-    keyInfo.setUpdateID(trxnLogIndex, isRatisEnabled);
+    keyInfo.setUpdateID(trxnLogIndex, isRatisEnabled, multiRaftEnabled, currentMultiRaftTerm);
 
     //The key doesn't exist in deletedTable, so create a new instance.
     return new RepeatedOmKeyInfo(keyInfo);

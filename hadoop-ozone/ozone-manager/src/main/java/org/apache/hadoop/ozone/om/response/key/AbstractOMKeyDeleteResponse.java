@@ -44,19 +44,27 @@ import static org.apache.hadoop.ozone.om.OmMetadataManagerImpl.DELETED_TABLE;
 public abstract class AbstractOMKeyDeleteResponse extends OmKeyResponse {
 
   private boolean isRatisEnabled;
+  private boolean isMultiRaftEnabled;
+  private long multiRaftTerm;
 
   public AbstractOMKeyDeleteResponse(
-      @Nonnull OMResponse omResponse, boolean isRatisEnabled) {
+      @Nonnull OMResponse omResponse, boolean isRatisEnabled, boolean multiRaftEnabled,
+      long currentMultiRaftTerm) {
 
     super(omResponse);
     this.isRatisEnabled = isRatisEnabled;
+    this.isMultiRaftEnabled = multiRaftEnabled;
+    this.multiRaftTerm = currentMultiRaftTerm;
   }
 
   public AbstractOMKeyDeleteResponse(@Nonnull OMResponse omResponse,
-      boolean isRatisEnabled, BucketLayout bucketLayout) {
+      boolean isRatisEnabled, BucketLayout bucketLayout, boolean multiRaftEnabled,
+                                     long currentMultiRaftTerm) {
 
     super(omResponse, bucketLayout);
     this.isRatisEnabled = isRatisEnabled;
+    this.isMultiRaftEnabled = multiRaftEnabled;
+    this.multiRaftTerm = currentMultiRaftTerm;
   }
 
   /**
@@ -100,7 +108,7 @@ public abstract class AbstractOMKeyDeleteResponse extends OmKeyResponse {
       // instance in deletedTable.
       RepeatedOmKeyInfo repeatedOmKeyInfo = OmUtils.prepareKeyForDelete(
           omKeyInfo, omKeyInfo.getUpdateID(),
-          isRatisEnabled);
+          isRatisEnabled, isMultiRaftEnabled, multiRaftTerm);
       String delKeyName = omMetadataManager.getOzoneDeletePathKey(
           omKeyInfo.getObjectID(), keyName);
       omMetadataManager.getDeletedTable().putWithBatch(
@@ -143,7 +151,7 @@ public abstract class AbstractOMKeyDeleteResponse extends OmKeyResponse {
       // instance in deletedTable.
       RepeatedOmKeyInfo repeatedOmKeyInfo = OmUtils.prepareKeyForDelete(
           omKeyInfo, omKeyInfo.getUpdateID(),
-          isRatisEnabled);
+          isRatisEnabled, isMultiRaftEnabled, multiRaftTerm);
       omMetadataManager.getDeletedTable().putWithBatch(
           batchOperation, deleteKeyName, repeatedOmKeyInfo);
     }

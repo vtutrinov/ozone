@@ -317,7 +317,8 @@ public class S3MultipartUploadCompleteRequest extends OMKeyRequest {
         boolean isNamespaceUpdate = false;
         if (keyToDelete != null && !omBucketInfo.getIsVersionEnabled()) {
           RepeatedOmKeyInfo oldKeyVersionsToDelete = getOldVersionsToCleanUp(
-              keyToDelete, trxnLogIndex, ozoneManager.isRatisEnabled());
+              keyToDelete, trxnLogIndex, ozoneManager.isRatisEnabled(),
+              ozoneManager.isMultiRaftEnabled(), ozoneManager.getCurrentMultiRaftTerm());
           allKeyInfoToRemove.addAll(oldKeyVersionsToDelete.getOmKeyInfoList());
           usedBytesDiff -= keyToDelete.getReplicatedSize();
         } else {
@@ -518,7 +519,12 @@ public class S3MultipartUploadCompleteRequest extends OMKeyRequest {
       omKeyInfo.getMetadata().put(OzoneConsts.ETAG,
           multipartUploadedKeyHash(partKeyInfoMap));
     }
-    omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled());
+    omKeyInfo.setUpdateID(
+        trxnLogIndex,
+        ozoneManager.isRatisEnabled(),
+        ozoneManager.isMultiRaftEnabled(),
+        ozoneManager.getCurrentMultiRaftTerm()
+    );
     return omKeyInfo;
   }
 

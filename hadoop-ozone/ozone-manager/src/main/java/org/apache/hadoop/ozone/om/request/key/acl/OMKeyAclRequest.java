@@ -108,7 +108,8 @@ public abstract class OMKeyAclRequest extends OMClientRequest {
       }
 
       operationResult = apply(omKeyInfo, trxnLogIndex);
-      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled());
+      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(), ozoneManager.isMultiRaftEnabled(),
+              ozoneManager.getCurrentMultiRaftTerm());
 
       // Update the modification time when updating ACLs of Key.
       long modificationTime = omKeyInfo.getModificationTime();

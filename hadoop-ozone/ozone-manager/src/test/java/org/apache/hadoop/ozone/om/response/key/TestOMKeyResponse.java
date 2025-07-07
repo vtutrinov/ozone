@@ -26,6 +26,7 @@ import java.util.UUID;
 import org.apache.hadoop.hdds.protocol.StorageType;
 import org.apache.hadoop.hdds.utils.db.cache.CacheKey;
 import org.apache.hadoop.hdds.utils.db.cache.CacheValue;
+import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
 import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
@@ -66,6 +67,7 @@ public class TestOMKeyResponse {
   protected Random random;
   protected long txnLogId = 100000L;
   protected RepeatedOmKeyInfo keysToDelete;
+  protected OzoneManager ozoneManager;
 
   @BeforeEach
   public void setup() throws Exception {
@@ -73,6 +75,7 @@ public class TestOMKeyResponse {
     ozoneConfiguration.set(OMConfigKeys.OZONE_OM_DB_DIRS,
         folder.toAbsolutePath().toString());
     omMetadataManager = new OmMetadataManagerImpl(ozoneConfiguration, null);
+    ozoneManager = OzoneManager.createOm(ozoneConfiguration);
     batchOperation = omMetadataManager.getStore().initBatchOperation();
 
     volumeName = UUID.randomUUID().toString();

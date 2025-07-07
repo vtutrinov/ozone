@@ -116,6 +116,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
 
   public OzoneManagerStateMachine(OzoneManagerRatisServer ratisServer,
       RaftGroupId raftGroupId, boolean isTracingEnabled) throws IOException {
+    this.raftGroupId = raftGroupId;
     this.omRatisServer = ratisServer;
     this.raftGroupId = raftGroupId;
     this.isTracingEnabled = isTracingEnabled;

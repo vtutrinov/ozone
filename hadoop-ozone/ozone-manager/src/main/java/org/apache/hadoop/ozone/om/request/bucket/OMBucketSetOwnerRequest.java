@@ -154,8 +154,12 @@ public class OMBucketSetOwnerRequest extends OMClientRequest {
       omBucketInfo.setModificationTime(
           setBucketPropertyRequest.getModificationTime());
       // Set the updateID to current transaction log index
-      omBucketInfo.setUpdateID(transactionLogIndex,
-          ozoneManager.isRatisEnabled());
+      omBucketInfo.setUpdateID(
+          transactionLogIndex,
+          ozoneManager.isRatisEnabled(),
+          ozoneManager.isMultiRaftEnabled(),
+          ozoneManager.getCurrentMultiRaftTerm()
+      );
 
       // Update table cache.
       omMetadataManager.getBucketTable().addCacheEntry(

@@ -37,6 +37,8 @@ public class WithObjectID extends WithMetadata {
   @SuppressWarnings("visibilitymodifier")
   protected long updateID;
 
+  protected long multiraftTerm;
+
   /**
    * Returns objectID.
    * @return long
@@ -76,7 +78,9 @@ public class WithObjectID extends WithMetadata {
    * @param updateId  long
    * @param isRatisEnabled boolean
    */
-  public void setUpdateID(long updateId, boolean isRatisEnabled) {
+  public void setUpdateID(
+      long updateId, boolean isRatisEnabled, boolean isMultiraftEnabled, long currentMultiraftTerm
+  ) {
 
     // Because in non-HA, we have multiple rpc handler threads and
     // transactionID is generated in OzoneManagerServerSideTranslatorPB.
@@ -102,12 +106,17 @@ public class WithObjectID extends WithMetadata {
 
     // Main reason, in non-HA transaction Index after restart starts from 0.
     // And also because of this same reason we don't do replay checks in non-HA.
-
-    if (isRatisEnabled && updateId < this.updateID) {
+    if ((!isMultiraftEnabled || currentMultiraftTerm == multiraftTerm)
+        && isRatisEnabled && updateId < this.updateID
+    ) {
       throw new IllegalArgumentException(String.format(
           "Trying to set updateID to %d which is not greater than the " +
-              "current value of %d for %s", updateId, this.updateID,
+          "current value of %d for %s", updateId, this.updateID,
           getObjectInfo()));
+    }
+
+    if (isMultiraftEnabled && currentMultiraftTerm != multiraftTerm) {
+      this.multiraftTerm = currentMultiraftTerm;
     }
 
     this.updateID = updateId;

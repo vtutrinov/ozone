@@ -148,6 +148,8 @@ enum Type {
   GetSnapshotInfo = 130;
   RenameSnapshot = 131;
   GetContentSummary = 143;
+  CreateBucketRaftGroups = 144;
+  RemoveBucketRaftGroups = 145;
 }
 
 enum SafeMode {
@@ -286,6 +288,9 @@ message OMRequest {
   optional RenameSnapshotRequest            RenameSnapshotRequest          = 129;
 
   optional GetContentSummaryRequest         getContentSummaryRequest       = 143;
+
+  optional CreateBucketRaftGroupsRequest    CreateBucketRaftGroupsRequest         = 144;
+  optional RemoveBucketRaftGroupsRequest    RemoveBucketRaftGroupsRequest         = 145;
 }
 
 message OMResponse {
@@ -410,6 +415,8 @@ message OMResponse {
   optional OMLockDetailsProto                omLockDetails                 = 131;
   optional RenameSnapshotResponse            RenameSnapshotResponse        = 132;
   optional GetContentSummaryResponse         getContentSummaryResponse     = 143;
+  optional CreateBucketRaftGroupsResponse    CreateBucketRaftGroupsResponse = 144;
+  optional RemoveBucketRaftGroupsResponse    RemoveBucketRaftGroupsResponse = 145;
 }
 
 enum Status {
@@ -2087,6 +2094,18 @@ message GetS3VolumeContextResponse {
   optional string userPrincipal = 2;
 }
 
+message CreateBucketRaftGroupsRequest {
+  repeated hadoop.hdds.UUID groupIds = 1;
+}
+
+message CreateBucketRaftGroupsResponse {
+}
+
+message RemoveBucketRaftGroupsRequest {
+  repeated hadoop.hdds.UUID groupIds = 1;
+}
+message RemoveBucketRaftGroupsResponse {
+}
 /**
   This will be used internally by OM to replicate S3 Secret across quorum of
   OM's.

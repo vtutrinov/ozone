@@ -54,18 +54,26 @@ import static org.apache.hadoop.ozone.om.OmMetadataManagerImpl.OPEN_KEY_TABLE;
 public abstract class AbstractS3MultipartAbortResponse extends OmKeyResponse {
 
   private boolean isRatisEnabled;
+  private boolean isMultiRaftEnabled;
+  private long multiRaftTerm;
 
   public AbstractS3MultipartAbortResponse(
-      @Nonnull OMResponse omResponse, boolean isRatisEnabled) {
+      @Nonnull OMResponse omResponse, boolean isRatisEnabled, boolean multiRaftEnabled,
+      long currentMultiRaftTerm) {
     super(omResponse);
     this.isRatisEnabled = isRatisEnabled;
+    this.isMultiRaftEnabled = multiRaftEnabled;
+    this.multiRaftTerm = currentMultiRaftTerm;
   }
 
   public AbstractS3MultipartAbortResponse(
       @Nonnull OMResponse omResponse, boolean isRatisEnabled,
-      BucketLayout bucketLayout) {
+      BucketLayout bucketLayout, boolean multiRaftEnabled,
+      long currentMultiRaftTerm) {
     super(omResponse, bucketLayout);
     this.isRatisEnabled =  isRatisEnabled;
+    this.isMultiRaftEnabled = multiRaftEnabled;
+    this.multiRaftTerm = currentMultiRaftTerm;
   }
 
   /**
@@ -113,7 +121,7 @@ public abstract class AbstractS3MultipartAbortResponse extends OmKeyResponse {
 
         RepeatedOmKeyInfo repeatedOmKeyInfo = OmUtils.prepareKeyForDelete(
             currentKeyPartInfo, omMultipartKeyInfo.getUpdateID(),
-            isRatisEnabled);
+            isRatisEnabled, isMultiRaftEnabled, multiRaftTerm);
 
         // multi-part key format is volumeName/bucketName/keyName/uploadId
         String deleteKey = omMetadataManager.getOzoneDeletePathKey(

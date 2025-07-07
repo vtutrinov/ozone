@@ -193,7 +193,12 @@ public class OMKeysRenameRequest extends OMKeyRequest {
           continue;
         }
 
-        fromKeyValue.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled());
+        fromKeyValue.setUpdateID(
+            trxnLogIndex,
+            ozoneManager.isRatisEnabled(),
+            ozoneManager.isMultiRaftEnabled(),
+            ozoneManager.getCurrentMultiRaftTerm()
+        );
 
         fromKeyValue.setKeyName(toKeyName);
 

@@ -62,17 +62,22 @@ public class OMDirectoriesPurgeResponseWithFSO extends OmKeyResponse {
   private boolean isRatisEnabled;
   private Map<Pair<String, String>, OmBucketInfo> volBucketInfoMap;
   private SnapshotInfo fromSnapshotInfo;
+  private boolean isMultiRaftEnabled;
+  private long multiRaftTerm;
 
   public OMDirectoriesPurgeResponseWithFSO(@Nonnull OMResponse omResponse,
       @Nonnull List<OzoneManagerProtocolProtos.PurgePathRequest> paths,
       boolean isRatisEnabled, @Nonnull BucketLayout bucketLayout,
       Map<Pair<String, String>, OmBucketInfo> volBucketInfoMap,
-      SnapshotInfo fromSnapshotInfo) {
+      SnapshotInfo fromSnapshotInfo, boolean multiRaftEnabled,
+                                           long currentMultiRaftTerm) {
     super(omResponse, bucketLayout);
     this.paths = paths;
     this.isRatisEnabled = isRatisEnabled;
     this.volBucketInfoMap = volBucketInfoMap;
     this.fromSnapshotInfo = fromSnapshotInfo;
+    this.isMultiRaftEnabled = multiRaftEnabled;
+    this.multiRaftTerm = currentMultiRaftTerm;
   }
 
   @Override
@@ -153,7 +158,7 @@ public class OMDirectoriesPurgeResponseWithFSO extends OmKeyResponse {
         }
 
         RepeatedOmKeyInfo repeatedOmKeyInfo = OmUtils.prepareKeyForDelete(
-            keyInfo, keyInfo.getUpdateID(), isRatisEnabled);
+            keyInfo, keyInfo.getUpdateID(), isRatisEnabled, isMultiRaftEnabled, multiRaftTerm);
 
         String deletedKey = omMetadataManager
             .getOzoneKey(keyInfo.getVolumeName(), keyInfo.getBucketName(),

@@ -264,7 +264,7 @@ public class OMKeysDeleteRequest extends OMKeyRequest {
                 .setUnDeletedKeys(unDeletedKeys))
         .setStatus(deleteStatus ? OK : PARTIAL_DELETE).setSuccess(deleteStatus)
         .build(), omKeyInfoList, ozoneManager.isRatisEnabled(),
-        omBucketInfo.copyObject());
+        omBucketInfo.copyObject(), ozoneManager.isMultiRaftEnabled(), ozoneManager.getCurrentMultiRaftTerm());
     return omClientResponse;
   }
 
@@ -279,7 +279,8 @@ public class OMKeysDeleteRequest extends OMKeyRequest {
                   omKeyInfo.getKeyName())),
           CacheValue.get(trxnLogIndex));
 
-      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled());
+      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(),ozoneManager.isMultiRaftEnabled(),
+              ozoneManager.getCurrentMultiRaftTerm());
       quotaReleased += sumBlockLengths(omKeyInfo);
     }
     return quotaReleased;

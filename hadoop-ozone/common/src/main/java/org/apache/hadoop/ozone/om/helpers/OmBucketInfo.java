@@ -694,6 +694,9 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, Bucke
     if (raftGroup != null) {
       bib.setRaftGroup(HddsUtils.toProtobuf(raftGroup));
     }
+    if (raftGroup != null) {
+      bib.setRaftGroup(HddsUtils.toProtobuf(raftGroup));
+    }
     return bib.build();
   }
 

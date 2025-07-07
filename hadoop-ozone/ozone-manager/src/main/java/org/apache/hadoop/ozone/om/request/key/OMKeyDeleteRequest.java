@@ -143,7 +143,8 @@ public class OMKeyDeleteRequest extends OMKeyRequest {
       }
 
       // Set the UpdateID to current transactionLogIndex
-      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled());
+      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(),ozoneManager.isMultiRaftEnabled(),
+              ozoneManager.getCurrentMultiRaftTerm());
 
       // Update table cache.
       omMetadataManager.getKeyTable(getBucketLayout()).addCacheEntry(
@@ -166,7 +167,7 @@ public class OMKeyDeleteRequest extends OMKeyRequest {
       omClientResponse = new OMKeyDeleteResponse(
           omResponse.setDeleteKeyResponse(DeleteKeyResponse.newBuilder())
               .build(), omKeyInfo, ozoneManager.isRatisEnabled(),
-          omBucketInfo.copyObject());
+          omBucketInfo.copyObject(), ozoneManager.isMultiRaftEnabled(), ozoneManager.getCurrentMultiRaftTerm());
 
       result = Result.SUCCESS;
     } catch (IOException | InvalidPathException ex) {

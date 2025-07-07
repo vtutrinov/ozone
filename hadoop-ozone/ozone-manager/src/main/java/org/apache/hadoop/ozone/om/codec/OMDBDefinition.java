@@ -191,6 +191,15 @@ public class OMDBDefinition extends DBDefinition.WithMap {
           String.class,
           StringCodec.get());
 
+  public static final DBColumnFamilyDefinition<String, Long>
+          MULTI_RAFT_TERM_TABLE =
+          new DBColumnFamilyDefinition<>(
+                  OmMetadataManagerImpl.MULTI_RAFT_TERM_TABLE,
+                  String.class,
+                  StringCodec.get(),
+                  Long.class,
+                  LongCodec.get());
+
   // Tables for multi-tenancy
 
   public static final DBColumnFamilyDefinition<String, OmDBAccessIdInfo>
@@ -282,7 +291,8 @@ public class OMDBDefinition extends DBDefinition.WithMap {
           TENANT_STATE_TABLE,
           TRANSACTION_INFO_TABLE,
           USER_TABLE,
-          VOLUME_TABLE);
+          VOLUME_TABLE,
+          MULTI_RAFT_TERM_TABLE);
 
   public OMDBDefinition() {
     super(COLUMN_FAMILIES);

@@ -181,7 +181,8 @@ public class OMKeyCommitRequestWithFSO extends OMKeyCommitRequest {
           omKeyInfo.updateLocationInfoList(locationInfoList, false);
 
       // Set the UpdateID to current transactionLogIndex
-      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled());
+      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(),ozoneManager.isMultiRaftEnabled(),
+              ozoneManager.getCurrentMultiRaftTerm());
 
       // If bucket versioning is turned on during the update, between key
       // creation and key commit, old versions will be just overwritten and
@@ -213,7 +214,8 @@ public class OMKeyCommitRequestWithFSO extends OMKeyCommitRequest {
         // Subtract the size of blocks to be overwritten.
         correctedSpace -= keyToDelete.getReplicatedSize();
         RepeatedOmKeyInfo oldVerKeyInfo = getOldVersionsToCleanUp(
-            keyToDelete, trxnLogIndex, ozoneManager.isRatisEnabled());
+            keyToDelete, trxnLogIndex, ozoneManager.isRatisEnabled(),
+                ozoneManager.isMultiRaftEnabled(), ozoneManager.getCurrentMultiRaftTerm());
         checkBucketQuotaInBytes(omMetadataManager, omBucketInfo,
             correctedSpace);
         String delKeyName = omMetadataManager

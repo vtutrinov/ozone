@@ -46,6 +46,7 @@ public class S3MultipartUploadCommitPartResponseWithFSO
    * 1. Update MultipartKey in MultipartInfoTable with new PartKeyInfo
    * 2. Delete openKey from OpenKeyTable
    * 3. If old PartKeyInfo exists, put it in DeletedKeyTable
+   *
    * @param omResponse
    * @param multipartKey
    * @param openKey
@@ -54,17 +55,20 @@ public class S3MultipartUploadCommitPartResponseWithFSO
    * @param openPartKeyInfoToBeDeleted
    * @param isRatisEnabled
    * @param omBucketInfo
+   * @param multiRaftEnabled
+   * @param currentMultiRaftTerm
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   public S3MultipartUploadCommitPartResponseWithFSO(
-      @Nonnull OMResponse omResponse, String multipartKey, String openKey,
-      @Nullable OmMultipartKeyInfo omMultipartKeyInfo,
-      @Nullable OzoneManagerProtocolProtos.PartKeyInfo oldPartKeyInfo,
-      @Nullable OmKeyInfo openPartKeyInfoToBeDeleted, boolean isRatisEnabled,
-      @Nonnull OmBucketInfo omBucketInfo, @Nonnull BucketLayout bucketLayout) {
+          @Nonnull OMResponse omResponse, String multipartKey, String openKey,
+          @Nullable OmMultipartKeyInfo omMultipartKeyInfo,
+          @Nullable OzoneManagerProtocolProtos.PartKeyInfo oldPartKeyInfo,
+          @Nullable OmKeyInfo openPartKeyInfoToBeDeleted, boolean isRatisEnabled,
+          @Nonnull OmBucketInfo omBucketInfo, @Nonnull BucketLayout bucketLayout,
+          boolean multiRaftEnabled, long currentMultiRaftTerm) {
 
     super(omResponse, multipartKey, openKey, omMultipartKeyInfo,
             oldPartKeyInfo, openPartKeyInfoToBeDeleted, isRatisEnabled,
-            omBucketInfo, bucketLayout);
+            omBucketInfo, bucketLayout, multiRaftEnabled, currentMultiRaftTerm);
   }
 }

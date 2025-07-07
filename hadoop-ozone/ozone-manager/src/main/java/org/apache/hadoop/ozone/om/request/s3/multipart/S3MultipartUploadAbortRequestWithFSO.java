@@ -57,7 +57,8 @@ public class S3MultipartUploadAbortRequestWithFSO
         omResponse.setAbortMultiPartUploadResponse(
             MultipartUploadAbortResponse.newBuilder()).build(), multipartKey,
         multipartOpenKey, multipartKeyInfo, ozoneManager.isRatisEnabled(),
-        omBucketInfo.copyObject(), getBucketLayout());
+        omBucketInfo.copyObject(), getBucketLayout(),
+        ozoneManager.isMultiRaftEnabled(), ozoneManager.getCurrentMultiRaftTerm());
     return omClientResp;
   }
 }

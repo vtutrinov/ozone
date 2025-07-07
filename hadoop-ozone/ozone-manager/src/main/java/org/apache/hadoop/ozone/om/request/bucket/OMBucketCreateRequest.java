@@ -76,6 +76,7 @@ import static org.apache.hadoop.ozone.om.lock.OzoneManagerLock.Resource.BUCKET_L
 import static org.apache.hadoop.ozone.om.lock.OzoneManagerLock.Resource.VOLUME_LOCK;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CryptoProtocolVersionProto.ENCRYPTION_ZONES;
 
+
 /**
  * Handles CreateBucket Request.
  */
@@ -245,8 +246,12 @@ public class OMBucketCreateRequest extends OMClientRequest {
       // Add objectID and updateID
       omBucketInfo.setObjectID(
           ozoneManager.getObjectIdFromTxId(transactionLogIndex));
-      omBucketInfo.setUpdateID(transactionLogIndex,
-          ozoneManager.isRatisEnabled());
+      omBucketInfo.setUpdateID(
+          transactionLogIndex,
+          ozoneManager.isRatisEnabled(),
+          ozoneManager.isMultiRaftEnabled(),
+          ozoneManager.getCurrentMultiRaftTerm()
+      );
 
       // Add default acls from volume.
       addDefaultAcls(omBucketInfo, omVolumeArgs);

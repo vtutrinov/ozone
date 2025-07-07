@@ -115,8 +115,12 @@ public class S3ExpiredMultipartUploadsAbortRequest extends OMKeyRequest {
       }
 
       omClientResponse = new S3ExpiredMultipartUploadsAbortResponse(
-          omResponse.build(), abortedMultipartUploads,
-          ozoneManager.isRatisEnabled());
+          omResponse.build(),
+          abortedMultipartUploads,
+          ozoneManager.isRatisEnabled(),
+          ozoneManager.isMultiRaftEnabled(),
+          ozoneManager.getCurrentMultiRaftTerm()
+      );
 
       result = Result.SUCCESS;
     } catch (IOException ex) {
@@ -237,8 +241,12 @@ public class S3ExpiredMultipartUploadsAbortRequest extends OMKeyRequest {
           }
 
           // Set the UpdateID to current transactionLogIndex
-          omMultipartKeyInfo.setUpdateID(trxnLogIndex,
-              ozoneManager.isRatisEnabled());
+          omMultipartKeyInfo.setUpdateID(
+                  trxnLogIndex,
+                  ozoneManager.isRatisEnabled(),
+                  ozoneManager.isMultiRaftEnabled(),
+                  ozoneManager.getCurrentMultiRaftTerm()
+          );
 
           // Parse the multipart upload components (e.g. volume, bucket, key)
           // from the multipartInfoTable db key

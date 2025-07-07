@@ -76,14 +76,15 @@ public class S3MultipartUploadCommitPartRequestWithFSO
   @Override
   @SuppressWarnings("checkstyle:ParameterNumber")
   protected S3MultipartUploadCommitPartResponse getOmClientResponse(
-      OzoneManager ozoneManager,
-      OzoneManagerProtocolProtos.PartKeyInfo oldPartKeyInfo, String openKey,
-      OmKeyInfo omKeyInfo, String multipartKey,
-      OmMultipartKeyInfo multipartKeyInfo,
-      OzoneManagerProtocolProtos.OMResponse build, OmBucketInfo omBucketInfo) {
+          OzoneManager ozoneManager,
+          OzoneManagerProtocolProtos.PartKeyInfo oldPartKeyInfo, String openKey,
+          OmKeyInfo omKeyInfo, String multipartKey,
+          OmMultipartKeyInfo multipartKeyInfo,
+          OzoneManagerProtocolProtos.OMResponse build, OmBucketInfo omBucketInfo) {
 
     return new S3MultipartUploadCommitPartResponseWithFSO(build, multipartKey,
-        openKey, multipartKeyInfo, oldPartKeyInfo, omKeyInfo,
-        ozoneManager.isRatisEnabled(), omBucketInfo, getBucketLayout());
+            openKey, multipartKeyInfo, oldPartKeyInfo, omKeyInfo,
+            ozoneManager.isRatisEnabled(), omBucketInfo, getBucketLayout(), ozoneManager.isMultiRaftEnabled(),
+            ozoneManager.getCurrentMultiRaftTerm());
   }
 }

@@ -72,6 +72,7 @@ import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.NOT_
 import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.NOT_SUPPORTED_OPERATION;
 import static org.apache.hadoop.ozone.om.lock.OzoneManagerLock.Resource.BUCKET_LOCK;
 
+
 /**
  * Handles CommitKey request.
  */
@@ -262,7 +263,8 @@ public class OMKeyCommitRequest extends OMKeyRequest {
           omKeyInfo.updateLocationInfoList(locationInfoList, false);
 
       // Set the UpdateID to current transactionLogIndex
-      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled());
+      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(), ozoneManager.isMultiRaftEnabled(),
+              ozoneManager.getCurrentMultiRaftTerm());
 
       long correctedSpace = omKeyInfo.getReplicatedSize();
       // if keyToDelete isn't null, usedNamespace needn't check and
@@ -275,7 +277,8 @@ public class OMKeyCommitRequest extends OMKeyRequest {
         // Subtract the size of blocks to be overwritten.
         correctedSpace -= keyToDelete.getReplicatedSize();
         RepeatedOmKeyInfo oldVerKeyInfo = getOldVersionsToCleanUp(
-            keyToDelete, trxnLogIndex, ozoneManager.isRatisEnabled());
+            keyToDelete, trxnLogIndex, ozoneManager.isRatisEnabled(),
+                ozoneManager.isMultiRaftEnabled(), ozoneManager.getCurrentMultiRaftTerm());
         checkBucketQuotaInBytes(omMetadataManager, omBucketInfo,
             correctedSpace);
         String delKeyName = omMetadataManager.getOzoneDeletePathKey(

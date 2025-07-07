@@ -51,8 +51,9 @@ public class S3MultipartUploadAbortResponse extends
   public S3MultipartUploadAbortResponse(@Nonnull OMResponse omResponse,
       String multipartKey, String multipartOpenKey,
       @Nonnull OmMultipartKeyInfo omMultipartKeyInfo, boolean isRatisEnabled,
-      @Nonnull OmBucketInfo omBucketInfo, @Nonnull BucketLayout bucketLayout) {
-    super(omResponse, isRatisEnabled, bucketLayout);
+      @Nonnull OmBucketInfo omBucketInfo, @Nonnull BucketLayout bucketLayout, boolean multiRaftEnabled,
+                                        long currentMultiRaftTerm) {
+    super(omResponse, isRatisEnabled, bucketLayout, multiRaftEnabled, currentMultiRaftTerm);
     this.multipartKey = multipartKey;
     this.multipartOpenKey = multipartOpenKey;
     this.omMultipartKeyInfo = omMultipartKeyInfo;
