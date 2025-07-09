@@ -38,6 +38,7 @@ import static org.apache.hadoop.ozone.om.OmMetadataManagerImpl.OPEN_FILE_TABLE;
 public class S3MultipartUploadAbortResponseWithFSO
     extends S3MultipartUploadAbortResponse {
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public S3MultipartUploadAbortResponseWithFSO(@Nonnull OMResponse omResponse,
       String multipartKey, String multipartOpenKey,
       @Nonnull OmMultipartKeyInfo omMultipartKeyInfo, boolean isRatisEnabled,

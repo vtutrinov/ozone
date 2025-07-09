@@ -37,7 +37,7 @@ public class WithObjectID extends WithMetadata {
   @SuppressWarnings("visibilitymodifier")
   protected long updateID;
 
-  protected long multiraftTerm;
+  private long multiRaftTerm;
 
   /**
    * Returns objectID.
@@ -106,7 +106,7 @@ public class WithObjectID extends WithMetadata {
 
     // Main reason, in non-HA transaction Index after restart starts from 0.
     // And also because of this same reason we don't do replay checks in non-HA.
-    if ((!isMultiraftEnabled || currentMultiraftTerm == multiraftTerm)
+    if ((!isMultiraftEnabled || currentMultiraftTerm == multiRaftTerm)
         && isRatisEnabled && updateId < this.updateID
     ) {
       throw new IllegalArgumentException(String.format(
@@ -115,8 +115,8 @@ public class WithObjectID extends WithMetadata {
           getObjectInfo()));
     }
 
-    if (isMultiraftEnabled && currentMultiraftTerm != multiraftTerm) {
-      this.multiraftTerm = currentMultiraftTerm;
+    if (isMultiraftEnabled && currentMultiraftTerm != multiRaftTerm) {
+      this.multiRaftTerm = currentMultiraftTerm;
     }
 
     this.updateID = updateId;

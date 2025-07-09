@@ -65,6 +65,7 @@ public class OMDirectoriesPurgeResponseWithFSO extends OmKeyResponse {
   private boolean isMultiRaftEnabled;
   private long multiRaftTerm;
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public OMDirectoriesPurgeResponseWithFSO(@Nonnull OMResponse omResponse,
       @Nonnull List<OzoneManagerProtocolProtos.PurgePathRequest> paths,
       boolean isRatisEnabled, @Nonnull BucketLayout bucketLayout,

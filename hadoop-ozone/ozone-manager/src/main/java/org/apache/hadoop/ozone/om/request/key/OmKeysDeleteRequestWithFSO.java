@@ -108,7 +108,7 @@ public class OmKeysDeleteRequestWithFSO extends OMKeysDeleteRequest {
                       omKeyInfo.getFileName())),
           CacheValue.get(trxnLogIndex));
 
-      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(),ozoneManager.isMultiRaftEnabled(),
+      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(), ozoneManager.isMultiRaftEnabled(),
               ozoneManager.getCurrentMultiRaftTerm());
       quotaReleased += sumBlockLengths(omKeyInfo);
     }
@@ -124,7 +124,7 @@ public class OmKeysDeleteRequestWithFSO extends OMKeysDeleteRequest {
                   omKeyInfo.getFileName())),
           CacheValue.get(trxnLogIndex));
 
-      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(),ozoneManager.isMultiRaftEnabled(),
+      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(), ozoneManager.isMultiRaftEnabled(),
               ozoneManager.getCurrentMultiRaftTerm());
       quotaReleased += sumBlockLengths(omKeyInfo);
     }

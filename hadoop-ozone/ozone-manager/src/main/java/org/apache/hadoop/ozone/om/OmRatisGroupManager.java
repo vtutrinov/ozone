@@ -34,14 +34,14 @@ public class OmRatisGroupManager {
   private final Map<UUID, Integer> ratisGroupCounter = new ConcurrentHashMap<>();
 
   public OmRatisGroupManager(
-      OzoneConfiguration configuration,
-      boolean multiRaftEnabled,
-      String omServiceId,
-      OMMetadataManager metadataManager
+          OzoneConfiguration configuration,
+          boolean multiRaftEnabled,
+          String omServiceId,
+          OMMetadataManager metadataManager
   ) {
     omRatisGroupCount = configuration.getInt(
-        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
-        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT
+            OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
+            OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT
     );
     this.multiRaftEnabled = multiRaftEnabled;
     this.omServiceId = omServiceId;
@@ -57,7 +57,7 @@ public class OmRatisGroupManager {
 
   private void initBucketMap() {
     Iterator<Map.Entry<CacheKey<String>, CacheValue<OmBucketInfo>>> bucketIterator =
-        metadataManager.getBucketIterator();
+            metadataManager.getBucketIterator();
     while (bucketIterator.hasNext()) {
       Map.Entry<CacheKey<String>, CacheValue<OmBucketInfo>> entry = bucketIterator.next();
       OmBucketInfo bucketInfo = entry.getValue().getCacheValue();
@@ -84,24 +84,26 @@ public class OmRatisGroupManager {
       return RaftGroupId.valueOf(storedUuid);
     }
 
-    UUID groupUuid;
+//    UUID groupUuid;
     while (ratisGroupCounter.size() < omRatisGroupCount) {
-        try {
-          LOG.trace("Waiting for group initiating {}-{}. {}", ratisGroupCounter.size(), omRatisGroupCount, ratisGroupCounter);
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+      try {
+        LOG.info(
+                "Waiting for group initiating {}-{}. {}", ratisGroupCounter.size(), omRatisGroupCount, ratisGroupCounter
+        );
+        wait(1000);
+      } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+      }
     }
-    if (ratisGroupCounter.size() >= omRatisGroupCount) {
-      groupUuid = ratisGroupCounter.entrySet().stream()
-          .min(Comparator.comparingInt(Map.Entry::getValue))
-          .map(Map.Entry::getKey)
-          .get();
-    } else {
-      String groupIdStr = getBucketId(bucketName, omRatisGroupCount);
-      groupUuid = toUuid(groupIdStr);
-    }
+//    if (ratisGroupCounter.size() >= omRatisGroupCount) {
+    UUID groupUuid = ratisGroupCounter.entrySet().stream()
+            .min(Comparator.comparingInt(Map.Entry::getValue))
+            .map(Map.Entry::getKey)
+            .get();
+//    } else {
+//      String groupIdStr = getBucketId(bucketName, omRatisGroupCount);
+//      groupUuid = toUuid(groupIdStr);
+//    }
 
     storeTable(volumeName, bucketName, groupUuid);
 

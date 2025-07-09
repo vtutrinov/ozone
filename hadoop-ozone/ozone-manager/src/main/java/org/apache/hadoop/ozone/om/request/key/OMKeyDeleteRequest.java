@@ -143,7 +143,7 @@ public class OMKeyDeleteRequest extends OMKeyRequest {
       }
 
       // Set the UpdateID to current transactionLogIndex
-      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(),ozoneManager.isMultiRaftEnabled(),
+      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(), ozoneManager.isMultiRaftEnabled(),
               ozoneManager.getCurrentMultiRaftTerm());
 
       // Update table cache.

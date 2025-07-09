@@ -96,7 +96,8 @@ public class OMOpenKeysDeleteRequest extends OMKeyRequest {
       }
 
       omClientResponse = new OMOpenKeysDeleteResponse(omResponse.build(),
-          deletedOpenKeys, ozoneManager.isRatisEnabled(), getBucketLayout(), ozoneManager.isMultiRaftEnabled(), ozoneManager.getCurrentMultiRaftTerm());
+              deletedOpenKeys, ozoneManager.isRatisEnabled(), getBucketLayout(),
+              ozoneManager.isMultiRaftEnabled(), ozoneManager.getCurrentMultiRaftTerm());
 
       result = Result.SUCCESS;
     } catch (IOException | InvalidPathException ex) {

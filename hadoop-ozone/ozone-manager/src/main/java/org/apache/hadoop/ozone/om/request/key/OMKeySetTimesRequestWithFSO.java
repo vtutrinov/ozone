@@ -52,18 +52,18 @@ public class OMKeySetTimesRequestWithFSO extends OMKeySetTimesRequest {
 
   @Override
   public OzoneManagerProtocolProtos.OMRequest preExecute(
-      OzoneManager ozoneManager) throws IOException {
+          OzoneManager ozoneManager) throws IOException {
     return super.preExecute(ozoneManager);
   }
 
   public OMKeySetTimesRequestWithFSO(
-      OzoneManagerProtocolProtos.OMRequest omReq, BucketLayout bucketLayout) {
+          OzoneManagerProtocolProtos.OMRequest omReq, BucketLayout bucketLayout) {
     super(omReq, bucketLayout);
   }
 
   @Override
   public OMClientResponse validateAndUpdateCache(OzoneManager ozoneManager,
-      long trxnLogIndex) {
+                                                 long trxnLogIndex) {
     OmKeyInfo omKeyInfo = null;
 
     OzoneManagerProtocolProtos.OMResponse.Builder omResponse = onInit();
@@ -79,25 +79,25 @@ public class OMKeySetTimesRequestWithFSO extends OMKeySetTimesRequest {
     Result result = null;
     try {
       volume = getVolumeName();
-       if (getWriteReqBucketName() != null) {
-         bucket = getWriteReqBucketName();
-       } else {
-         bucket = getBucketName();
-       }
+      if (getWriteReqBucketName() != null) {
+        bucket = getWriteReqBucketName();
+      } else {
+        bucket = getBucketName();
+      }
       key = getKeyName();
 
       // check Acl
       if (ozoneManager.getAclsEnabled()) {
         checkAcls(ozoneManager, OzoneObj.ResourceType.KEY,
-            OzoneObj.StoreType.OZONE, IAccessAuthorizer.ACLType.WRITE_ACL,
-            volume, bucket, key);
+                OzoneObj.StoreType.OZONE, IAccessAuthorizer.ACLType.WRITE_ACL,
+                volume, bucket, key);
       }
       mergeOmLockDetails(omMetadataManager.getLock()
-          .acquireWriteLock(BUCKET_LOCK, volume, bucket));
+              .acquireWriteLock(BUCKET_LOCK, volume, bucket));
       lockAcquired = getOmLockDetails().isLockAcquired();
       OzoneFileStatus keyStatus = OMFileRequest.getOMKeyInfoIfExists(
-          omMetadataManager, volume, bucket, key, 0,
-          ozoneManager.getDefaultReplicationConfig());
+              omMetadataManager, volume, bucket, key, 0,
+              ozoneManager.getDefaultReplicationConfig());
       if (keyStatus == null) {
         throw new OMException("Key not found. Key:" + key, KEY_NOT_FOUND);
       }
@@ -107,31 +107,31 @@ public class OMKeySetTimesRequestWithFSO extends OMKeySetTimesRequest {
       final long volumeId = omMetadataManager.getVolumeId(volume);
       final long bucketId = omMetadataManager.getBucketId(volume, bucket);
       final String dbKey = omMetadataManager.getOzonePathKey(volumeId, bucketId,
-          omKeyInfo.getParentObjectID(), omKeyInfo.getFileName());
+              omKeyInfo.getParentObjectID(), omKeyInfo.getFileName());
       boolean isDirectory = keyStatus.isDirectory();
       operationResult = true;
       apply(omKeyInfo);
       omKeyInfo.setUpdateID(
-          trxnLogIndex,
-          ozoneManager.isRatisEnabled(),
-          ozoneManager.isMultiRaftEnabled(),
-          ozoneManager.getCurrentMultiRaftTerm()
+              trxnLogIndex,
+              ozoneManager.isRatisEnabled(),
+              ozoneManager.isMultiRaftEnabled(),
+              ozoneManager.getCurrentMultiRaftTerm()
       );
 
       // update cache.
       if (isDirectory) {
         Table<String, OmDirectoryInfo> dirTable =
-            omMetadataManager.getDirectoryTable();
+                omMetadataManager.getDirectoryTable();
         dirTable.addCacheEntry(new CacheKey<>(dbKey),
-            CacheValue.get(trxnLogIndex,
-                OMFileRequest.getDirectoryInfo(omKeyInfo)));
+                CacheValue.get(trxnLogIndex,
+                        OMFileRequest.getDirectoryInfo(omKeyInfo)));
       } else {
         omMetadataManager.getKeyTable(getBucketLayout())
-            .addCacheEntry(new CacheKey<>(dbKey),
-                CacheValue.get(trxnLogIndex, omKeyInfo));
+                .addCacheEntry(new CacheKey<>(dbKey),
+                        CacheValue.get(trxnLogIndex, omKeyInfo));
       }
       omClientResponse = onSuccess(omResponse, omKeyInfo, operationResult,
-          isDirectory, volumeId, bucketId);
+              isDirectory, volumeId, bucketId);
       result = Result.SUCCESS;
     } catch (IOException | InvalidPathException ex) {
       result = Result.FAILURE;
@@ -140,7 +140,7 @@ public class OMKeySetTimesRequestWithFSO extends OMKeySetTimesRequest {
     } finally {
       if (lockAcquired) {
         mergeOmLockDetails(omMetadataManager.getLock()
-            .releaseWriteLock(BUCKET_LOCK, volume, bucket));
+                .releaseWriteLock(BUCKET_LOCK, volume, bucket));
       }
       if (omClientResponse != null) {
         omClientResponse.setOmLockDetails(getOmLockDetails());
@@ -159,19 +159,19 @@ public class OMKeySetTimesRequestWithFSO extends OMKeySetTimesRequest {
   }
 
   private OMClientResponse onSuccess(OMResponse.Builder omResponse,
-      OmKeyInfo omKeyInfo, boolean operationResult, boolean isDir,
-      long volumeId, long bucketId) {
+                                     OmKeyInfo omKeyInfo, boolean operationResult, boolean isDir,
+                                     long volumeId, long bucketId) {
     omResponse.setSuccess(operationResult);
     omResponse.setSetTimesResponse(
-        OzoneManagerProtocolProtos.SetTimesResponse.newBuilder());
+            OzoneManagerProtocolProtos.SetTimesResponse.newBuilder());
     return new OMKeySetTimesResponseWithFSO(omResponse.build(), omKeyInfo,
-        isDir, getBucketLayout(), volumeId, bucketId);
+            isDir, getBucketLayout(), volumeId, bucketId);
   }
 
   @Override
   protected OMClientResponse onFailure(OMResponse.Builder omResponse,
-      Exception exception) {
+                                       Exception exception) {
     return new OMKeySetTimesResponseWithFSO(createErrorOMResponse(
-        omResponse, exception), getBucketLayout());
+            omResponse, exception), getBucketLayout());
   }
 }

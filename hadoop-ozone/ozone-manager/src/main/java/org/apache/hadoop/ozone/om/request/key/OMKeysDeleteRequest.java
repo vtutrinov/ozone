@@ -279,7 +279,7 @@ public class OMKeysDeleteRequest extends OMKeyRequest {
                   omKeyInfo.getKeyName())),
           CacheValue.get(trxnLogIndex));
 
-      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(),ozoneManager.isMultiRaftEnabled(),
+      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(), ozoneManager.isMultiRaftEnabled(),
               ozoneManager.getCurrentMultiRaftTerm());
       quotaReleased += sumBlockLengths(omKeyInfo);
     }

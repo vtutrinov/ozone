@@ -47,6 +47,7 @@ public class OMKeysDeleteResponseWithFSO extends OMKeysDeleteResponse {
   private List<OmKeyInfo> dirsList;
   private long volumeId;
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public OMKeysDeleteResponseWithFSO(
       @NotNull OzoneManagerProtocolProtos.OMResponse omResponse,
       @NotNull List<OmKeyInfo> keyDeleteList,
