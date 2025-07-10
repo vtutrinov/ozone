@@ -218,7 +218,7 @@ public final class OzoneManagerRatisServer {
     }
   }
 
-  public void removeBucketRaftGroup(RaftGroupId raftGroupId) {
+  public void removeBucketRaftGroup(RaftGroupId raftGroupId) throws IOException {
     GroupManagementRequest request = GroupManagementRequest.newRemove(currentClientId, server.getId(), nextCallId(),
         raftGroupId, true, false);
     RaftClientReply reply;
@@ -226,22 +226,11 @@ public final class OzoneManagerRatisServer {
     try {
       reply = server.groupManagement(request);
     } catch (Exception ex) {
-      try {
-        LOG.error("Remove raft group {} error exception", raftGroupId, ex);
-        throw new IOException(ex.getMessage(), ex);
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
+      throw new IOException(ex.getMessage(), ex);
     }
     NotLeaderException notLeaderException = reply.getNotLeaderException();
     if (notLeaderException != null) {
-      LOG.error("Remove raft group {} error not leader", raftGroupId, notLeaderException);
-      try {
-        throw notLeaderException;
-      } catch (NotLeaderException e) {
-
-        throw new RuntimeException(e);
-      }
+      throw notLeaderException;
     }
     StateMachineException stateMachineException =
         reply.getStateMachineException();

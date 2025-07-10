@@ -22,24 +22,24 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET
 /**
  * Provides a proper raft group id for the provided bucket name.
  */
-public class OmRatisGroupManager {
-  public static final Logger LOG = LoggerFactory.getLogger(OmRatisGroupManager.class);
+public class OmRaftGroupManager {
+  public static final Logger LOG = LoggerFactory.getLogger(OmRaftGroupManager.class);
 
-  private int omRatisGroupCount;
+  private final int omRaftGroupCount;
   private final boolean multiRaftEnabled;
   private final String omServiceId;
   private final OMMetadataManager metadataManager;
 
-  private final Map<String, UUID> bucketRatisGroups = new ConcurrentHashMap<>();
-  private final Map<UUID, Integer> ratisGroupCounter = new ConcurrentHashMap<>();
+  private final Map<String, UUID> bucketRaftGroups = new ConcurrentHashMap<>();
+  private final Map<UUID, Integer> raftGroupCounter = new ConcurrentHashMap<>();
 
-  public OmRatisGroupManager(
+  public OmRaftGroupManager(
       OzoneConfiguration configuration,
       boolean multiRaftEnabled,
       String omServiceId,
       OMMetadataManager metadataManager
   ) {
-    omRatisGroupCount = configuration.getInt(
+    omRaftGroupCount = configuration.getInt(
         OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
         OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT
     );
@@ -51,8 +51,8 @@ public class OmRatisGroupManager {
   }
 
   public void reset() {
-    bucketRatisGroups.clear();
-    ratisGroupCounter.clear();
+    bucketRaftGroups.clear();
+    raftGroupCounter.clear();
   }
 
   private void initBucketMap() {
@@ -65,36 +65,36 @@ public class OmRatisGroupManager {
         UUID raftGroup = bucketInfo.getRaftGroup();
         if (raftGroup != null) {
           String key = metadataManager.getBucketKey(bucketInfo.getVolumeName(), bucketInfo.getBucketName());
-          bucketRatisGroups.put(key, raftGroup);
-          ratisGroupCounter.compute(raftGroup, (k, v) -> v == null ? 1 : v + 1);
+          bucketRaftGroups.put(key, raftGroup);
+          raftGroupCounter.compute(raftGroup, (k, v) -> v == null ? 1 : v + 1);
         }
       }
     }
   }
 
-  public synchronized RaftGroupId ratisGroupName(String volumeName, String bucketName) {
+  public synchronized RaftGroupId raftGroupName(String volumeName, String bucketName) {
     if (bucketName == null || !multiRaftEnabled) {
       return RaftGroupId.valueOf(toUuid(omServiceId));
     }
 
     String key = metadataManager.getBucketKey(volumeName, bucketName);
-    UUID storedUuid = bucketRatisGroups.get(key);
-    if (storedUuid != null && ratisGroupCounter.containsKey(storedUuid)) {
+    UUID storedUuid = bucketRaftGroups.get(key);
+    if (storedUuid != null && raftGroupCounter.containsKey(storedUuid)) {
       LOG.trace("Return stored uuid {}", storedUuid);
       return RaftGroupId.valueOf(storedUuid);
     }
 
-    while (ratisGroupCounter.size() < omRatisGroupCount) {
+    while (raftGroupCounter.size() < omRaftGroupCount) {
       try {
         LOG.info(
-                "Waiting for group initiating {}-{}. {}", ratisGroupCounter.size(), omRatisGroupCount, ratisGroupCounter
+                "Waiting for group initiating {}-{}. {}", raftGroupCounter.size(), omRaftGroupCount, raftGroupCounter
         );
         wait(1000);
       } catch (InterruptedException e) {
         throw new RuntimeException(e);
       }
     }
-    UUID groupUuid = ratisGroupCounter.entrySet().stream()
+    UUID groupUuid = raftGroupCounter.entrySet().stream()
             .min(Comparator.comparingInt(Map.Entry::getValue))
             .map(Map.Entry::getKey)
             .get();
@@ -104,18 +104,18 @@ public class OmRatisGroupManager {
     return RaftGroupId.valueOf(groupUuid);
   }
 
-  public Map<String, UUID> getBucketRatisGroups() {
-    return bucketRatisGroups;
+  public Map<String, UUID> getBucketRaftGroups() {
+    return bucketRaftGroups;
   }
 
-  public int getOmRatisGroupCount() {
-    return omRatisGroupCount;
+  public int getOmRaftGroupCount() {
+    return omRaftGroupCount;
   }
 
   private void storeTable(String volumeName, String bucketName, UUID groupId) {
     String key = metadataManager.getBucketKey(volumeName, bucketName);
-    bucketRatisGroups.put(key, groupId);
-    ratisGroupCounter.compute(groupId, (k, v) -> v == null ? 1 : v + 1);
+    bucketRaftGroups.put(key, groupId);
+    raftGroupCounter.compute(groupId, (k, v) -> v == null ? 1 : v + 1);
 
     try {
       OmBucketInfo omBucketInfo = metadataManager.getBucketTable().get(key);
@@ -135,13 +135,13 @@ public class OmRatisGroupManager {
     return UUID.nameUUIDFromBytes(groupId.getBytes(java.nio.charset.StandardCharsets.UTF_8));
   }
 
-  public RaftGroupId incrementRatisGroupCounter(UUID groupUuid) {
-    ratisGroupCounter.put(groupUuid, 0);
+  public RaftGroupId addGroupIdToRaftGroupCounter(UUID groupUuid) {
+    raftGroupCounter.put(groupUuid, 0);
     return RaftGroupId.valueOf(groupUuid);
   }
 
-  public void reIncrementRatisGroupCounter(List<UUID> groupUuid) {
-    ratisGroupCounter.clear();
-    groupUuid.forEach(it -> ratisGroupCounter.put(it, 0));
+  public void addGroupIdListToRaftGroupCounter(List<UUID> groupUuid) {
+    raftGroupCounter.clear();
+    groupUuid.forEach(it -> raftGroupCounter.put(it, 0));
   }
 }

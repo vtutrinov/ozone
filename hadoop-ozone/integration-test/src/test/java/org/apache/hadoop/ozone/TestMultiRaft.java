@@ -90,7 +90,6 @@ public class TestMultiRaft {
   public void testRaftGroupsAndStateMachinesWhenMultiRaftDisables()
           throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(false);
-    // Wait for OM leader election to finish
     OzoneManager om = cluster.getOMLeader();
     assertEquals(1, om.getOmRaftGroups().size());
     assertEquals(1, om.getStateMachines().size());
@@ -100,7 +99,6 @@ public class TestMultiRaft {
   public void testDefaultRaftGroupsAndStateMachinesWhenMultiRaftEnabled()
           throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true);
-    // Wait for OM leader election to finish
     OzoneManager om = cluster.getOMLeader();
 
     GenericTestUtils.waitFor(() -> om.getOmRaftGroups().size() == 5, 100, 20000
@@ -113,7 +111,6 @@ public class TestMultiRaft {
   public void testRaftGroupsAndStateMachinesWhenMultiRaftEnabled()
           throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true, 10);
-    // Wait for OM leader election to finish
     OzoneManager om = cluster.getOMLeader();
     assertEquals(11, om.getOmRaftGroups().size());
     assertEquals(11, om.getStateMachines().size());
@@ -123,13 +120,15 @@ public class TestMultiRaft {
   public void testChangeMultiRaftConfig() throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true, 4);
 
+    ClientProtocol proxy = cluster.createClient().getProxy();
     String volume = "testvolume";
-    cluster.createClient().getProxy().createVolume(volume);
+    proxy.createVolume(volume);
     String bucket = "testbucket";
-    cluster.createClient().getProxy().createBucket(volume, bucket);
+    proxy.createBucket(volume, bucket);
     String key = "testkey";
-    try (OzoneOutputStream stream = cluster.createClient().getProxy()
-            .createKey(volume, bucket, key, key.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap())
+    try (OzoneOutputStream stream = proxy.createKey(
+            volume, bucket, key, key.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap()
+    )
     ) {
       stream.write(key.getBytes(UTF_8));
     }
@@ -153,7 +152,7 @@ public class TestMultiRaft {
     assertEquals(1, om2.getOmRaftGroups().size());
 
     String key1 = "testkey1";
-    try (OzoneOutputStream stream = cluster.createClient().getProxy()
+    try (OzoneOutputStream stream = proxy
             .createKey(volume, bucket, key1, key1.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap())
     ) {
       stream.write(key1.getBytes(UTF_8));
@@ -172,7 +171,7 @@ public class TestMultiRaft {
     assertEquals(5, om1.getOmRaftGroups().size());
 
     String key2 = "testkey2";
-    try (OzoneOutputStream stream = cluster.createClient().getProxy()
+    try (OzoneOutputStream stream = proxy
             .createKey(volume, bucket, key2, key2.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap())
     ) {
       stream.write(key2.getBytes(UTF_8));
@@ -191,7 +190,7 @@ public class TestMultiRaft {
     assertEquals(1, om1.getOmRaftGroups().size());
 
     String key3 = "testkey3";
-    try (OzoneOutputStream stream = cluster.createClient().getProxy()
+    try (OzoneOutputStream stream = proxy
             .createKey(volume, bucket, key3, key3.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap())
     ) {
       stream.write(key3.getBytes(UTF_8));

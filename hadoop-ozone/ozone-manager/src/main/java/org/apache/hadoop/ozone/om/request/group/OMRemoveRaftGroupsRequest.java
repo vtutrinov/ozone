@@ -33,7 +33,7 @@ public class OMRemoveRaftGroupsRequest extends OMClientRequest {
     OzoneManagerProtocolProtos.RemoveBucketRaftGroupsRequest removeBucketRaftGroupsRequest =
             omRequest.getRemoveBucketRaftGroupsRequest();
 
-    ozoneManager.getOmRatisGroupManager().reset();
+    ozoneManager.getOmRaftGroupManager().reset();
     removeBucketRaftGroupsRequest.getGroupIdsList().forEach(
             groupId -> {
               LOG.trace("Start removing RAFT group in {}: {}", ozoneManager.getOMNodeId(), groupId);
