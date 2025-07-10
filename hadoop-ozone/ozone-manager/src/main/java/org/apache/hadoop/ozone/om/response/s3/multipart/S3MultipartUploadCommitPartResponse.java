@@ -68,7 +68,6 @@ public class S3MultipartUploadCommitPartResponse extends OmKeyResponse {
    * 1. Update MultipartKey in MultipartInfoTable with new PartKeyInfo
    * 2. Delete openKey from OpenKeyTable
    * 3. If old PartKeyInfo exists, put it in DeletedKeyTable
-   *
    * @param omResponse
    * @param multipartKey
    * @param openKey

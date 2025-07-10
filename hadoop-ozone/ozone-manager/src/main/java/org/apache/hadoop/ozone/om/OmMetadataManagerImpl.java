@@ -236,7 +236,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
       "snapshotRenamedTable";
   public static final String COMPACTION_LOG_TABLE =
       "compactionLogTable";
-  public static final String MULTI_RAFT_TERM_TABLE =
+  public static final String MULTI_RAFT_INFO_TABLE =
       "multiRaftInfoTable";
   static final String[] ALL_TABLES = new String[] {
       USER_TABLE,
@@ -261,7 +261,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
       SNAPSHOT_INFO_TABLE,
       SNAPSHOT_RENAMED_TABLE,
       COMPACTION_LOG_TABLE,
-      MULTI_RAFT_TERM_TABLE
+      MULTI_RAFT_INFO_TABLE
   };
 
   private DBStore store;
@@ -296,7 +296,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   private boolean isRatisEnabled;
   private boolean ignorePipelineinKey;
   private Table deletedDirTable;
-  private Table<String, Long> multiRaftTermTable;
+  private Table<String, Long> multiRaftInfoTable;
 
   // Table-level locks that protects table read/write access. Note:
   // Don't use this lock for tables other than deletedTable and deletedDirTable.
@@ -633,7 +633,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
         .addTable(SNAPSHOT_INFO_TABLE)
         .addTable(SNAPSHOT_RENAMED_TABLE)
         .addTable(COMPACTION_LOG_TABLE)
-        .addTable(MULTI_RAFT_TERM_TABLE)
+        .addTable(MULTI_RAFT_INFO_TABLE)
         .addCodec(OzoneTokenIdentifier.class, TokenIdentifierCodec.get())
         .addCodec(OmKeyInfo.class, OmKeyInfo.getCodec(true))
         .addCodec(RepeatedOmKeyInfo.class, RepeatedOmKeyInfo.getCodec(true))
@@ -767,9 +767,9 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
     checkTableStatus(compactionLogTable, COMPACTION_LOG_TABLE,
         addCacheMetrics);
 
-    multiRaftTermTable = this.store.getTable(MULTI_RAFT_TERM_TABLE,
+    multiRaftInfoTable = this.store.getTable(MULTI_RAFT_INFO_TABLE,
         String.class, Long.class);
-    checkTableStatus(multiRaftTermTable, MULTI_RAFT_TERM_TABLE,
+    checkTableStatus(multiRaftInfoTable, MULTI_RAFT_INFO_TABLE,
         addCacheMetrics);
   }
 
@@ -1956,7 +1956,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
 
   @Override
   public Table<String, Long> getMultiRaftInfoTable() {
-    return multiRaftTermTable;
+    return multiRaftInfoTable;
   }
   /**
    * Get Snapshot Chain Manager.

@@ -34,14 +34,14 @@ public class OmRatisGroupManager {
   private final Map<UUID, Integer> ratisGroupCounter = new ConcurrentHashMap<>();
 
   public OmRatisGroupManager(
-          OzoneConfiguration configuration,
-          boolean multiRaftEnabled,
-          String omServiceId,
-          OMMetadataManager metadataManager
+      OzoneConfiguration configuration,
+      boolean multiRaftEnabled,
+      String omServiceId,
+      OMMetadataManager metadataManager
   ) {
     omRatisGroupCount = configuration.getInt(
-            OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
-            OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT
+        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
+        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT
     );
     this.multiRaftEnabled = multiRaftEnabled;
     this.omServiceId = omServiceId;
@@ -84,7 +84,6 @@ public class OmRatisGroupManager {
       return RaftGroupId.valueOf(storedUuid);
     }
 
-//    UUID groupUuid;
     while (ratisGroupCounter.size() < omRatisGroupCount) {
       try {
         LOG.info(
@@ -95,15 +94,10 @@ public class OmRatisGroupManager {
         throw new RuntimeException(e);
       }
     }
-//    if (ratisGroupCounter.size() >= omRatisGroupCount) {
     UUID groupUuid = ratisGroupCounter.entrySet().stream()
             .min(Comparator.comparingInt(Map.Entry::getValue))
             .map(Map.Entry::getKey)
             .get();
-//    } else {
-//      String groupIdStr = getBucketId(bucketName, omRatisGroupCount);
-//      groupUuid = toUuid(groupIdStr);
-//    }
 
     storeTable(volumeName, bucketName, groupUuid);
 
