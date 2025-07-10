@@ -1955,7 +1955,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   }
 
   @Override
-  public Table<String, Long> getMultiRaftTermTable() {
+  public Table<String, Long> getMultiRaftInfoTable() {
     return multiRaftTermTable;
   }
   /**

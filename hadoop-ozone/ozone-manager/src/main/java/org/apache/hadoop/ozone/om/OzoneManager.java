@@ -483,7 +483,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
   private boolean fsSnapshotEnabled;
   private long multiRaftTerm;
-
   private BiFunction<RaftPeer, GrpcTlsConfig, RaftClient> raftClientProvider;
 
   public long getCurrentMultiRaftTerm() {
@@ -768,6 +767,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     raftClientProvider = RatisHelper.newRaftClient(configuration);
 
     bucketUtilizationMetrics = BucketUtilizationMetrics.create(metadataManager);
+    multiRaftTerm = Optional.fromNullable(metadataManager.getMultiRaftInfoTable().get("term")).or(0L);
   }
 
   public void removeRaftGroupForBucket(RaftGroupId raftGroupId) {
@@ -903,7 +903,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
               omStorage.getClusterID(), omStorage.getVersionFile());
     }
     raftClientProvider = RatisHelper.newRaftClient(configuration);
-    multiRaftTerm = Optional.fromNullable(metadataManager.getMultiRaftTermTable().get("term")).or(0L);
   }
 
   @SuppressWarnings("checkstyle:EmptyBlock")
@@ -1868,7 +1867,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
             || (isMultiRaftEnabled() && omRatisGroupManager.getOmRatisGroupCount() != getStateMachines().size() - 1)) {
 
       multiRaftTerm += 1;
-      metadataManager.getMultiRaftTermTable().put("term", multiRaftTerm);
+      metadataManager.getMultiRaftInfoTable().put("term", multiRaftTerm);
 
       CompletableFuture.runAsync(() -> {
         OzoneManagerStateMachine omStateMachine = getStateMachine();
@@ -1915,13 +1914,24 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
         if (multiRaftEnabled && getStateMachines().size() == 1) {
           List<UUID> raftGroupIdsToCreate = new ArrayList<>();
-          long startTerm = 100 * multiRaftTerm;
-          for (long i = startTerm; i < startTerm + omRatisGroupManager.getOmRatisGroupCount(); i++) {
+
+          long minGroupIndex;
+          long maxGroupIndex;
+
+          try {
+            minGroupIndex = Optional.fromNullable(metadataManager.getMultiRaftInfoTable().get("minGroupIndex"))
+                .or(0L);
+            maxGroupIndex = minGroupIndex + omRatisGroupManager.getOmRatisGroupCount();
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+          for (long i = minGroupIndex; i < maxGroupIndex; i++) {
             raftGroupIdsToCreate.add(OmRatisGroupManager.toUuid(String.valueOf(i)));
           }
           if (!raftGroupIdsToCreate.isEmpty()) {
             try {
               omClientSideTranslator.createRaftGroups(raftGroupIdsToCreate);
+              metadataManager.getMultiRaftInfoTable().put("minGroupIndex", maxGroupIndex);
             } catch (IOException e) {
               throw new RuntimeException(e);
             }

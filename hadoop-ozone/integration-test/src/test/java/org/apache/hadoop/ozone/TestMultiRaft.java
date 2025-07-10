@@ -188,7 +188,6 @@ public class TestMultiRaft {
     GenericTestUtils.waitFor(() -> om0.getOmRaftGroups().size() == 1 &&
             om1.getOmRaftGroups().size() == 1 &&
             om2.getOmRaftGroups().size() == 1, 100, 20000);
-    GenericTestUtils.waitFor(() -> om0.getOmRaftGroups().size() == 1, 100, 20000);
     assertEquals(1, om1.getOmRaftGroups().size());
 
     String key3 = "testkey3";
