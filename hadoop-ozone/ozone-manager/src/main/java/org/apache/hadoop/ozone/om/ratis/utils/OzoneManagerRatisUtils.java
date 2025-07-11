@@ -509,7 +509,7 @@ public final class OzoneManagerRatisUtils {
 
   public static void checkLeaderStatus(String volumeName, String bucketName, OzoneManager ozoneManager)
       throws ServiceException {
-    RaftGroupId ratisGroupId = ozoneManager.ratisGroupName(volumeName, bucketName);
+    RaftGroupId ratisGroupId = ozoneManager.raftGroupName(volumeName, bucketName);
 
     LOG.trace("Check leader status for {}", ratisGroupId);
     try {

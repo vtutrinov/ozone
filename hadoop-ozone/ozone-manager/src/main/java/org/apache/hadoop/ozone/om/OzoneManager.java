@@ -775,26 +775,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     getOmRaftGroups().remove(raftGroupId);
   }
 
-  public InitBucketResult initBucketRaftGroupAndStateMachine(String volumeName, String bucketName) {
-    RaftGroup bucketRaftGroup;
-    RaftGroupId raftGroupId = ratisGroupName(volumeName, bucketName);
-    if (omRaftGroups.containsKey(raftGroupId)) {
-      return new InitBucketResult(false, omRaftGroups.get(raftGroupId));
-    }
-    List<RaftPeer> peers = createRaftPeerList(omNodeDetails, peerNodesMap, false).getPeers();
-    bucketRaftGroup = RaftGroup.valueOf(raftGroupId, peers);
-    BucketStateMachine stateMachine;
-    try {
-      stateMachine = new BucketStateMachine(raftGroupId, this);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
-
-    omRaftGroups.put(raftGroupId, bucketRaftGroup);
-    omStateMachines.put(raftGroupId, stateMachine);
-    return new InitBucketResult(true, bucketRaftGroup);
-  }
-
   public InitBucketResult initBucketRaftGroupAndStateMachine(RaftGroupId raftGroupId) {
     RaftGroup bucketRaftGroup;
     if (omRaftGroups.containsKey(raftGroupId)) {
@@ -898,9 +878,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     raftClientProvider = RatisHelper.newRaftClient(configuration);
   }
 
-  @SuppressWarnings("checkstyle:EmptyBlock")
   public void createRaftGroupForBucket(String volumeName, String bucketName) {
-    RaftGroupId raftGroupId = ratisGroupName(volumeName, bucketName);
+    RaftGroupId raftGroupId = raftGroupName(volumeName, bucketName);
     createRaftGroupForBucket(raftGroupId);
   }
 
@@ -917,9 +896,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     } catch (AlreadyExistsException ex) {
       // do nothing
     } catch (IOException e) {
-      if (e.getCause() instanceof AlreadyExistsException) {
-        // do nothing
-      } else {
+      if (!(e.getCause() instanceof AlreadyExistsException)) {
         LOG.error("Failed to create bucket raft group : {}", raftGroupId, e);
         throw new RuntimeException(e);
       }
@@ -1874,7 +1851,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
           LOG.info("Skipping group initialization: {} - {}", minNodeId, currentRaftPeerId);
           return;
         }
-        Iterable<RaftGroupId> groupIds = omRatisServer.getServer().getGroupIds();
         List<RaftGroupId> bucketGroupIds = getOmRaftGroups().values().stream()
                 .map(RaftGroup::getGroupId)
                 .filter(groupId -> !groupId.equals(omRatisServer.getCurrentRaftGroupId()))
@@ -4484,11 +4460,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return isMultiRaftEnabled;
   }
 
-  public RaftGroupId omRatisGroupName() {
-    return ratisGroupName(null, null);
+  public RaftGroupId omRaftGroupName() {
+    return raftGroupName(null, null);
   }
 
-  public RaftGroupId ratisGroupName(String volumeName, String bucketName) {
+  public RaftGroupId raftGroupName(String volumeName, String bucketName) {
     return omRaftGroupManager.raftGroupName(volumeName, bucketName);
   }
 

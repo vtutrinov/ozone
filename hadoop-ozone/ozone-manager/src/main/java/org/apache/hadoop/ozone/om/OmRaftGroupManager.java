@@ -127,10 +127,6 @@ public class OmRaftGroupManager {
     }
   }
 
-  private static String getBucketId(String ratisGroupPlainStr, int groupCount) {
-    return String.valueOf(Math.abs(ratisGroupPlainStr.hashCode() % groupCount));
-  }
-
   public static UUID toUuid(String groupId) {
     return UUID.nameUUIDFromBytes(groupId.getBytes(java.nio.charset.StandardCharsets.UTF_8));
   }

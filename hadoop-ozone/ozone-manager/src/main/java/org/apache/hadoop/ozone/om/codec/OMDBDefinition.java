@@ -192,7 +192,7 @@ public class OMDBDefinition extends DBDefinition.WithMap {
           StringCodec.get());
 
   public static final DBColumnFamilyDefinition<String, Long>
-          MULTI_RAFT_TERM_TABLE =
+          MULTI_RAFT_INFO_TABLE =
           new DBColumnFamilyDefinition<>(
                   OmMetadataManagerImpl.MULTI_RAFT_INFO_TABLE,
                   String.class,
@@ -292,7 +292,7 @@ public class OMDBDefinition extends DBDefinition.WithMap {
           TRANSACTION_INFO_TABLE,
           USER_TABLE,
           VOLUME_TABLE,
-          MULTI_RAFT_TERM_TABLE);
+          MULTI_RAFT_INFO_TABLE);
 
   public OMDBDefinition() {
     super(COLUMN_FAMILIES);

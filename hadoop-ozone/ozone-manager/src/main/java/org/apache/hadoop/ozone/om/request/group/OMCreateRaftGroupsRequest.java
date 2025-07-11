@@ -11,15 +11,11 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateB
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMResponse;
 import org.apache.ratis.protocol.RaftGroupId;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Handles create raft group request.
  */
 public class OMCreateRaftGroupsRequest extends OMClientRequest {
-  private static final Logger LOG =
-          LoggerFactory.getLogger(OMCreateRaftGroupsRequest.class);
 
   public OMCreateRaftGroupsRequest(OMRequest omRequest) {
     super(omRequest);

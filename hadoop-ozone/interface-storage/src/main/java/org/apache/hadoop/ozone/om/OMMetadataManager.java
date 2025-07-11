@@ -452,7 +452,12 @@ public interface OMMetadataManager extends DBStoreHAManager {
    */
   Table<String, OmDirectoryInfo> getDirectoryTable();
 
+  /**
+   * Get table for multi-raft info.
+   * @return Table.
+   */
   Table<String, Long> getMultiRaftInfoTable();
+
   /**
    * Return table mapped to the specified table name.
    * @param tableName
