@@ -425,9 +425,9 @@ public class BucketStateMachine extends BaseStateMachine {
   @Override
   public void notifyLeaderChanged(RaftGroupMemberId groupMemberId,
                                   RaftPeerId newLeaderId) {
-    LOG.trace("Change leader in group {}. New leader {}", groupMemberId, newLeaderId);
+    LOG.trace("Change leader in group {}. New leader {}", groupMemberId.getGroupId(), newLeaderId);
     // Initialize OMHAMetrics
-    ozoneManager.omHAMetricsInit(newLeaderId.toString());
+    ozoneManager.getOmhaMetrics().defineRaftGroupLeader(groupMemberId.getGroupId(), newLeaderId.toString(), false);
   }
 
   /**

@@ -176,9 +176,13 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   @Override
   public void notifyLeaderChanged(RaftGroupMemberId groupMemberId,
                                   RaftPeerId newLeaderId) {
-    LOG.trace("Change leader in group {}. New leader {}", groupMemberId, newLeaderId);
+    LOG.trace("Change leader in group {}. New leader {}", groupMemberId.getGroupId(), newLeaderId);
     // Initialize OMHAMetrics
-    ozoneManager.omHAMetricsInit(newLeaderId.toString());
+    if (ozoneManager.getOmhaMetrics() == null) {
+      ozoneManager.omHAMetricsInit(groupMemberId.getGroupId(), newLeaderId.toString());
+    } else {
+      ozoneManager.getOmhaMetrics().defineRaftGroupLeader(groupMemberId.getGroupId(), newLeaderId.toString(), true);
+    }
   }
 
   /**

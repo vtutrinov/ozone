@@ -42,7 +42,7 @@ public class TestOMHAMetrics {
   @Test
   public void testGetMetricsWithLeader() {
     leaderId = NODE_ID;
-    omhaMetrics = OMHAMetrics.create(NODE_ID, leaderId);
+    omhaMetrics = OMHAMetrics.create(NODE_ID, leaderId, null);
 
     omhaMetrics.getMetrics(METRICS_COLLECTOR, true);
     Assertions.assertEquals(1,
@@ -52,7 +52,7 @@ public class TestOMHAMetrics {
   @Test
   public void testGetMetricsWithFollower() {
     leaderId = "om" + RandomStringUtils.randomNumeric(5);
-    omhaMetrics = OMHAMetrics.create(NODE_ID, leaderId);
+    omhaMetrics = OMHAMetrics.create(NODE_ID, leaderId, null);
 
     omhaMetrics.getMetrics(METRICS_COLLECTOR, true);
     Assertions.assertEquals(0,
