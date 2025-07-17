@@ -166,6 +166,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -2597,6 +2598,16 @@ public class RpcClient implements ClientProtocol {
         .setBucketName(obj.getBucketName())
         .setKeyName(keyName);
     ozoneManagerClient.setTimes(builder.build(), mtime, atime);
+  }
+
+  @Override
+  public void removeRaftGroups(List<UUID> raftGroupIds) throws IOException {
+    ozoneManagerClient.removeRaftGroups(raftGroupIds);
+  }
+
+  @Override
+  public void createRaftGroups(List<UUID> raftGroupIds) throws IOException {
+    ozoneManagerClient.createRaftGroups(raftGroupIds);
   }
 
   private static ExecutorService createThreadPoolExecutor(

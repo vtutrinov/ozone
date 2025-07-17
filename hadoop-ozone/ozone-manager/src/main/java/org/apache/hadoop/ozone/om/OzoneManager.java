@@ -104,6 +104,8 @@ import org.apache.hadoop.ozone.audit.AuditLoggerType;
 import org.apache.hadoop.ozone.audit.AuditMessage;
 import org.apache.hadoop.ozone.audit.Auditor;
 import org.apache.hadoop.ozone.audit.OMAction;
+import org.apache.hadoop.ozone.client.OzoneClient;
+import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.common.Storage.StorageState;
 import org.apache.hadoop.ozone.common.ha.ratis.RatisSnapshotInfo;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
@@ -210,6 +212,7 @@ import org.apache.ratis.protocol.RaftId;
 import org.apache.ratis.protocol.RaftPeer;
 import org.apache.ratis.protocol.RaftPeerId;
 import org.apache.ratis.protocol.exceptions.AlreadyExistsException;
+import org.apache.ratis.protocol.exceptions.GroupMismatchException;
 import org.apache.ratis.server.RaftServer;
 import org.apache.ratis.server.protocol.TermIndex;
 import org.apache.ratis.statemachine.StateMachine;
@@ -1856,28 +1859,25 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
                 .filter(groupId -> !groupId.equals(omRatisServer.getCurrentRaftGroupId()))
                 .collect(Collectors.toList());
 
-        ClientId clientID = ClientId.randomId();
         List<UUID> collect = bucketGroupIds.stream()
                 .map(RaftId::getUuid)
                 .collect(Collectors.toList());
 
-        OmTransport omTransport;
+        OzoneClient ozoneClient;
         try {
-          omTransport = new Hadoop3OmTransportFactory().createOmTransport(configuration, null, getOMServiceId());
+          ozoneClient = OzoneClientFactory.getRpcClient(configuration);
         } catch (IOException e) {
           throw new RuntimeException(e);
         }
-        OzoneManagerProtocolClientSideTranslatorPB omClientSideTranslator =
-                new OzoneManagerProtocolClientSideTranslatorPB(
-                omTransport, clientID.toString(), configuration, () -> omTransport
-        );
         try {
           if (!collect.isEmpty()) {
-            omClientSideTranslator.removeRaftGroups(collect);
+            ozoneClient.getProxy().removeRaftGroups(collect);
           }
         } catch (IOException e) {
           LOG.error("Error removing Raft group: {}", collect, e);
-          throw new RuntimeException(e);
+          if (!(e instanceof GroupMismatchException)) {
+            throw new RuntimeException(e);
+          }
         }
 
         boolean multiRaftEnabled = isMultiRaftEnabled();
@@ -1900,7 +1900,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
           }
           if (!raftGroupIdsToCreate.isEmpty()) {
             try {
-              omClientSideTranslator.createRaftGroups(raftGroupIdsToCreate);
+              ozoneClient.getProxy().createRaftGroups(raftGroupIdsToCreate);
               metadataManager.getMultiRaftInfoTable().put("minGroupIndex", maxGroupIndex);
             } catch (IOException e) {
               throw new RuntimeException(e);

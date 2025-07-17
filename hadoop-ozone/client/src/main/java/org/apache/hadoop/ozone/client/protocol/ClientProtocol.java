@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import javax.annotation.Nonnull;
 import org.apache.hadoop.crypto.key.KeyProvider;
@@ -1195,4 +1196,9 @@ public interface ClientProtocol {
    * */
   void setTimes(OzoneObj obj, String keyName, long mtime, long atime)
       throws IOException;
+
+  void removeRaftGroups(List<UUID> raftGroupIds) throws IOException;
+
+  void createRaftGroups(List<UUID> raftGroupIds) throws IOException;
+
 }
