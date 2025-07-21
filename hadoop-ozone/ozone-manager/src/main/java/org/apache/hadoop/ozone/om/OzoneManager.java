@@ -312,6 +312,8 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_METRICS_SAVE_INTE
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_METRICS_SAVE_INTERVAL_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_NAMESPACE_STRICT_S3;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_NAMESPACE_STRICT_S3_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_S3_GPRC_SERVER_ENABLED;
@@ -526,6 +528,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private final Map<RaftGroupId, RaftGroup> omRaftGroups = new ConcurrentHashMap<>();
   private final Map<RaftGroupId, StateMachine> omStateMachines = new ConcurrentHashMap<>();
   private final Map<RaftGroupId, AtomicReference<TransactionInfo>> omTransactionInfos = new HashMap<>();
+  private final SafeModeManager omSafeModeManager;
+  private final OmStatusChecker omStatusChecker;
 
   @SuppressWarnings("methodlength")
   private OzoneManager(OzoneConfiguration conf, StartupOption startupOption)
@@ -766,6 +770,12 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
     bucketUtilizationMetrics = BucketUtilizationMetrics.create(metadataManager);
     multiRaftTerm = Optional.fromNullable(metadataManager.getMultiRaftInfoTable().get("term")).or(0L);
+    omSafeModeManager = new SafeModeManager(configuration);
+    omStatusChecker = new OmStatusChecker(this);
+  }
+
+  public boolean areAllOMsOnline() {
+    return omStatusChecker.areAllOMsOnline();
   }
 
   public void removeRaftGroupForBucket(RaftGroupId raftGroupId) {
@@ -896,6 +906,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     try {
       RaftGroup raftGroup = initBucketResult.getRaftGroup();
       omRatisServer.addBucketRaftGroup(raftGroup);
+      if (bucketRaftGroupsCreated()) {
+        omSafeModeManager.onBucketRaftGroupsReady();
+      }
     } catch (AlreadyExistsException ex) {
       // do nothing
     } catch (IOException e) {
@@ -904,6 +917,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         throw new RuntimeException(e);
       }
     }
+  }
+
+  private boolean bucketRaftGroupsCreated() {
+    return omRaftGroups.size() == configuration.getInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
+        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT) + 1;
   }
 
   /**
@@ -1830,12 +1848,16 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
 
     omState = State.RUNNING;
-    if (isRatisEnabled) {
-      initBucketRaftGroups();
-    }
+//    if (isRatisEnabled) {
+//      initBucketRaftGroups();
+//    }
   }
 
-  private void initBucketRaftGroups() throws IOException {
+  public SafeModeManager getSafeModeManager() {
+    return omSafeModeManager;
+  }
+
+  public void initBucketRaftGroups() throws IOException {
 
     boolean isNeedRemoveStaleRaftGroups = !isMultiRaftEnabled() && getStateMachines().size() != 1;
     boolean isNeedRecreateRaftGroupsWhileChangedGroupsAmount = isMultiRaftEnabled() &&
@@ -1915,6 +1937,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       LOG.trace(
               "Try to seed Ratis group counter {} - {}", getStateMachines(), omRaftGroupManager.getBucketRaftGroups()
       );
+      if (omSafeModeManager.isInSafeMode()) {
+        omSafeModeManager.onBucketRaftGroupsReady();
+        omSafeModeManager.onLeaderElected();
+      }
       if (omRaftGroupManager.getBucketRaftGroups().size() != getStateMachines().size()) {
         omRaftGroupManager.addGroupIdListToRaftGroupCounter(getStateMachines().keySet()
                 .stream()
@@ -2012,9 +2038,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       );
       omRaftGroupManager =
               new OmRaftGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
-      if (isMultiRaftEnabled) {
-        initBucketRaftGroups();
-      }
+//      if (isMultiRaftEnabled) {
+//        initBucketRaftGroups();
+//      }
     }
   }
 

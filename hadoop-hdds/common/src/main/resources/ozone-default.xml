@@ -4367,4 +4367,15 @@
       Use isolated http endpoint (/prom_ratis) for ratis dropwizard metrics.
     </description>
   </property>
+  <property>
+    <name>ozone.om.safemode.enabled</name>
+    <value>false</value>
+    <tag>OM, OZONE</tag>
+    <description>
+        Enable/disable OzoneManager safemode. If enabled, OzoneManager will not allow any write operations
+        until it is exited from safemode.
+        This used in case of activated multiraft feature. OM will stay in safemode until OM main raft group elects a leader and all the expected
+        bucket raft groups are created
+    </description>
+  </property>
 </configuration>

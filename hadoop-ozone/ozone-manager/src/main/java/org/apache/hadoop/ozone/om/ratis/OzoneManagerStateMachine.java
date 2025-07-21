@@ -183,6 +183,14 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     } else {
       ozoneManager.getOmhaMetrics().defineRaftGroupLeader(groupMemberId.getGroupId(), newLeaderId.toString(), true);
     }
+    ozoneManager.getSafeModeManager().onLeaderElected();
+    if (ozoneManager.areAllOMsOnline()) {
+      try {
+        ozoneManager.initBucketRaftGroups(); // TODO submit request to delete bucket raft group and create new ones
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
   }
 
   /**
@@ -551,6 +559,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   @Override
   public void notifyNotLeader(Collection<TransactionContext> pendingEntries)
       throws IOException {
+    ozoneManager.getSafeModeManager().onLeadershipLost(); // TODO is is necessary?
   }
 
   @Override
@@ -600,12 +609,6 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
           handler.handleWriteRequest(request, trxLogIndex);
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
       OMResponse omResponse = omClientResponse.getOMResponse();
-      if (request.hasCreateBucketRequest() && ozoneManager.isMultiRaftEnabled()) {
-        String volumeName = request.getCreateBucketRequest().getBucketInfo().getVolumeName();
-        String bucketName = request.getCreateBucketRequest().getBucketInfo().getBucketName();
-        LOG.trace("Creating raft group while runCommand {}", bucketName);
-        ozoneManager.createRaftGroupForBucket(volumeName, bucketName);
-      }
       if (omLockDetails != null) {
         return omResponse.toBuilder()
             .setOmLockDetails(omLockDetails.toProtobufBuilder()).build();

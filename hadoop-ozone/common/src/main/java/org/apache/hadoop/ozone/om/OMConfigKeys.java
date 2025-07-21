@@ -624,4 +624,9 @@ public final class OMConfigKeys {
   public static final String OZONE_OM_MULTI_RAFT_BUCKET_ENABLED =
           "ozone.om.multi.raft.bucket.enabled";
   public static final boolean OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT = false;
+
+  public static final String OZONE_OM_SAFE_MODE_ENABLED = "ozone.om.safemode.enabled";
+
+  public static final boolean OZONE_OM_SAFE_MODE_ENABLED_DEFAULT = true;
+
 }
