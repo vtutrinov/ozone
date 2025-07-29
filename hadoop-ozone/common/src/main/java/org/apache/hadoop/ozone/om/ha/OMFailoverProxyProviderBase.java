@@ -45,6 +45,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Collections;
 
 /**
  * A failover proxy provider base abstract class.
@@ -411,7 +412,8 @@ public abstract class OMFailoverProxyProviderBase<T> implements
   }
 
   protected synchronized void setOmNodeIDList(List<String> omNodeIDList) {
-    this.omNodeIDList = omNodeIDList;
+    Collections.shuffle(omNodeIDList);
+    this.omNodeIDList = Collections.unmodifiableList(omNodeIDList);
   }
 
   protected synchronized List<String> getOmNodeIDList() {

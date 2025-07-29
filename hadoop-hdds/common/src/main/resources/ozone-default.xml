@@ -4352,6 +4352,14 @@
     </description>
   </property>
   <property>
+    <name>ozone.om.follower.read.enabled</name>
+    <value>false</value>
+    <tag>OZONE, OM</tag>
+    <description>
+      Enable/disable read from OM followers, disabled by default.
+    </description>
+  </property>
+  <property>
     <name>ozone.ratis.dropwizard.metrics.use.isolated.http.endpoint</name>
     <value>false</value>
     <tag>OM. DATANODE, SCM</tag>

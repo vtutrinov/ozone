@@ -259,6 +259,11 @@ public final class OMConfigKeys {
   public static final boolean
       OZONE_OM_RATIS_SERVER_ELECTION_PRE_VOTE_DEFAULT = true;
 
+  public static final String OZONE_OM_FOLLOWER_READ_ENABLED =
+      "ozone.om.follower.read.enabled";
+  public static final boolean
+      OZONE_OM_FOLLOWER_READ_ENABLED_DEFAULT = false;
+
 
   // OM SnapshotProvider configurations
   public static final String OZONE_OM_RATIS_SNAPSHOT_DIR =

@@ -22,6 +22,7 @@ import static org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils.crea
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type.PrepareStatus;
 import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 
+import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.ratis.protocol.RaftGroupId;
 
 import java.io.IOException;
@@ -44,7 +45,6 @@ import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
 import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerProtocolPB;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerDoubleBuffer;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
-import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
 import org.apache.hadoop.ozone.om.request.validation.RequestValidations;
@@ -264,18 +264,27 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
         () -> finalOmClientRequest.preExecute(ozoneManager));
   }
 
+  private boolean isFollowerReadEnabled() {
+    return ozoneManager.getConfiguration().getBoolean(OMConfigKeys.OZONE_OM_FOLLOWER_READ_ENABLED,
+            OMConfigKeys.OZONE_OM_FOLLOWER_READ_ENABLED_DEFAULT);
+  }
+
   private OMResponse submitReadRequestToOM(OMRequest request)
-      throws ServiceException {
-    RaftServerStatus raftServerStatus = omRatisServer.checkOmLeaderStatus();
-    if (raftServerStatus == LEADER_AND_READY || request.getCmdType().equals(PrepareStatus)) {
+          throws ServiceException {
+    if (isFollowerReadEnabled()) {
       return handler.handleReadRequest(request);
     } else {
-      throw createLeaderErrorException(omRatisServer.getCurrentRaftGroupId(), raftServerStatus);
+      OzoneManagerRatisServer.RaftServerStatus raftServerStatus = omRatisServer.checkOmLeaderStatus();
+      if (raftServerStatus == LEADER_AND_READY || request.getCmdType().equals(PrepareStatus)) {
+        return handler.handleReadRequest(request);
+      } else {
+        throw createLeaderErrorException(omRatisServer.getCurrentRaftGroupId(), raftServerStatus);
+      }
     }
   }
 
   private ServiceException createLeaderErrorException(
-          RaftGroupId raftGroupId, RaftServerStatus raftServerStatus) {
+          RaftGroupId raftGroupId, OzoneManagerRatisServer.RaftServerStatus raftServerStatus) {
     if (raftServerStatus == NOT_LEADER) {
       return new ServiceException(omRatisServer.newOMNotLeaderException(raftGroupId));
     } else {
