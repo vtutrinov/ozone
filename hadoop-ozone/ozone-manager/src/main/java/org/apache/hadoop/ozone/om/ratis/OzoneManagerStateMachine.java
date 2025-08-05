@@ -184,13 +184,6 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
       ozoneManager.getOmhaMetrics().defineRaftGroupLeader(groupMemberId.getGroupId(), newLeaderId.toString(), true);
     }
     ozoneManager.getSafeModeManager().onLeaderElected();
-    if (ozoneManager.areAllOMsOnline()) {
-      try {
-        ozoneManager.initBucketRaftGroups(); // TODO submit request to delete bucket raft group and create new ones
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    }
   }
 
   /**

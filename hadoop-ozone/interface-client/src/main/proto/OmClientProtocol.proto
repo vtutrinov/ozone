@@ -150,6 +150,7 @@ enum Type {
   GetContentSummary = 143;
   CreateBucketRaftGroups = 144;
   RemoveBucketRaftGroups = 145;
+  GetRaftGroupHealthState = 146;
 }
 
 enum SafeMode {
@@ -291,6 +292,8 @@ message OMRequest {
 
   optional CreateBucketRaftGroupsRequest    CreateBucketRaftGroupsRequest         = 144;
   optional RemoveBucketRaftGroupsRequest    RemoveBucketRaftGroupsRequest         = 145;
+  optional GetRaftGroupHealthStateRequest   getRaftGroupHealthStateRequest      = 146;
+  optional hadoop.hdds.UUID raftGroupId = 147; // Used for raft group health state
 }
 
 message OMResponse {
@@ -417,6 +420,7 @@ message OMResponse {
   optional GetContentSummaryResponse         getContentSummaryResponse     = 143;
   optional CreateBucketRaftGroupsResponse    CreateBucketRaftGroupsResponse = 144;
   optional RemoveBucketRaftGroupsResponse    RemoveBucketRaftGroupsResponse = 145;
+  optional GetRaftGroupHealthStateResponse   getRaftGroupHealthStateResponse     = 146;
 }
 
 enum Status {
@@ -2171,6 +2175,21 @@ message GetContentSummaryResponse {
   optional uint64 directoryCount = 3;
   optional uint64 spaceConsumed = 4;
 }
+
+message PeerHealthInfo {
+  required string peerId = 1;
+  required bool isHealthy = 2;
+  required int64 lastRpcResponseTimeMs = 3;
+}
+
+message GetRaftGroupHealthStateRequest {
+  required hadoop.hdds.UUID groupId = 1;
+}
+
+message GetRaftGroupHealthStateResponse {
+  repeated PeerHealthInfo peerHealthInfo = 1;
+}
+
 /**
  The OM service that takes care of Ozone namespace.
 */

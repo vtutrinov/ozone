@@ -2643,6 +2643,14 @@ public final class OzoneManagerProtocolClientSideTranslatorPB
     return handleError(submitRequest(omRequest)).getRemoveBucketRaftGroupsResponse();
   }
 
+  @Override
+  public OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse getRaftGroupHealthState(OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest request) throws IOException {
+    OMRequest omRequest = createOMRequest(Type.GetRaftGroupHealthState)
+        .setGetRaftGroupHealthStateRequest(request)
+        .build();
+    return handleError(submitRequest(omRequest)).getGetRaftGroupHealthStateResponse();
+  }
+
   private SafeMode toProtoBuf(SafeModeAction action) {
     switch (action) {
     case ENTER:

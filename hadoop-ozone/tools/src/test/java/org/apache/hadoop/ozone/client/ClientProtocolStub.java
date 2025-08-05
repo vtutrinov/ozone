@@ -72,6 +72,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static java.util.Collections.emptyList;
 import static java.util.stream.Collectors.toList;
@@ -754,6 +755,21 @@ public class ClientProtocolStub implements ClientProtocol {
 
   @Override
   public void setTimes(OzoneObj obj, String keyName, long mtime, long atime) {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @Override
+  public OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse getRaftGroupHealthState(OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest request) throws IOException {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @Override
+  public void removeRaftGroups(List<UUID> raftGroupIds) throws IOException {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @Override
+  public void createRaftGroups(List<UUID> raftGroupIds) throws IOException {
     throw new UnsupportedOperationException("Not supported yet.");
   }
 }

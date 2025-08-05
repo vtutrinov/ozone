@@ -54,6 +54,8 @@ import org.apache.hadoop.hdds.utils.db.Table;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.ozone.compaction.log.CompactionLogEntry;
+import org.apache.ratis.proto.RaftProtos;
+import org.apache.ratis.protocol.RaftGroupId;
 
 /**
  * OM metadata manager interface.
@@ -458,6 +460,7 @@ public interface OMMetadataManager extends DBStoreHAManager {
    */
   Table<String, Long> getMultiRaftInfoTable();
 
+  Table<RaftGroupId, RaftProtos.RaftConfigurationProto> getRaftGroupConfigurationTable();
   /**
    * Return table mapped to the specified table name.
    * @param tableName

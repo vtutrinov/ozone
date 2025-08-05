@@ -64,6 +64,7 @@ import org.apache.hadoop.ozone.om.codec.TokenIdentifierCodec;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes;
 import org.apache.hadoop.ozone.om.helpers.ListKeysResult;
+import org.apache.hadoop.ozone.om.helpers.OMRatisHelper;
 import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.apache.hadoop.ozone.om.helpers.OmDBAccessIdInfo;
 import org.apache.hadoop.ozone.om.helpers.OmDBUserPrincipalInfo;
@@ -116,6 +117,8 @@ import static org.apache.hadoop.ozone.om.snapshot.SnapshotUtils.checkSnapshotDir
 
 import org.apache.hadoop.util.Time;
 import org.apache.ozone.compaction.log.CompactionLogEntry;
+import org.apache.ratis.proto.RaftProtos;
+import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.util.ExitUtils;
 import org.eclipse.jetty.util.StringUtil;
 import org.slf4j.Logger;
@@ -238,6 +241,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
       "compactionLogTable";
   public static final String MULTI_RAFT_INFO_TABLE =
       "multiRaftInfoTable";
+  public static final String RAFT_GROUP_CONFIG_TABLE = "raftGroupConfigTable";
   static final String[] ALL_TABLES = new String[] {
       USER_TABLE,
       VOLUME_TABLE,
@@ -261,7 +265,8 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
       SNAPSHOT_INFO_TABLE,
       SNAPSHOT_RENAMED_TABLE,
       COMPACTION_LOG_TABLE,
-      MULTI_RAFT_INFO_TABLE
+      MULTI_RAFT_INFO_TABLE,
+      RAFT_GROUP_CONFIG_TABLE
   };
 
   private DBStore store;
@@ -297,6 +302,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   private boolean ignorePipelineinKey;
   private Table deletedDirTable;
   private Table<String, Long> multiRaftInfoTable;
+  private Table<RaftGroupId, RaftProtos.RaftConfigurationProto> raftGroupConfigurationTable;
 
   // Table-level locks that protects table read/write access. Note:
   // Don't use this lock for tables other than deletedTable and deletedDirTable.
@@ -634,6 +640,9 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
         .addTable(SNAPSHOT_RENAMED_TABLE)
         .addTable(COMPACTION_LOG_TABLE)
         .addTable(MULTI_RAFT_INFO_TABLE)
+        .addTable(RAFT_GROUP_CONFIG_TABLE)
+        .addCodec(RaftGroupId.class, OMRatisHelper.getRaftGroupIdRocksDbCodec())
+        .addCodec(RaftProtos.RaftConfigurationProto.class, OMRatisHelper.getRaftConfigurationRocksDbCodec())
         .addCodec(OzoneTokenIdentifier.class, TokenIdentifierCodec.get())
         .addCodec(OmKeyInfo.class, OmKeyInfo.getCodec(true))
         .addCodec(RepeatedOmKeyInfo.class, RepeatedOmKeyInfo.getCodec(true))
@@ -770,6 +779,12 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
     multiRaftInfoTable = this.store.getTable(MULTI_RAFT_INFO_TABLE,
         String.class, Long.class);
     checkTableStatus(multiRaftInfoTable, MULTI_RAFT_INFO_TABLE,
+        addCacheMetrics);
+
+
+    raftGroupConfigurationTable = this.store.getTable(RAFT_GROUP_CONFIG_TABLE,
+        RaftGroupId.class, RaftProtos.RaftConfigurationProto.class);
+    checkTableStatus(raftGroupConfigurationTable, RAFT_GROUP_CONFIG_TABLE,
         addCacheMetrics);
   }
 
@@ -1958,6 +1973,12 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   public Table<String, Long> getMultiRaftInfoTable() {
     return multiRaftInfoTable;
   }
+
+  @Override
+  public Table<RaftGroupId, RaftProtos.RaftConfigurationProto> getRaftGroupConfigurationTable() {
+    return raftGroupConfigurationTable;
+  }
+
   /**
    * Get Snapshot Chain Manager.
    *

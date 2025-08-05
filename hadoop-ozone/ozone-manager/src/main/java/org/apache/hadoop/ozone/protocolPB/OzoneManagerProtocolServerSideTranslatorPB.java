@@ -24,9 +24,11 @@ import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.ratis.protocol.RaftGroupId;
 
 import java.io.IOException;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -225,7 +227,11 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
         // To validate credentials we have already verified leader status.
         // This will skip of checking leader status again if request has S3Auth.
         if (!s3Auth) {
-          OzoneManagerRatisUtils.checkLeaderStatus(volumeName, bucketName, ozoneManager);
+          if (request.hasRaftGroupId()) {
+            OzoneManagerRatisUtils.checkLeaderStatus(omClientRequest.getWriteRaftGroup(), ozoneManager);
+          } else {
+            OzoneManagerRatisUtils.checkLeaderStatus(volumeName, bucketName, ozoneManager);
+          }
         }
         // TODO: Note: Due to HDDS-6055, createClientRequest() could now
         //  return null, which triggered the findbugs warning.
@@ -244,6 +250,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
         try {
           ozoneManager.getSafeModeManager().checkSafeMode();
         } catch (OMInSafeModeException ex) {
+          LOG.error("OM is in safe mode, cannot process request: {}", request.getCmdType(), ex);
           throw new ServiceException(ex);
         }
         response = omRatisServer.submitBucketWriteRequest(
@@ -309,9 +316,9 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
     }
 
     OMNotLeaderException notLeaderException =
-        raftLeaderId == null ? new OMNotLeaderException(raftPeerId) :
+        raftLeaderId == null ? new OMNotLeaderException(raftPeerId, omRatisServer.getCurrentRaftGroupId()) :
             new OMNotLeaderException(raftPeerId, raftLeaderId,
-                raftLeaderAddress);
+                raftLeaderAddress, omRatisServer.getCurrentRaftGroupId());
 
     LOG.debug(notLeaderException.getMessage());
 

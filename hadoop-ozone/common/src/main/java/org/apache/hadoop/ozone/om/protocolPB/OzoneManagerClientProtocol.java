@@ -21,6 +21,7 @@ package org.apache.hadoop.ozone.om.protocolPB;
 import org.apache.hadoop.ozone.om.protocol.OzoneManagerProtocol;
 import org.apache.hadoop.ozone.om.protocol.S3Auth;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 
 import java.io.IOException;
 import java.util.List;
@@ -46,4 +47,8 @@ public interface OzoneManagerClientProtocol extends OzoneManagerProtocol {
   OzoneManagerProtocolProtos.CreateBucketRaftGroupsResponse createRaftGroups(List<UUID> groupIds) throws IOException;
 
   OzoneManagerProtocolProtos.RemoveBucketRaftGroupsResponse removeRaftGroups(List<UUID> groupIds) throws IOException;
+
+  GetRaftGroupHealthStateResponse getRaftGroupHealthState(
+      OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest request)
+      throws IOException;
 }

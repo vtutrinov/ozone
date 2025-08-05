@@ -183,7 +183,7 @@ public class TestOzoneDelegationTokenSecretManager {
   public void testLeadershipCheckinRetrievePassword() throws Exception {
     secretManager = createSecretManager(conf, TOKEN_MAX_LIFETIME,
         expiryTime, TOKEN_REMOVER_SCAN_INTERVAL);
-    Mockito.doThrow(new OMNotLeaderException(RaftPeerId.valueOf("om")))
+    Mockito.doThrow(new OMNotLeaderException(RaftPeerId.valueOf("om"), null))
         .when(om).checkOmLeaderStatus();
     OzoneTokenIdentifier identifier = new OzoneTokenIdentifier();
     try {

@@ -89,6 +89,8 @@ public class BucketStateMachine extends BaseStateMachine {
   public static final Logger LOG =
           LoggerFactory.getLogger(BucketStateMachine.class);
 
+  public static final Logger LOG_MULTI_RAFT = LoggerFactory.getLogger("multiraft");
+
   public BucketStateMachine(RaftGroupId raftGroupId, OzoneManager om) throws IOException {
     this.ozoneManager = om;
     this.ozoneManagerDoubleBuffer =  buildDoubleBufferForRatis();
@@ -425,9 +427,17 @@ public class BucketStateMachine extends BaseStateMachine {
   @Override
   public void notifyLeaderChanged(RaftGroupMemberId groupMemberId,
                                   RaftPeerId newLeaderId) {
-    LOG.trace("Change leader in group {}. New leader {}", groupMemberId.getGroupId(), newLeaderId);
+    LOG_MULTI_RAFT.info("Change leader in group {}. New leader {}", groupMemberId.getGroupId(), newLeaderId);
     // Initialize OMHAMetrics
-    ozoneManager.getOmhaMetrics().defineRaftGroupLeader(groupMemberId.getGroupId(), newLeaderId.toString(), false);
+    if (ozoneManager.getOmhaMetrics() == null) {
+      LOG_MULTI_RAFT.info("OM ha metrics are not ready, put tmp leader {} {}", groupMemberId.getGroupId(),
+          newLeaderId.toString());
+      ozoneManager.getTmpLeadersMap().put(groupMemberId.getGroupId(), newLeaderId.toString());
+    } else {
+      LOG_MULTI_RAFT.info("OM ha metrics are ready, put leader to metrics {} {}", groupMemberId.getGroupId(),
+          newLeaderId.toString());
+      ozoneManager.getOmhaMetrics().defineRaftGroupLeader(groupMemberId.getGroupId(), newLeaderId.toString(), false);
+    }
   }
 
   /**

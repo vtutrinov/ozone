@@ -4369,7 +4369,7 @@
   </property>
   <property>
     <name>ozone.om.safemode.enabled</name>
-    <value>false</value>
+    <value>true</value>
     <tag>OM, OZONE</tag>
     <description>
         Enable/disable OzoneManager safemode. If enabled, OzoneManager will not allow any write operations
