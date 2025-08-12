@@ -1964,6 +1964,16 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     ozoneClient.getProxy().createRaftGroups(raftGroupIdsToCreate);
   }
 
+  public void removeRaftGroups(List<UUID> raftGroupIdsToDelete) throws IOException {
+    OzoneClient ozoneClient;
+    try {
+      ozoneClient = OzoneClientFactory.getRpcClient(configuration);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+    ozoneClient.getProxy().removeRaftGroups(raftGroupIdsToDelete);
+  }
+
   private List<UUID> getBucketRaftGroupIds() {
     int count = configuration.getInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
         OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);

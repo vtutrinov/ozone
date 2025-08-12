@@ -46,6 +46,7 @@ import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketAddAclRequest;
 import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketRemoveAclRequest;
 import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketSetAclRequest;
 import org.apache.hadoop.ozone.om.request.file.OMRecoverLeaseRequest;
+import org.apache.hadoop.ozone.om.request.group.OMBucketRaftGroupsStateUpdateRequest;
 import org.apache.hadoop.ozone.om.request.group.OMCreateRaftGroupsRequest;
 import org.apache.hadoop.ozone.om.request.group.OMRemoveRaftGroupsRequest;
 import org.apache.hadoop.ozone.om.request.key.OMDirectoriesPurgeRequestWithFSO;
@@ -344,6 +345,8 @@ public final class OzoneManagerRatisUtils {
       return new OMEchoRPCWriteRequest(omRequest);
     case AbortExpiredMultiPartUploads:
       return new S3ExpiredMultipartUploadsAbortRequest(omRequest);
+    case BucketRaftGroupsStateChanged:
+      return new OMBucketRaftGroupsStateUpdateRequest(omRequest);
     default:
       throw new OMException("Unrecognized write command type request "
           + cmdType, OMException.ResultCodes.INVALID_REQUEST);

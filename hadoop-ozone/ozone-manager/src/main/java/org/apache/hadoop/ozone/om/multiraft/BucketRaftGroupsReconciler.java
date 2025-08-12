@@ -7,13 +7,19 @@ import org.apache.hadoop.hdds.utils.BackgroundTaskQueue;
 import org.apache.hadoop.hdds.utils.BackgroundTaskResult;
 import org.apache.hadoop.hdds.utils.db.Table;
 import org.apache.hadoop.hdds.utils.db.TableIterator;
+import org.apache.hadoop.ipc.ClientId;
+import org.apache.hadoop.ipc.RPC;
+import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketRaftGroupsStateChangedRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMResponse;
 import org.apache.ratis.proto.RaftProtos.RaftConfigurationProto;
 import org.apache.ratis.protocol.RaftGroup;
 import org.apache.ratis.protocol.RaftGroupId;
@@ -33,6 +39,7 @@ import java.util.stream.Collectors;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUPS_RECONCILER_INTERVAL;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUPS_RECONCILER_INTERVAL_DEFAULT;
 import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER;
+import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type.BucketRaftGroupsStateChanged;
 
 public class BucketRaftGroupsReconciler extends BackgroundService {
 
@@ -52,6 +59,7 @@ public class BucketRaftGroupsReconciler extends BackgroundService {
     public BackgroundTaskResult call() throws Exception {
       OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
       RaftGroup mainRaftGroup = omRatisServer.getCurrentRaftGroup();
+      boolean raftGroupsReconfigured = false;
       if (!omRatisServer.checkLeaderStatus(mainRaftGroup.getGroupId()).equals(NOT_LEADER)) {
         Map<RaftGroupId, RaftConfigurationProto> expectedRaftGroupsConfiguration = new HashMap<>();
         try (TableIterator<RaftGroupId, ? extends Table.KeyValue<RaftGroupId, RaftConfigurationProto>>
@@ -127,12 +135,42 @@ public class BucketRaftGroupsReconciler extends BackgroundService {
           }
         }
         if (!groupsToBeReconfigured.isEmpty()) {
+          ozoneManager.removeRaftGroups(groupsToBeReconfigured);
           ozoneManager.createRaftGroups(groupsToBeReconfigured);
+          raftGroupsReconfigured = true;
         }
         if (!expectedRaftGroupsConfiguration.isEmpty()) {
           List<UUID> ids = expectedRaftGroupsConfiguration.keySet().stream()
               .map(RaftGroupId::getUuid).collect(Collectors.toList());
           ozoneManager.createRaftGroups(ids);
+          raftGroupsReconfigured = true;
+        }
+        if (raftGroupsReconfigured) {
+          try {
+            byte[] clientId = omRatisServer.getCurrentClientId().toByteString().toByteArray();
+            int callId = 1;
+            Server.Call fakeCall = new Server.Call(
+                callId,
+                0,
+                null,
+                null,
+                RPC.RpcKind.RPC_BUILTIN,
+                clientId
+            );
+            RPC.Server.getCurCall().set(fakeCall);
+            BucketRaftGroupsStateChangedRequest bucketRaftGroupsStateChangedRequest =
+                BucketRaftGroupsStateChangedRequest.newBuilder()
+                    .setStateChangedIndex(ozoneManager.getCurrentMultiRaftTerm() + 1)
+                    .build();
+            OMRequest omRequest = OMRequest.newBuilder()
+                .setBucketRaftGroupsStateChangedRequest(bucketRaftGroupsStateChangedRequest)
+                .setCmdType(BucketRaftGroupsStateChanged)
+                .setClientId(omRatisServer.getCurrentClientId().toString())
+                .build();
+            OMResponse omResponse = omRatisServer.submitRequest(omRequest);
+          } finally {
+            RPC.Server.getCurCall().remove();
+          }
         }
       }
       return BackgroundTaskResult.EmptyTaskResult.newResult();
