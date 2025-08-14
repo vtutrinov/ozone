@@ -24,10 +24,13 @@ import org.apache.ratis.proto.RaftProtos.RaftConfigurationProto;
 import org.apache.ratis.protocol.RaftGroup;
 import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.protocol.RaftPeerId;
+import org.apache.ratis.protocol.SetConfigurationRequest;
 import org.apache.ratis.server.DivisionInfo;
 import org.apache.ratis.util.LifeCycle;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -81,7 +84,6 @@ public class BucketRaftGroupsReconciler extends BackgroundService {
             RaftPeerId leaderId = divisionInfo.getLeaderId();
             if (leaderId == null || divisionInfo.getLifeCycleState().equals(LifeCycle.State.CLOSED)) {
               LOG.warn("Raft group {} is closed, removing it.", groupId);
-              omRatisServer.removeBucketRaftGroup(groupId);
               groupsToBeReconfigured.add(groupId.getUuid());
             } else {
               RaftPeerId raftGroupLeaderId = omRatisServer.getServer().getDivision(groupId).getInfo().getLeaderId();
@@ -131,10 +133,20 @@ public class BucketRaftGroupsReconciler extends BackgroundService {
             expectedRaftGroupsConfiguration.remove(groupId);
           } else {
             LOG.warn("Raft group {} is not expected, removing it.", groupId);
-            omRatisServer.removeBucketRaftGroup(groupId);
+            ozoneManager.removeRaftGroupForBucket(groupId);
           }
         }
         if (!groupsToBeReconfigured.isEmpty()) {
+          groupsToBeReconfigured.forEach(raftGroupIdUUID -> {
+            try {
+              omRatisServer.getServer().setConfiguration(
+                  new SetConfigurationRequest(omRatisServer.getCurrentClientId(), omRatisServer.getRaftPeerId(),
+                      RaftGroupId.valueOf(raftGroupIdUUID), OzoneManagerRatisServer.nextCallId(),
+                      Collections.singletonList(omRatisServer.getLeader())));
+            } catch (IOException e) {
+              LOG.error("An error occurred on changing raft group configuration fro raft group {}", raftGroupIdUUID, e);
+            }
+          });
           ozoneManager.removeRaftGroups(groupsToBeReconfigured);
           ozoneManager.createRaftGroups(groupsToBeReconfigured);
           raftGroupsReconfigured = true;
@@ -148,9 +160,8 @@ public class BucketRaftGroupsReconciler extends BackgroundService {
         if (raftGroupsReconfigured) {
           try {
             byte[] clientId = omRatisServer.getCurrentClientId().toByteString().toByteArray();
-            int callId = 1;
             Server.Call fakeCall = new Server.Call(
-                callId,
+                (int) OzoneManagerRatisServer.nextCallId(),
                 0,
                 null,
                 null,
