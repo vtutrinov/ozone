@@ -538,6 +538,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private final OmStatusChecker omStatusChecker;
   private final Map<RaftGroupId, String> tmpLeadersMap = new HashMap<>();
   private final BucketRaftGroupsReconciler bucketRaftGroupsreconciler;
+  private final List<String> listOfRaftGroupToReset;
 
   @SuppressWarnings("methodlength")
   private OzoneManager(OzoneConfiguration conf, StartupOption startupOption)
@@ -751,6 +752,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     this.omRatisSnapshotInfo = new RatisSnapshotInfo();
 
     initializeRatisDirs(conf);
+    listOfRaftGroupToReset = cleanUpRaftGroups(OzoneManagerRatisUtils.getOMRatisDirectory(configuration), omRaftGroupName());
     initializeRatisServer(isBootstrapping || isForcedBootstrapping);
     checkOmBucketRaftGroupsPersistedState();
 
@@ -1733,8 +1735,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
   }
 
-  private void cleanUpRaftGroups(String ratisDir, RaftGroupId exceptRaftGroupDir) {
+  private List<String> cleanUpRaftGroups(String ratisDir, RaftGroupId exceptRaftGroupDir) {
     File ratisMetadataDir = new File(ratisDir);
+    List<String> listOfRaftGroupsToReset = new ArrayList<>();
     if (ratisMetadataDir.exists()) {
       String[] list = ratisMetadataDir.list((dir, name) -> {
         String exceptRaftGroupDirName = exceptRaftGroupDir.getUuid().toString();
@@ -1744,8 +1747,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         File file = new File(ratisMetadataDir, s);
         try {
           deleteDirectory(file);
-          RaftGroupId raftGroupId = RaftGroupId.valueOf(UUID.fromString(s));
-          getMetadataManager().getTransactionInfoTable().delete(TRANSACTION_INFO_KEY + raftGroupId.toString());
+          listOfRaftGroupsToReset.add(s);
         } catch (IOException e) {
           LOG.error("Can't delete directory {} in ratis metadata dir {}",
               file.getAbsolutePath(), ratisMetadataDir.getAbsolutePath(), e);
@@ -1756,6 +1758,18 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       } catch (IOException e) {
         LOG.warn("Something went wrong on flushing db", e);
         throw new RuntimeException(e);
+      }
+    }
+    return listOfRaftGroupsToReset;
+  }
+
+  private void cleanUpRaftGroupsTransactions() {
+    for (String s : listOfRaftGroupToReset) {
+      try {
+        RaftGroupId raftGroupId = RaftGroupId.valueOf(UUID.fromString(s));
+        getMetadataManager().getTransactionInfoTable().delete(TRANSACTION_INFO_KEY + raftGroupId.toString());
+      } catch (IOException e) {
+        LOG.error("Can't reset transaction info for raft group {}", s, e);
       }
     }
   }
@@ -1901,9 +1915,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         omRpcAddress));
 
     metadataManager.start(configuration);
-
-    cleanUpRaftGroups(OzoneManagerRatisUtils.getOMRatisDirectory(configuration), omRaftGroupName());
-
+    cleanUpRaftGroupsTransactions();
     // Start Ratis services
     if (omRatisServer != null) {
       omRatisServer.start();
