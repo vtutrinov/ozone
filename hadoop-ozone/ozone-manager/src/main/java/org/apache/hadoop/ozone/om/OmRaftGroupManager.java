@@ -46,8 +46,6 @@ public class OmRaftGroupManager {
     this.multiRaftEnabled = multiRaftEnabled;
     this.omServiceId = omServiceId;
     this.metadataManager = metadataManager;
-
-    initBucketMap();
   }
 
   public void reset() {

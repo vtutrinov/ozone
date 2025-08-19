@@ -124,6 +124,10 @@ public final class OMHAMetrics implements MetricsSource {
     return this;
   }
 
+  public void deleteRaftGroup(RaftGroupId raftGroupId) {
+    raftGroupsLeaders.remove(raftGroupId);
+  }
+
   /**
    * Unregister the metrics instance.
    */

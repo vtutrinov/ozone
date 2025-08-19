@@ -798,13 +798,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
     getStateMachines().remove(raftGroupId);
     getOmRaftGroups().remove(raftGroupId);
-    try {
-      getMetadataManager().getTransactionInfoTable().delete(TRANSACTION_INFO_KEY + raftGroupId.toString());
-      getMetadataManager().getStore().flushDB();
-    } catch (IOException e) {
-      LOG.error("Ooops! Can't reset bucket raft group {} transaction info", raftGroupId, e);
-      throw new RuntimeException(e);
-    }
   }
 
   public InitBucketResult initBucketRaftGroupAndStateMachine(RaftGroupId raftGroupId) {
@@ -925,6 +918,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     try {
       RaftGroup raftGroup = initBucketResult.getRaftGroup();
       omRatisServer.addBucketRaftGroup(raftGroup);
+      metadataManager.getTransactionInfoTable().delete(TRANSACTION_INFO_KEY + raftGroup.getGroupId().toString());
       LOG.info("Bucket group {} created with peers {}", raftGroupId, raftGroup.getPeers());
       if (bucketRaftGroupsCreated()) {
         LOG.info("All bucket raft groups are created, " +
