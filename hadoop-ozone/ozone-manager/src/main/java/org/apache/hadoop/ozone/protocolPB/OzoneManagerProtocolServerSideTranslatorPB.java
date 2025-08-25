@@ -24,11 +24,9 @@ import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
-import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.ratis.protocol.RaftGroupId;
 
 import java.io.IOException;
-import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -222,6 +220,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
         // check retry cache
         String volumeName = omClientRequest.getWriteReqVolumeName();
         String bucketName = omClientRequest.getWriteReqBucketName();
+        String keyName = omClientRequest.getWriteKeyName();
 
         LOG.trace("Continue internal processing request {}, bucket {}", request.getCmdType(), bucketName);
         // To validate credentials we have already verified leader status.
@@ -230,7 +229,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
           if (request.hasRaftGroupId()) {
             OzoneManagerRatisUtils.checkLeaderStatus(omClientRequest.getWriteRaftGroup(), ozoneManager);
           } else {
-            OzoneManagerRatisUtils.checkLeaderStatus(volumeName, bucketName, ozoneManager);
+            OzoneManagerRatisUtils.checkLeaderStatus(volumeName, bucketName, keyName, ozoneManager);
           }
         }
         // TODO: Note: Due to HDDS-6055, createClientRequest() could now
@@ -256,8 +255,8 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
         response = omRatisServer.submitBucketWriteRequest(
                 requestToSubmit,
                 omClientRequest.getWriteReqVolumeName(),
-                omClientRequest.getWriteReqBucketName()
-        );
+                omClientRequest.getWriteReqBucketName(),
+                omClientRequest.getWriteKeyName());
       } else {
         response = omRatisServer.submitRequest(requestToSubmit);
       }

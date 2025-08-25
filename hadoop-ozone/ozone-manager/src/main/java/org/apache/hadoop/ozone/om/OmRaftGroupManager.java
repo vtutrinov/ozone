@@ -70,7 +70,7 @@ public class OmRaftGroupManager {
     }
   }
 
-  public synchronized RaftGroupId raftGroupName(String volumeName, String bucketName) {
+  public synchronized RaftGroupId raftGroupName(String volumeName, String bucketName, String keyName) {
     if (bucketName == null || !multiRaftEnabled) {
       return RaftGroupId.valueOf(toUuid(omServiceId));
     }

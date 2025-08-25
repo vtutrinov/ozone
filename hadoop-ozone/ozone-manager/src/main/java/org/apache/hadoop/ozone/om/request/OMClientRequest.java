@@ -83,6 +83,7 @@ public abstract class OMClientRequest implements RequestAuditor {
       ThreadLocal.withInitial(OMLockDetails::new);
   private String writeBucketName;
   private String writeVolumeName;
+  private String writeKeyName;
   private RaftGroupId writeRaftGroup;
   /**
    * Stores the result of request execution in
@@ -599,6 +600,14 @@ public abstract class OMClientRequest implements RequestAuditor {
 
   public void setWriteReqVolumeName(String volumeName) {
     this.writeVolumeName = volumeName;
+  }
+
+  public String getWriteKeyName() {
+    return writeKeyName;
+  }
+
+  public void setWriteKeyName(String writeKeyName) {
+    this.writeKeyName = writeKeyName;
   }
 
   public RaftGroupId getWriteRaftGroup() {

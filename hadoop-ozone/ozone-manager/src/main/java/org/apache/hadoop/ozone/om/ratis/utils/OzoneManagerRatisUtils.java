@@ -152,6 +152,7 @@ public final class OzoneManagerRatisUtils {
     BucketLayout bucketLayout = BucketLayout.DEFAULT;
     String volumeName = "";
     String bucketName = "";
+    String keyName = "";
 
     switch (cmdType) {
     case CreateVolume:
@@ -256,6 +257,7 @@ public final class OzoneManagerRatisUtils {
     case RecoverLease:
       volumeName = omRequest.getRecoverLeaseRequest().getVolumeName();
       bucketName = omRequest.getRecoverLeaseRequest().getBucketName();
+      keyName = omRequest.getRecoverLeaseRequest().getKeyName();
       bucketLayout =
         getBucketLayout(ozoneManager.getMetadataManager(), volumeName,
           bucketName);
@@ -272,31 +274,37 @@ public final class OzoneManagerRatisUtils {
       keyArgs = omRequest.getCreateDirectoryRequest().getKeyArgs();
       volumeName = keyArgs.getVolumeName();
       bucketName = keyArgs.getBucketName();
+      keyName = keyArgs.getKeyName();
       break;
     case CreateFile:
       keyArgs = omRequest.getCreateFileRequest().getKeyArgs();
       volumeName = keyArgs.getVolumeName();
       bucketName = keyArgs.getBucketName();
+      keyName = keyArgs.getKeyName();
       break;
     case CreateKey:
       keyArgs = omRequest.getCreateKeyRequest().getKeyArgs();
       volumeName = keyArgs.getVolumeName();
       bucketName = keyArgs.getBucketName();
+      keyName = keyArgs.getKeyName();
       break;
     case AllocateBlock:
       keyArgs = omRequest.getAllocateBlockRequest().getKeyArgs();
       volumeName = keyArgs.getVolumeName();
       bucketName = keyArgs.getBucketName();
+      keyName = keyArgs.getKeyName();
       break;
     case CommitKey:
       keyArgs = omRequest.getCommitKeyRequest().getKeyArgs();
       volumeName = keyArgs.getVolumeName();
       bucketName = keyArgs.getBucketName();
+      keyName = keyArgs.getKeyName();
       break;
     case DeleteKey:
       keyArgs = omRequest.getDeleteKeyRequest().getKeyArgs();
       volumeName = keyArgs.getVolumeName();
       bucketName = keyArgs.getBucketName();
+      keyName = keyArgs.getKeyName();
       break;
     case DeleteKeys:
       OzoneManagerProtocolProtos.DeleteKeyArgs deleteKeyArgs =
@@ -309,6 +317,7 @@ public final class OzoneManagerRatisUtils {
       keyArgs = omRequest.getRenameKeyRequest().getKeyArgs();
       volumeName = keyArgs.getVolumeName();
       bucketName = keyArgs.getBucketName();
+      keyName = keyArgs.getKeyName();
       break;
     case RenameKeys:
       OzoneManagerProtocolProtos.RenameKeysArgs renameKeysArgs =
@@ -320,26 +329,31 @@ public final class OzoneManagerRatisUtils {
       keyArgs = omRequest.getInitiateMultiPartUploadRequest().getKeyArgs();
       volumeName = keyArgs.getVolumeName();
       bucketName = keyArgs.getBucketName();
+      keyName = keyArgs.getKeyName();
       break;
     case CommitMultiPartUpload:
       keyArgs = omRequest.getCommitMultiPartUploadRequest().getKeyArgs();
       volumeName = keyArgs.getVolumeName();
       bucketName = keyArgs.getBucketName();
+      keyName = keyArgs.getKeyName();
       break;
     case AbortMultiPartUpload:
       keyArgs = omRequest.getAbortMultiPartUploadRequest().getKeyArgs();
       volumeName = keyArgs.getVolumeName();
       bucketName = keyArgs.getBucketName();
+      keyName = keyArgs.getKeyName();
       break;
     case CompleteMultiPartUpload:
       keyArgs = omRequest.getCompleteMultiPartUploadRequest().getKeyArgs();
       volumeName = keyArgs.getVolumeName();
       bucketName = keyArgs.getBucketName();
+      keyName = keyArgs.getKeyName();
       break;
     case SetTimes:
       keyArgs = omRequest.getSetTimesRequest().getKeyArgs();
       volumeName = keyArgs.getVolumeName();
       bucketName = keyArgs.getBucketName();
+      keyName = keyArgs.getKeyName();
       break;
     case EchoRPC:
       return new OMEchoRPCWriteRequest(omRequest);
@@ -357,6 +371,7 @@ public final class OzoneManagerRatisUtils {
     if (!bucketName.isEmpty()) {
       request.setWriteReqBucketName(bucketName);
       request.setWriteReqVolumeName(volumeName);
+      request.setWriteKeyName(keyName);
       if (omRequest.hasRaftGroupId()) {
         HddsProtos.UUID uuid = omRequest.getRaftGroupId();
         RaftGroupId raftGroupId = RaftGroupId.valueOf(new UUID(uuid.getMostSigBits(), uuid.getLeastSigBits()));
@@ -517,9 +532,9 @@ public final class OzoneManagerRatisUtils {
     }
   }
 
-  public static void checkLeaderStatus(String volumeName, String bucketName, OzoneManager ozoneManager)
+  public static void checkLeaderStatus(String volumeName, String bucketName, String keyName, OzoneManager ozoneManager)
       throws ServiceException {
-    RaftGroupId ratisGroupId = ozoneManager.raftGroupName(volumeName, bucketName);
+    RaftGroupId ratisGroupId = ozoneManager.raftGroupName(volumeName, bucketName, keyName);
 
     LOG.trace("Check leader status for {}", ratisGroupId);
     try {

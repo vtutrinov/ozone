@@ -903,11 +903,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     raftClientProvider = RatisHelper.newRaftClient(configuration);
   }
 
-  public void createRaftGroupForBucket(String volumeName, String bucketName) {
-    RaftGroupId raftGroupId = raftGroupName(volumeName, bucketName);
-    createRaftGroupForBucket(raftGroupId);
-  }
-
   @SuppressWarnings("checkstyle:EmptyBlock")
   public void createRaftGroupForBucket(RaftGroupId raftGroupId) {
     InitBucketResult initBucketResult = initBucketRaftGroupAndStateMachine(raftGroupId);
@@ -4576,11 +4571,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   }
 
   public RaftGroupId omRaftGroupName() {
-    return raftGroupName(null, null);
+    return raftGroupName(null, null, null);
   }
 
-  public RaftGroupId raftGroupName(String volumeName, String bucketName) {
-    return omRaftGroupManager.raftGroupName(volumeName, bucketName);
+  public RaftGroupId raftGroupName(String volumeName, String bucketName, String keyName) {
+    return omRaftGroupManager.raftGroupName(volumeName, bucketName, keyName);
   }
 
   public RaftGroupId raftGroupName(HddsProtos.UUID raftGroupId) {

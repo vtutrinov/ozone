@@ -326,17 +326,19 @@ public final class OzoneManagerRatisServer {
 
   /**
    * Submit writing to bucket request to Ratis server.
+   *
    * @param omRequest client request
+   * @param keyName
    * @return OMResponse - response returned to the client.
    * @throws ServiceException throw when applying Ratis request
    */
   public OMResponse submitBucketWriteRequest(
-          OMRequest omRequest, String volumeName, String bucketName
-  ) throws ServiceException {
+          OMRequest omRequest, String volumeName, String bucketName,
+          String keyName) throws ServiceException {
     return commonSubmitRequest(
             omRequest,
             omRequest.hasRaftGroupId() ? ozoneManager.raftGroupName(omRequest.getRaftGroupId()) :
-                ozoneManager.raftGroupName(volumeName, bucketName)
+                ozoneManager.raftGroupName(volumeName, bucketName, null)
     );
   }
 
@@ -381,7 +383,7 @@ public final class OzoneManagerRatisServer {
     LOG.trace("Submit write request to Ratis Server {} - {} - {} - {}",
             omRequest.getCmdType(), clientId, callId, bucketName
     );
-    return submitRequest(omRequest, clientId, callId, ozoneManager.raftGroupName(volumeName, bucketName));
+    return submitRequest(omRequest, clientId, callId, ozoneManager.raftGroupName(volumeName, bucketName, null));
   }
 
   public OMResponse submitRequest(
