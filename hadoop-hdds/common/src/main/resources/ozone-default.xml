@@ -4378,4 +4378,22 @@
         bucket raft groups are created
     </description>
   </property>
+  <property>
+    <name>ozone.om.bucket.raft.groups.reconciler.interval</name>
+    <value>60s</value>
+    <tag>OM, OZONE</tag>
+    <description>
+      If the multi-raft feature is enabled then a special background job named as BucketRaftGroupsReconciler runs and monitors a health state
+      of the bucket raft groups. The configuration property is to set the job execution interval
+    </description>
+  </property>
+  <property>
+    <name>ozone.om.ratis.unhealthy.peer.timeout</name>
+    <value>30s</value>
+    <tag>OM, OZONE</tag>
+    <description>
+      Timeout to consider a Ratis peer as unhealthy if no heartbeat is received.
+      This is used in multi-raft feature for bucket raft groups.
+    </description>
+  </property>
 </configuration>

@@ -460,10 +460,6 @@ public final class OmUtils {
     return dirFile;
   }
 
-  public static void cleanUpRatisDir(String ratisDir, RaftGroupId exceptRaftGroupDir) {
-
-  }
-
   /**
    * Prepares key info to be moved to deletedTable.
    * 1. It strips GDPR metadata from key info

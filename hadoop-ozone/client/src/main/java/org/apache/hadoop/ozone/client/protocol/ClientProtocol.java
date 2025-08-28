@@ -1200,8 +1200,6 @@ public interface ClientProtocol {
   void setTimes(OzoneObj obj, String keyName, long mtime, long atime)
       throws IOException;
 
-  void removeRaftGroups(List<UUID> raftGroupIds) throws IOException;
-
   void createRaftGroups(List<UUID> raftGroupIds) throws IOException;
 
   GetRaftGroupHealthStateResponse getRaftGroupHealthState(GetRaftGroupHealthStateRequest request) throws IOException;

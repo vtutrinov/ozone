@@ -302,7 +302,6 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   private boolean ignorePipelineinKey;
   private Table deletedDirTable;
   private Table<String, Long> multiRaftInfoTable;
-  private Table<RaftGroupId, RaftProtos.RaftConfigurationProto> raftGroupConfigurationTable;
 
   // Table-level locks that protects table read/write access. Note:
   // Don't use this lock for tables other than deletedTable and deletedDirTable.
@@ -779,12 +778,6 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
     multiRaftInfoTable = this.store.getTable(MULTI_RAFT_INFO_TABLE,
         String.class, Long.class);
     checkTableStatus(multiRaftInfoTable, MULTI_RAFT_INFO_TABLE,
-        addCacheMetrics);
-
-
-    raftGroupConfigurationTable = this.store.getTable(RAFT_GROUP_CONFIG_TABLE,
-        RaftGroupId.class, RaftProtos.RaftConfigurationProto.class);
-    checkTableStatus(raftGroupConfigurationTable, RAFT_GROUP_CONFIG_TABLE,
         addCacheMetrics);
   }
 
@@ -1972,11 +1965,6 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   @Override
   public Table<String, Long> getMultiRaftInfoTable() {
     return multiRaftInfoTable;
-  }
-
-  @Override
-  public Table<RaftGroupId, RaftProtos.RaftConfigurationProto> getRaftGroupConfigurationTable() {
-    return raftGroupConfigurationTable;
   }
 
   /**

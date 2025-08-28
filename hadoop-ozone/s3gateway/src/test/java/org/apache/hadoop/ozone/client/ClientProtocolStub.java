@@ -709,11 +709,6 @@ public class ClientProtocolStub implements ClientProtocol {
   }
 
   @Override
-  public void removeRaftGroups(List<UUID> raftGroupIds) throws IOException {
-    throw new UnsupportedOperationException("Not supported yet.");
-  }
-
-  @Override
   public void createRaftGroups(List<UUID> raftGroupIds) throws IOException {
     throw new UnsupportedOperationException("Not supported yet.");
   }

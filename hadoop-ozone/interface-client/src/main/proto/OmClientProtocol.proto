@@ -149,7 +149,6 @@ enum Type {
   RenameSnapshot = 131;
   GetContentSummary = 143;
   CreateBucketRaftGroups = 144;
-  RemoveBucketRaftGroups = 145;
   GetRaftGroupHealthState = 146;
   BucketRaftGroupsStateChanged = 147;
 }
@@ -292,7 +291,6 @@ message OMRequest {
   optional GetContentSummaryRequest         getContentSummaryRequest       = 143;
 
   optional CreateBucketRaftGroupsRequest    CreateBucketRaftGroupsRequest         = 144;
-  optional RemoveBucketRaftGroupsRequest    RemoveBucketRaftGroupsRequest         = 145;
   optional GetRaftGroupHealthStateRequest   getRaftGroupHealthStateRequest      = 146;
   optional hadoop.hdds.UUID                 raftGroupId                    = 147; // Used for raft group that the request should be executed in
   optional BucketRaftGroupsStateChangedRequest bucketRaftGroupsStateChangedRequest = 148; // Used to notify OM about bucket raft groups state changes
@@ -421,7 +419,6 @@ message OMResponse {
   optional RenameSnapshotResponse            RenameSnapshotResponse        = 132;
   optional GetContentSummaryResponse         getContentSummaryResponse     = 143;
   optional CreateBucketRaftGroupsResponse    CreateBucketRaftGroupsResponse = 144;
-  optional RemoveBucketRaftGroupsResponse    RemoveBucketRaftGroupsResponse = 145;
   optional GetRaftGroupHealthStateResponse   getRaftGroupHealthStateResponse     = 146;
   optional BucketRaftGroupsStateChangedResponse bucketRaftGroupsStateChangedResponse = 147;
 }
@@ -2108,11 +2105,6 @@ message CreateBucketRaftGroupsRequest {
 message CreateBucketRaftGroupsResponse {
 }
 
-message RemoveBucketRaftGroupsRequest {
-  repeated hadoop.hdds.UUID groupIds = 1;
-}
-message RemoveBucketRaftGroupsResponse {
-}
 /**
   This will be used internally by OM to replicate S3 Secret across quorum of
   OM's.

@@ -15,12 +15,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SAFE_MODE_CHECK_INTERVAL;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SAFE_MODE_CHECK_INTERVAL_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SAFE_MODE_ENABLED;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SAFE_MODE_ENABLED_DEFAULT;
 
-public class SafeModeManager extends BackgroundService {
+public class SafeModeManager  {
 
   public static final Logger LOG = LoggerFactory.getLogger(SafeModeManager.class);
 
@@ -30,20 +28,13 @@ public class SafeModeManager extends BackgroundService {
 
   private final boolean safeModeEnabled;
   private final int bucketRaftGroupsExpectedCount;
-  private final long safeModeCheckInterval;
   private final AtomicInteger bucketGroupsReadyCount = new AtomicInteger(0);
 
 
   public SafeModeManager(OzoneConfiguration configuration) {
-    super("SafeModeManager",
-        configuration.getTimeDuration(OZONE_OM_SAFE_MODE_CHECK_INTERVAL,
-            OZONE_OM_SAFE_MODE_CHECK_INTERVAL_DEFAULT, TimeUnit.MILLISECONDS),
-        TimeUnit.MILLISECONDS, 1, 0, "OMSafeModeManager-");
     this.safeModeEnabled = configuration.getBoolean(OZONE_OM_SAFE_MODE_ENABLED, OZONE_OM_SAFE_MODE_ENABLED_DEFAULT);
     this.bucketRaftGroupsExpectedCount = configuration.getInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
         OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
-    this.safeModeCheckInterval = configuration.getTimeDuration(OZONE_OM_SAFE_MODE_CHECK_INTERVAL,
-        OZONE_OM_SAFE_MODE_CHECK_INTERVAL_DEFAULT, TimeUnit.MILLISECONDS);
     if (!safeModeEnabled) {
       inSafeMode.set(false);
       LOG.info("OM safe mode is disabled by configuration");
@@ -105,26 +96,4 @@ public class SafeModeManager extends BackgroundService {
     }
   }
 
-  public static class SafeModeCheckTask implements BackgroundTask {
-
-    @Override
-    public BackgroundTaskResult call() throws Exception {
-      return null;
-    }
-
-    @Override
-    public int getPriority() {
-      return 0;
-    }
-
-  }
-
-  @Override
-  public BackgroundTaskQueue getTasks() {
-    BackgroundTaskQueue queue = new BackgroundTaskQueue();
-    if (safeModeEnabled) {
-      queue.add(new SafeModeCheckTask());
-    }
-    return queue;
-  }
 }

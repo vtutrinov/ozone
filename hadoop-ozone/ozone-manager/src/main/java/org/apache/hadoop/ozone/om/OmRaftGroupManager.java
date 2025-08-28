@@ -1,6 +1,7 @@
 package org.apache.hadoop.ozone.om;
 
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.utils.db.cache.CacheKey;
 import org.apache.hadoop.hdds.utils.db.cache.CacheValue;
 import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
@@ -9,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
@@ -70,6 +72,13 @@ public class OmRaftGroupManager {
     }
   }
 
+  public synchronized RaftGroupId raftGroupName(String volumeName, String bucketName, HddsProtos.UUID raftGroupId) {
+    UUID raftGroupUUID = new UUID(raftGroupId.getMostSigBits(), raftGroupId.getLeastSigBits());
+    RaftGroupId raftGroupIdToHandleRequest = RaftGroupId.valueOf(raftGroupUUID);
+    storeTable(volumeName, bucketName, raftGroupUUID);
+    return raftGroupIdToHandleRequest;
+  }
+
   public synchronized RaftGroupId raftGroupName(String volumeName, String bucketName) {
     if (bucketName == null || !multiRaftEnabled) {
       return RaftGroupId.valueOf(toUuid(omServiceId));
@@ -108,6 +117,17 @@ public class OmRaftGroupManager {
 
   public int getOmRaftGroupCount() {
     return omRaftGroupCount;
+  }
+
+  public List<RaftGroupId> generateRaftGroups(long currentTerm, int count) {
+    List<RaftGroupId> result = new ArrayList<>(count);
+    long startFrom = currentTerm * 100;
+    for (long i = startFrom; i < startFrom + count; i++) {
+      UUID raftGroupIdUUID = OmRaftGroupManager.toUuid(String.valueOf(i));
+      RaftGroupId groupId = RaftGroupId.valueOf(raftGroupIdUUID);
+      result.add(groupId);
+    }
+    return result;
   }
 
   private void storeTable(String volumeName, String bucketName, UUID groupId) {

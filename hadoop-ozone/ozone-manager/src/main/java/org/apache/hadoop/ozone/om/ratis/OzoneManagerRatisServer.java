@@ -335,7 +335,7 @@ public final class OzoneManagerRatisServer {
   ) throws ServiceException {
     return commonSubmitRequest(
             omRequest,
-            omRequest.hasRaftGroupId() ? ozoneManager.raftGroupName(omRequest.getRaftGroupId()) :
+            omRequest.hasRaftGroupId() ? ozoneManager.raftGroupName(volumeName, bucketName, omRequest.getRaftGroupId()) :
                 ozoneManager.raftGroupName(volumeName, bucketName)
     );
   }

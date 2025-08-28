@@ -2604,11 +2604,6 @@ public class RpcClient implements ClientProtocol {
   }
 
   @Override
-  public void removeRaftGroups(List<UUID> raftGroupIds) throws IOException {
-    ozoneManagerClient.removeRaftGroups(raftGroupIds);
-  }
-
-  @Override
   public void createRaftGroups(List<UUID> raftGroupIds) throws IOException {
     ozoneManagerClient.createRaftGroups(raftGroupIds);
   }
