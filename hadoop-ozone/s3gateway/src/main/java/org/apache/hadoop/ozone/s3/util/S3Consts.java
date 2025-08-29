@@ -47,6 +47,7 @@ public final class S3Consts {
 
   public static final String AWS_CHUNKED = "aws-chunked";
   public static final String MULTI_CHUNKS_UPLOAD_PREFIX = "STREAMING";
+  public static final String X_AMZ_CHECKSUM_SHA256 = "x-amz-checksum-sha256";
 
   // Constants related to Range Header
   public static final String COPY_SOURCE_IF_PREFIX = "x-amz-copy-source-if-";

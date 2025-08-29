@@ -42,9 +42,12 @@ import static org.apache.hadoop.ozone.s3.util.S3Consts.RANGE_HEADER_SUPPORTED_UN
 import static org.apache.hadoop.ozone.s3.util.S3Consts.STORAGE_CLASS_HEADER;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.TAG_COUNT_HEADER;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.TAG_DIRECTIVE_HEADER;
+import static org.apache.hadoop.ozone.s3.util.S3Consts.X_AMZ_CHECKSUM_SHA256;
+import static org.apache.hadoop.ozone.s3.util.S3Utils.checksumsMatches;
 import static org.apache.hadoop.ozone.s3.util.S3Utils.stripQuotes;
 import static org.apache.hadoop.ozone.s3.util.S3Utils.validateSignatureHeader;
 import static org.apache.hadoop.ozone.s3.util.S3Utils.wrapInQuotes;
+import static org.apache.hadoop.ozone.s3.util.S3Utils.wrapWithSha256Digest;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.LoadingCache;
@@ -79,6 +82,8 @@ import javax.ws.rs.core.Response.ResponseBuilder;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.StreamingOutput;
 import javax.xml.bind.DatatypeConverter;
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -283,6 +288,11 @@ public class ObjectEndpoint extends ObjectOperationHandler {
           getCustomMetadataFromHeaders(getHeaders().getRequestHeaders());
       Map<String, String> tags = getTaggingFromHeaders(getHeaders());
 
+      // SDP (SDPOZN-1660): optional x-amz-checksum-sha256 (hex or base64) of the payload
+      final String expectedChecksumSha256 = getHeaders().getHeaderString(X_AMZ_CHECKSUM_SHA256);
+      final MessageDigest checksumSha256 = expectedChecksumSha256 == null ? null : DigestUtils.getSha256Digest();
+      String actualChecksumSha256 = null;
+
       long putLength;
       final String md5Hash;
       if (isDatastreamEnabled() && !enableEC && length > getDatastreamMinLength()) {
@@ -305,11 +315,19 @@ public class ObjectEndpoint extends ObjectOperationHandler {
           long metadataLatencyNs =
               getMetrics().updatePutKeyMetadataStats(startNanos);
           perf.appendMetaLatencyNanos(metadataLatencyNs);
-          putLength = output.copyFrom(multiDigestInputStream, getIOBufferSize(expectedLength));
+          putLength = output.copyFrom(checksumSha256 == null ? multiDigestInputStream
+              : wrapWithSha256Digest(multiDigestInputStream, checksumSha256), getIOBufferSize(expectedLength));
           md5Hash = DatatypeConverter.printHexBinary(
                   multiDigestInputStream.getMessageDigest(OzoneConsts.MD5_HASH).digest())
               .toLowerCase();
           output.getMetadata().put(OzoneConsts.ETAG, md5Hash);
+
+          if (checksumSha256 != null) {
+            // validated before commit: a mismatching object is not stored
+            final String actual = Hex.encodeHexString(checksumSha256.digest());
+            actualChecksumSha256 = actual;
+            output.addPreCommit(() -> checksumsMatches(actual, expectedChecksumSha256));
+          }
 
           String clientContentMD5 = getHeaders().getHeaderString(S3Consts.CHECKSUM_HEADER);
           if (clientContentMD5 != null) {
@@ -338,10 +356,13 @@ public class ObjectEndpoint extends ObjectOperationHandler {
       long opLatencyNs = getMetrics().updateCreateKeySuccessStats(startNanos);
       perf.appendOpLatencyNanos(opLatencyNs);
       getKeyCache().invalidate(Pair.of(bucketName, keyPath));
-      return Response.ok()
+      Response.ResponseBuilder response = Response.ok()
           .header(HttpHeaders.ETAG, wrapInQuotes(md5Hash))
-          .status(HttpStatus.SC_OK)
-          .build();
+          .status(HttpStatus.SC_OK);
+      if (actualChecksumSha256 != null) {
+        response.header(X_AMZ_CHECKSUM_SHA256, actualChecksumSha256);
+      }
+      return response.build();
     } catch (IOException | RuntimeException ex) {
       if (copyHeader != null) {
         getMetrics().updateCopyObjectFailureStats(startNanos);

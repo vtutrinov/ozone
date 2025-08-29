@@ -38,12 +38,14 @@ import static org.apache.hadoop.ozone.s3.util.S3Consts.TAG_HEADER;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.TAG_KEY_LENGTH_LIMIT;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.TAG_NUM_LIMIT;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.TAG_VALUE_LENGTH_LIMIT;
+import static org.apache.hadoop.ozone.s3.util.S3Consts.X_AMZ_CHECKSUM_SHA256;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.X_AMZ_CONTENT_SHA256;
 import static org.apache.hadoop.ozone.s3.util.S3Utils.parseETag;
 import static org.apache.hadoop.ozone.s3.util.S3Utils.urlEncode;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.any;
@@ -69,6 +71,8 @@ import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response;
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hdds.client.ECReplicationConfig;
@@ -91,6 +95,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.MockedStatic;
 
 /**
@@ -823,4 +828,44 @@ class TestObjectPut {
     when(headers.getHeaderString(HttpHeaders.CONTENT_LENGTH))
         .thenReturn(String.valueOf(length));
   }
+
+  @Test
+  public void testPutObjectWithWrongChecksumSha256() throws Exception {
+    when(headers.getHeaderString(X_AMZ_CHECKSUM_SHA256)).thenReturn("123");
+
+    OS3Exception ex = assertErrorResponse(S3ErrorTable.CHECKSUM_MISMATCH, () -> putObject(CONTENT));
+    assertThat(ex.getErrorMessage()).contains("Checksum mismatch");
+    // validated before commit: the object is not stored
+    assertThrows(IOException.class, () -> bucket.getKey(KEY_NAME));
+  }
+
+  @Test
+  public void testPutObjectWithInvalidChecksumSha256Format() throws Exception {
+    when(headers.getHeaderString(X_AMZ_CHECKSUM_SHA256)).thenReturn("not base64 !");
+
+    assertErrorResponse(INVALID_REQUEST, () -> putObject(CONTENT));
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {true, false})
+  public void testPutObjectWithChecksumSha256(boolean base64) throws Exception {
+    byte[] sha256 = DigestUtils.sha256(CONTENT);
+    when(headers.getHeaderString(X_AMZ_CHECKSUM_SHA256))
+        .thenReturn(base64 ? Base64.getEncoder().encodeToString(sha256) : Hex.encodeHexString(sha256));
+
+    Response response = putObject(CONTENT);
+    assertEquals(200, response.getStatus());
+
+    assertEquals(Hex.encodeHexString(sha256), response.getHeaderString(X_AMZ_CHECKSUM_SHA256));
+    assertKeyContent(bucket, KEY_NAME, CONTENT);
+  }
+
+  @Test
+  public void testPutObjectWithoutChecksumSha256() throws Exception {
+    Response response = putObject(CONTENT);
+    assertEquals(200, response.getStatus());
+
+    assertNull(response.getHeaderString(X_AMZ_CHECKSUM_SHA256));
+  }
+
 }

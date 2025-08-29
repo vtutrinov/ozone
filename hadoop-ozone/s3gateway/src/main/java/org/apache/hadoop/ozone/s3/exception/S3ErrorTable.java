@@ -160,6 +160,10 @@ public enum S3ErrorTable {
       "Access Denied", "User doesn't have permission to access this resource due to a " +
       "bucket ownership mismatch.", HTTP_FORBIDDEN),
 
+  // SDP (SDPOZN-1660): x-amz-checksum-sha256 does not match the payload
+  CHECKSUM_MISMATCH(
+      "BadDigest", "The SHA256 you specified did not match the calculated checksum.", HTTP_BAD_REQUEST),
+
   X_AMZ_CONTENT_SHA256_MISMATCH(
       "XAmzContentSHA256Mismatch", "The provided 'x-amz-content-sha256' header does " +
       "not match the computed hash.", HTTP_BAD_REQUEST),

@@ -19,7 +19,9 @@ package org.apache.hadoop.ozone.s3.util;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.BAD_DIGEST;
+import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.CHECKSUM_MISMATCH;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.INVALID_DIGEST;
+import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.INVALID_REQUEST;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.INVALID_STORAGE_CLASS;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.newError;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.AWS_CHUNKED;
@@ -27,14 +29,20 @@ import static org.apache.hadoop.ozone.s3.util.S3Consts.DECODED_CONTENT_LENGTH_HE
 import static org.apache.hadoop.ozone.s3.util.S3Consts.MULTI_CHUNKS_UPLOAD_PREFIX;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.STREAMING_UNSIGNED_PAYLOAD_TRAILER;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.UNSIGNED_PAYLOAD;
+import static org.apache.hadoop.ozone.s3.util.S3Consts.X_AMZ_CHECKSUM_SHA256;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.X_AMZ_CONTENT_SHA256;
 
 import jakarta.annotation.Nonnull;
+import java.io.FilterInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Locale;
 import java.util.Objects;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.HttpHeaders;
@@ -274,4 +282,53 @@ public final class S3Utils {
     }
   }
 
+  /**
+   * SDP (SDPOZN-1660): checks x-amz-checksum-sha256 (hex or base64) against the actual hex SHA-256.
+   * @return true if the checksums match
+   * @throws OS3Exception INVALID_REQUEST for a malformed checksum, CHECKSUM_MISMATCH if they differ
+   */
+  public static boolean checksumsMatches(String actual, String expected) throws OS3Exception {
+    String normalizedExpected;
+    try {
+      if (expected.matches("^[0-9a-fA-F]+$")) {
+        normalizedExpected = expected.toLowerCase(Locale.ROOT);
+      } else {
+        normalizedExpected = Hex.encodeHexString(Base64.getDecoder().decode(expected));
+      }
+    } catch (IllegalArgumentException e) {
+      OS3Exception ex = newError(INVALID_REQUEST, e);
+      ex.setErrorMessage("Invalid " + X_AMZ_CHECKSUM_SHA256 + " format: " + expected);
+      throw ex;
+    }
+
+    if (!actual.equals(normalizedExpected)) {
+      OS3Exception ex = newError(CHECKSUM_MISMATCH);
+      ex.setErrorMessage("Checksum mismatch: expected=" + normalizedExpected + " actual=" + actual);
+      throw ex;
+    }
+    return true;
+  }
+
+  /** SDP (SDPOZN-1660): updates the digest with the bytes read from the stream. */
+  public static InputStream wrapWithSha256Digest(InputStream body, MessageDigest digest) {
+    return new FilterInputStream(body) {
+      @Override
+      public int read() throws IOException {
+        int b = super.read();
+        if (b != -1) {
+          digest.update((byte) b);
+        }
+        return b;
+      }
+
+      @Override
+      public int read(byte[] b, int off, int len) throws IOException {
+        int n = super.read(b, off, len);
+        if (n > 0) {
+          digest.update(b, off, n);
+        }
+        return n;
+      }
+    };
+  }
 }
