@@ -2036,11 +2036,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     omState = State.RUNNING;
     if (omRatisServer != null) {
       isMultiRaftEnabled = configuration.getBoolean(
-              OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
-              OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT
+          OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
+          OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT
       );
       omRaftGroupManager =
-              new OmRaftGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
+          new OmRaftGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
     }
     bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
     bucketRaftGroupsReconciler.start();
