@@ -74,6 +74,9 @@ public final class S3ErrorTable {
       "AuthorizationHeaderMalformed", "The authorization header you provided " +
       "is invalid.", HTTP_BAD_REQUEST);
 
+  public static final OS3Exception CHECKSUM_MISMATCH = new OS3Exception(
+      "ChecksumMismatch", "Actual checksum did not match expected one ", HTTP_BAD_REQUEST);
+
   public static final OS3Exception NO_SUCH_KEY = new OS3Exception(
       "NoSuchKey", "The specified key does not exist", HTTP_NOT_FOUND);
 

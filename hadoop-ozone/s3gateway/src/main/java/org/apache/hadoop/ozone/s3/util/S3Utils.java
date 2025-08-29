@@ -22,13 +22,21 @@ import org.apache.hadoop.hdds.client.ReplicationFactor;
 import org.apache.hadoop.hdds.client.ReplicationType;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.ozone.s3.exception.OS3Exception;
+import org.apache.commons.codec.binary.Hex;
 
 import java.io.UnsupportedEncodingException;
+import java.io.FilterInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.security.MessageDigest;
+import java.util.Base64;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.INVALID_ARGUMENT;
+import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.CHECKSUM_MISMATCH;
+import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.INVALID_REQUEST;
 import static org.apache.hadoop.ozone.s3.exception.S3ErrorTable.newError;
 
 /**
@@ -115,5 +123,48 @@ public final class S3Utils {
     } catch (IllegalArgumentException ex) {
       throw newError(INVALID_ARGUMENT, storageType, ex);
     }
+  }
+
+  public static boolean checksumsMatches(String actual, String expected) throws OS3Exception {
+    String normalizedExpected;
+    try {
+      if (expected.matches("^[0-9a-fA-F]+$")) {
+        normalizedExpected = expected.toLowerCase();
+      } else {
+        byte[] decoded = Base64.getDecoder().decode(expected);
+        normalizedExpected = Hex.encodeHexString(decoded);
+      }
+    } catch (IllegalArgumentException e) {
+      throw newError(INVALID_REQUEST, "Invalid checksum format: " + expected, e);
+    }
+
+    if (!actual.equals(normalizedExpected)) {
+      throw newError(CHECKSUM_MISMATCH,
+          "Checksum mismatch: expected=" + actual + " actual=" + normalizedExpected);
+    } else {
+      return true;
+    }
+  }
+
+  public static InputStream wrapWithSha256Digest(InputStream body, MessageDigest digest) {
+    return new FilterInputStream(body) {
+      @Override
+      public int read() throws IOException {
+        int b = super.read();
+        if (b != -1) {
+          digest.update((byte) b);
+        }
+        return b;
+      }
+
+      @Override
+      public int read(byte[] b, int off, int len) throws IOException {
+        int n = super.read(b, off, len);
+        if (n > 0) {
+          digest.update(b, off, n);
+        }
+        return n;
+      }
+    };
   }
 }

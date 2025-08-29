@@ -44,6 +44,8 @@ import javax.ws.rs.core.Response.ResponseBuilder;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.StreamingOutput;
 import javax.xml.bind.DatatypeConverter;
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -139,7 +141,10 @@ import static org.apache.hadoop.ozone.s3.util.S3Consts.COPY_SOURCE_IF_UNMODIFIED
 import static org.apache.hadoop.ozone.s3.util.S3Consts.RANGE_HEADER;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.RANGE_HEADER_SUPPORTED_UNIT;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.STORAGE_CLASS_HEADER;
+import static org.apache.hadoop.ozone.s3.util.S3Consts.X_AMZ_CHECKSUM_SHA256;
 import static org.apache.hadoop.ozone.s3.util.S3Utils.urlDecode;
+import static org.apache.hadoop.ozone.s3.util.S3Utils.wrapWithSha256Digest;
+import static org.apache.hadoop.ozone.s3.util.S3Utils.checksumsMatches;
 
 /**
  * Key level rest endpoints.
@@ -306,13 +311,17 @@ public class ObjectEndpoint extends EndpointBase {
         customMetadata.put(ETAG_CUSTOM, customETag);
       }
 
+      String expectedChecksum = headers.getHeaderString(X_AMZ_CHECKSUM_SHA256);
+      MessageDigest sha256 = (expectedChecksum == null) ? null : DigestUtils.getSha256Digest();
+      InputStream bodyStream = (sha256 == null) ? body : wrapWithSha256Digest(body, sha256);
+
       if ("STREAMING-AWS4-HMAC-SHA256-PAYLOAD"
           .equals(headers.getHeaderString("x-amz-content-sha256"))) {
-        digestInputStream = new DigestInputStream(new SignedChunksInputStream(body),
+        digestInputStream = new DigestInputStream(new SignedChunksInputStream(bodyStream),
             getMessageDigestInstance());
         length = Long.parseLong(amzDecodedLength);
       } else {
-        digestInputStream = new DigestInputStream(body, getMessageDigestInstance());
+        digestInputStream = new DigestInputStream(bodyStream, getMessageDigestInstance());
       }
 
       long putLength;
@@ -341,6 +350,16 @@ public class ObjectEndpoint extends EndpointBase {
       getMetrics().incPutKeySuccessLength(putLength);
       perf.appendSizeBytes(putLength);
       getKeyCache().invalidate(Pair.of(bucketName, keyPath));
+      if (sha256 != null) {
+        String actualChecksum = Hex.encodeHexString(sha256.digest());
+        if (checksumsMatches(actualChecksum, expectedChecksum)) {
+          return Response.ok()
+              .header(ETAG, wrapInQuotes(eTag))
+              .header(X_AMZ_CHECKSUM_SHA256, actualChecksum)
+              .status(HttpStatus.SC_OK)
+              .build();
+        }
+      }
       return Response.ok()
           .header(ETAG, wrapInQuotes(eTag))
           .status(HttpStatus.SC_OK)
