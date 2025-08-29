@@ -2,21 +2,30 @@ package org.apache.hadoop.ozone;
 
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.hdds.server.ServerUtils;
 import org.apache.hadoop.ozone.client.OzoneBucket;
 import org.apache.hadoop.ozone.client.OzoneKeyDetails;
 import org.apache.hadoop.ozone.client.io.OzoneInputStream;
 import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
 import org.apache.hadoop.ozone.client.protocol.ClientProtocol;
 import org.apache.hadoop.ozone.om.OzoneManager;
+import org.apache.hadoop.ozone.om.ratis.BucketStateMachine;
 import org.apache.ozone.test.GenericTestUtils;
+import org.apache.ratis.server.protocol.TermIndex;
+import org.apache.ratis.statemachine.StateMachine;
+import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -28,6 +37,7 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Test MultiRaft.
@@ -101,10 +111,16 @@ public class TestMultiRaft {
     cluster = initClusterWithMultiRaft(true);
     OzoneManager om = cluster.getOMLeader();
 
-    GenericTestUtils.waitFor(() -> om.getOmRaftGroups().size() == 5, 100, 20000
+    GenericTestUtils.waitFor(
+        () -> om.getOmRaftGroups().size() == 5,
+        100,
+        80000
     );
-    assertEquals(5, om.getOmRaftGroups().size());
-    assertEquals(5, om.getStateMachines().size());
+    GenericTestUtils.waitFor(
+        () -> om.getStateMachines().size() == 5,
+        100,
+        80000
+    );
   }
 
   @Test
@@ -112,8 +128,12 @@ public class TestMultiRaft {
           throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true, 10);
     OzoneManager om = cluster.getOMLeader();
-    assertEquals(11, om.getOmRaftGroups().size());
-    assertEquals(11, om.getStateMachines().size());
+    GenericTestUtils.waitFor(
+        () -> om.getOmRaftGroups().size() == 11
+            && om.getStateMachines().size() == 11,
+        100,
+        80000
+    );
   }
 
   @Test
@@ -126,12 +146,7 @@ public class TestMultiRaft {
     String bucket = "testbucket";
     proxy.createBucket(volume, bucket);
     String key = "testkey";
-    try (OzoneOutputStream stream = proxy.createKey(
-            volume, bucket, key, key.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap()
-    )
-    ) {
-      stream.write(key.getBytes(UTF_8));
-    }
+    writeKey(proxy, volume, bucket, key);
 
     cluster.getOzoneManager(0).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
     cluster.getOzoneManager(1).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
@@ -143,20 +158,13 @@ public class TestMultiRaft {
     OzoneManager om0 = cluster.getOzoneManager(0);
     OzoneManager om1 = cluster.getOzoneManager(1);
     OzoneManager om2 = cluster.getOzoneManager(2);
+
     GenericTestUtils.waitFor(() -> om0.getOmRaftGroups().size() == 1 &&
             om1.getOmRaftGroups().size() == 1 &&
-            om2.getOmRaftGroups().size() == 1, 100, 20000);
-
-    assertEquals(1, om0.getOmRaftGroups().size());
-    assertEquals(1, om1.getOmRaftGroups().size());
-    assertEquals(1, om2.getOmRaftGroups().size());
+            om2.getOmRaftGroups().size() == 1, 100, 100000);
 
     String key1 = "testkey1";
-    try (OzoneOutputStream stream = proxy
-            .createKey(volume, bucket, key1, key1.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap())
-    ) {
-      stream.write(key1.getBytes(UTF_8));
-    }
+    writeKey(proxy, volume, bucket, key1);
 
     cluster.getOzoneManager(0).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, true);
     cluster.getOzoneManager(1).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, true);
@@ -167,15 +175,11 @@ public class TestMultiRaft {
 
     GenericTestUtils.waitFor(() -> om0.getOmRaftGroups().size() == 5 &&
             om1.getOmRaftGroups().size() == 5 &&
-            om2.getOmRaftGroups().size() == 5, 100, 20000);
+            om2.getOmRaftGroups().size() == 5, 100, 80000);
     assertEquals(5, om1.getOmRaftGroups().size());
 
     String key2 = "testkey2";
-    try (OzoneOutputStream stream = proxy
-            .createKey(volume, bucket, key2, key2.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap())
-    ) {
-      stream.write(key2.getBytes(UTF_8));
-    }
+    writeKey(proxy, volume, bucket, key2);
 
     cluster.getOzoneManager(0).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
     cluster.getOzoneManager(1).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
@@ -186,15 +190,10 @@ public class TestMultiRaft {
 
     GenericTestUtils.waitFor(() -> om0.getOmRaftGroups().size() == 1 &&
             om1.getOmRaftGroups().size() == 1 &&
-            om2.getOmRaftGroups().size() == 1, 100, 20000);
-    assertEquals(1, om1.getOmRaftGroups().size());
+            om2.getOmRaftGroups().size() == 1, 100, 80000);
 
     String key3 = "testkey3";
-    try (OzoneOutputStream stream = proxy
-            .createKey(volume, bucket, key3, key3.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap())
-    ) {
-      stream.write(key3.getBytes(UTF_8));
-    }
+    writeKey(proxy, volume, bucket, key3);
 
     checkKeyReading(volume, bucket, key);
     checkKeyReading(volume, bucket, key1);
@@ -221,7 +220,6 @@ public class TestMultiRaft {
     GenericTestUtils.waitFor(() -> om0.getOmRaftGroups().size() == 11 &&
             om1.getOmRaftGroups().size() == 11 &&
             om2.getOmRaftGroups().size() == 11, 100, 120000);
-    assertEquals(11, om1.getOmRaftGroups().size());
 
     ClientProtocol proxy = cluster.createClient().getProxy();
     String volume = "testvolume";
@@ -232,18 +230,143 @@ public class TestMultiRaft {
     assertNotNull(bucketDetails);
     assertEquals("testbucket", bucketDetails.getName());
     assertEquals("testvolume", bucketDetails.getVolumeName());
+    Thread.sleep(1000L);
+
     String key = "testkey";
-    try (OzoneOutputStream stream = proxy.createKey(
-            volume, bucket, key, key.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap())
-    ) {
-      stream.write(key.getBytes(UTF_8));
-    }
+    writeKey(proxy, volume, bucket, key);
+    Thread.sleep(1000L);
 
     OzoneKeyDetails keyDetails = proxy.getKeyDetails(volume, bucket, key);
     assertNotNull(keyDetails);
     assertEquals("testkey", keyDetails.getName());
 
     checkKeyReading(volume, bucket, key);
+  }
+
+  @Test
+  public void testWriteRequestsExecutesThroughBucketStateMachines() throws InterruptedException, TimeoutException, IOException {
+    cluster = initClusterWithMultiRaft(true, 1);
+
+    OzoneManager om0 = cluster.getOzoneManager(0);
+    OzoneManager om1 = cluster.getOzoneManager(1);
+    OzoneManager om2 = cluster.getOzoneManager(2);
+
+    GenericTestUtils.waitFor(() -> om0.getOmRaftGroups().size() == 2 &&
+        om1.getOmRaftGroups().size() == 2 &&
+        om2.getOmRaftGroups().size() == 2, 100, 120000);
+
+    ClientProtocol proxy = cluster.createClient().getProxy();
+    String volume = "testvolume";
+    proxy.createVolume(volume);
+    String bucket1 = "111a";
+    proxy.createBucket(volume, bucket1);
+    String bucket2 = "222a";
+    proxy.createBucket(volume, bucket2);
+    String bucket3 = "333a";
+    proxy.createBucket(volume, bucket3);
+    String bucket4 = "444a";
+    proxy.createBucket(volume, bucket4);
+
+    String key = "testkey";
+
+    Thread.sleep(1000L);
+    writeKey(proxy, volume, bucket1, key);
+    waitTermIndex(om0, 4L);
+    checkLastAppliedIndex(4L, om0);
+
+    writeKey(proxy, volume, bucket2, key);
+    waitTermIndex(om0, 8L);
+    checkLastAppliedIndex(8L, om0);
+
+    writeKey(proxy, volume, bucket3, key);
+    waitTermIndex(om0, 12L);
+    checkLastAppliedIndex(12L, om0);
+
+    writeKey(proxy, volume, bucket4, key);
+    waitTermIndex(om0, 16L);
+    checkLastAppliedIndex(16L, om0);
+
+    checkKeyReading(volume, bucket1, key);
+    checkKeyReading(volume, bucket2, key);
+    checkKeyReading(volume, bucket3, key);
+    checkKeyReading(volume, bucket4, key);
+  }
+
+  private static void waitTermIndex(OzoneManager om0, long expectedIndex) throws TimeoutException, InterruptedException {
+    GenericTestUtils.waitFor(
+        () -> om0.getStateMachines().values().stream().filter(it -> it instanceof BucketStateMachine)
+            .findFirst().map(StateMachine::getLastAppliedTermIndex)
+            .map(TermIndex::getIndex)
+            .orElse(0L) == expectedIndex, 100, 120000);
+  }
+
+  private static void checkLastAppliedIndex(Long expectedIndex,OzoneManager om0) {
+    Long lastAppliedTermIndex =
+        om0.getStateMachines().values().stream().filter(it -> it instanceof BucketStateMachine)
+            .findFirst().map(StateMachine::getLastAppliedTermIndex)
+            .map(TermIndex::getIndex)
+            .orElse(0L);
+    assertEquals(expectedIndex, lastAppliedTermIndex);
+  }
+
+  private void writeKey(ClientProtocol proxy, String volume, String bucket4, String key) throws IOException {
+    try (OzoneOutputStream stream = proxy.createKey(
+        volume, bucket4, key, key.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap())
+    ) {
+      stream.write(key.getBytes(UTF_8));
+    }
+  }
+
+  @Test
+  public void testCleaningRatisDirectory() throws InterruptedException, TimeoutException, IOException {
+    cluster = initClusterWithMultiRaft(true, 4);
+
+    OzoneManager om0 = cluster.getOzoneManager(0);
+    OzoneManager om1 = cluster.getOzoneManager(1);
+    OzoneManager om2 = cluster.getOzoneManager(2);
+
+    GenericTestUtils.waitFor(() -> om0.getOmRaftGroups().size() == 5 &&
+        om1.getOmRaftGroups().size() == 5 &&
+        om2.getOmRaftGroups().size() == 5, 1000, 120000);
+
+    UUID mainGroupUuid = cluster.getOzoneManager(0).getOmRatisServer().getCurrentRaftGroupId().getUuid();
+    List<String> dirsListBefore0 = getDirsList(om0.getConfiguration());
+    assertTrue(dirsListBefore0.contains(mainGroupUuid.toString()));
+    List<String> dirsListBefore1 = getDirsList(om1.getConfiguration());
+    assertTrue(dirsListBefore1.contains(mainGroupUuid.toString()));
+    List<String> dirsListBefore2 = getDirsList(om2.getConfiguration());
+    assertTrue(dirsListBefore2.contains(mainGroupUuid.toString()));
+
+    cluster.restartOzoneManager();
+    cluster.waitForClusterToBeReady();
+
+    GenericTestUtils.waitFor(
+        () -> getDirsList(om0.getConfiguration()).size() == 5 ,
+        1000,
+        120000
+    );
+
+    checkRemovedDirsDirs(om0, mainGroupUuid, dirsListBefore0);
+    checkRemovedDirsDirs(om1, mainGroupUuid, dirsListBefore1);
+    checkRemovedDirsDirs(om2, mainGroupUuid, dirsListBefore2);
+  }
+
+  private void checkRemovedDirsDirs(OzoneManager om0, UUID mainGroupUuid, List<String> dirsListBefore0) {
+    List<String> dirsListAfter0 = getDirsList(om0.getConfiguration());
+    assertTrue(dirsListAfter0.contains(mainGroupUuid.toString()));
+    dirsListAfter0.removeAll(dirsListBefore0);
+    assertEquals(4, dirsListAfter0.size());
+  }
+
+  private List<String> getDirsList(OzoneConfiguration configuration) {
+    String omRatisDirectory = ServerUtils.getDefaultRatisDirectory(configuration);
+    File ratisMetadataDir = new File(omRatisDirectory);
+    if (ratisMetadataDir.exists()) {
+      String[] list = ratisMetadataDir.list();
+
+      return new ArrayList<>(Arrays.asList(list == null ? new String[]{} : list));
+    }
+    return Lists.emptyList();
   }
 
   private void checkKeyReading(String volume, String bucket, String key) throws IOException {

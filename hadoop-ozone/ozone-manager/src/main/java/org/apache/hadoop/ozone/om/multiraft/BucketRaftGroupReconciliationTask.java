@@ -3,7 +3,6 @@ package org.apache.hadoop.ozone.om.multiraft;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.ratis.RatisHelper;
 import org.apache.hadoop.hdds.scm.ScmConfigKeys;
-import org.apache.hadoop.hdds.utils.BackgroundService;
 import org.apache.hadoop.hdds.utils.BackgroundTask;
 import org.apache.hadoop.hdds.utils.BackgroundTaskResult;
 import org.apache.hadoop.ipc.RPC;
@@ -34,6 +33,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
+import static org.apache.hadoop.ozone.om.OmRaftGroupManager.generateRaftGroups;
 import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type.BucketRaftGroupsStateChanged;
 
@@ -53,16 +53,20 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
   public BackgroundTaskResult call() throws Exception {
     OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
     RaftGroup mainRaftGroup = omRatisServer.getCurrentRaftGroup();
+    LOG.trace("Start reconciling bucket group RaftGroup. On {} - {}", mainRaftGroup, omRatisServer.getRaftPeerId());
     Long currentMultiRaftTerm = ozoneManager.getBucketRaftGroupsReconfigurationIndex();
     if (currentMultiRaftTerm == null) {
       currentMultiRaftTerm = 0L;
     }
     if (!omRatisServer.checkLeaderStatus(mainRaftGroup.getGroupId()).equals(NOT_LEADER)) {
+      LOG.trace("Start reconciling bucket group RaftGroup on leader {}", omRatisServer.getRaftPeerId());
       List<RaftGroup> groupsToBeReconfigured = new ArrayList<>();
       List<RaftGroup> existingRaftGroups = (List<RaftGroup>) omRatisServer.getServer().getGroups();
-      if (existingRaftGroups.size() == 1) { // consist of only main raft group, as like as an initial setup
-        List<RaftGroupId> raftGroupIds = ozoneManager.getOmRaftGroupManager()
-            .generateRaftGroups(currentMultiRaftTerm, expectedRaftGroupsCount);
+
+      if (existingRaftGroups.size() == 1 &&
+          ozoneManager.isMultiRaftEnabled()) { // consist of only main raft group, as like as an initial setup
+        LOG.trace("Create all raft groups");
+        List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm, expectedRaftGroupsCount);
         ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()), true);
       } else {
         for (RaftGroup raftGroup : existingRaftGroups) {
@@ -71,7 +75,7 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
           DivisionInfo divisionInfo = omRatisServer.getServer().getDivision(groupId).getInfo();
           RaftPeerId leaderId = divisionInfo.getLeaderId();
           if (leaderId == null || divisionInfo.getLifeCycleState().equals(LifeCycle.State.CLOSED)) {
-            BackgroundService.LOG.warn("Raft group {} is closed, removing it.", groupId);
+            LOG.warn("Raft group {} is closed, removing it.", groupId);
             groupsToBeReconfigured.add(raftGroup);
           } else {
             RaftPeerId raftGroupLeaderId = omRatisServer.getServer().getDivision(groupId).getInfo().getLeaderId();
@@ -113,18 +117,25 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
             }
           }
         }
-        if (!groupsToBeReconfigured.isEmpty()) {
-          ozoneManager.moveOmToSafeMode();
-          groupsToBeReconfigured.forEach(this::deleteRaftGroup);
-          List<RaftGroupId> raftGroupIds = ozoneManager.getOmRaftGroupManager()
-              .generateRaftGroups(currentMultiRaftTerm + 1, groupsToBeReconfigured.size());
-          ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()),
-              false);
-        }
-        if (existingRaftGroups.size() < expectedRaftGroupsCount + 1) {
-          List<RaftGroupId> ids = ozoneManager.getOmRaftGroupManager().generateRaftGroups(currentMultiRaftTerm,
-              expectedRaftGroupsCount - existingRaftGroups.size() + 1);
-          ozoneManager.createRaftGroups(ids.stream().map(RaftId::getUuid).collect(Collectors.toList()), false);
+        groupsToBeReconfigured.forEach(this::deleteRaftGroup);
+
+        if (ozoneManager.isMultiRaftEnabled()) {
+          LOG.trace("Raft group to be reconfigured: {}", groupsToBeReconfigured);
+          if (!groupsToBeReconfigured.isEmpty()) {
+            ozoneManager.moveOmToSafeMode();
+            List<RaftGroupId> raftGroupIds = ozoneManager.getOmRaftGroupManager()
+                .generateRaftGroups(currentMultiRaftTerm + 1, expectedRaftGroupsCount);
+            LOG.trace("Raft group to be created: {}", raftGroupIds);
+            ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()),
+                false);
+          }
+          if (existingRaftGroups.size() < expectedRaftGroupsCount + 1) {
+            List<RaftGroupId> raftGroupIds =
+                ozoneManager.getOmRaftGroupManager().generateRaftGroups(currentMultiRaftTerm,
+                    expectedRaftGroupsCount - existingRaftGroups.size() + 1);
+            ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()),
+                false);
+          }
         }
       }
       boolean raftGroupsReconfigured = existingRaftGroups.size() == 1 || !groupsToBeReconfigured.isEmpty() ||
@@ -159,6 +170,18 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
     return BackgroundTaskResult.EmptyTaskResult.newResult();
   }
 
+
+//  private List<RaftGroupId> generateRaftGroups(long currentTerm, int count) {
+//    List<RaftGroupId> result = new ArrayList<>(count);
+//    long startFrom = currentTerm * 100;
+//    for (long i = startFrom; i < startFrom + count; i++) {
+//      UUID raftGroupIdUUID = OmRaftGroupManager.toUuid(String.valueOf(i));
+//      RaftGroupId groupId = RaftGroupId.valueOf(raftGroupIdUUID);
+//      result.add(groupId);
+//    }
+//    return result;
+//  }
+
   private void deleteRaftGroup(RaftGroup raftGroup) {
     String rpcType = ozoneManager.getConfiguration()
         .get(ScmConfigKeys.DFS_CONTAINER_RATIS_RPC_TYPE_KEY,
@@ -168,8 +191,9 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
     GrpcTlsConfig tlsConfig = null;
     if (ozoneManager.isSecurityEnabled()) {
       try {
-        tlsConfig = new GrpcTlsConfig(ozoneManager.getCertificateClient().getClientKeyStoresFactory().getKeyManagers()[0],
-            ozoneManager.getCertificateClient().getClientKeyStoresFactory().getTrustManagers()[0], true);
+        tlsConfig =
+            new GrpcTlsConfig(ozoneManager.getCertificateClient().getClientKeyStoresFactory().getKeyManagers()[0],
+                ozoneManager.getCertificateClient().getClientKeyStoresFactory().getTrustManagers()[0], true);
       } catch (IOException ex) {
         LOG.error("Can't retrieve cert key store factory");
       }
@@ -183,7 +207,8 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
               peer, retryPolicy, finalTlsConfig, ozoneManager.getConfiguration())) {
             raftClient.getGroupManagementApi(peer.getId()).remove(raftGroup.getGroupId(), true, false);
           } catch (IOException e) {
-            LOG.error("An error occurred on deleting raft group {} remotely from {}", raftGroup.getGroupId(), peer.getId());
+            LOG.error("An error occurred on deleting raft group {} remotely from {}",
+                raftGroup.getGroupId(), peer.getId());
           }
         });
     try {
@@ -192,6 +217,6 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
       LOG.error("An error occurred on deleting raft group {} from {}", raftGroup.getGroupId(),
           omRatisServer.getRaftPeerId());
     }
-  }
 
+  }
 }
