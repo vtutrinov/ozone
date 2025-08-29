@@ -25,11 +25,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.MessageDigest;
+import java.util.Base64;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.Response;
 
 import com.google.common.cache.LoadingCache;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdds.client.ECReplicationConfig;
@@ -59,6 +61,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.DECODED_CONTENT_LENGTH_HEADER;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.COPY_SOURCE_HEADER;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.STORAGE_CLASS_HEADER;
+import static org.apache.hadoop.ozone.s3.util.S3Consts.X_AMZ_CHECKSUM_SHA256;
 import static org.apache.hadoop.ozone.s3.util.S3Utils.urlEncode;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -511,5 +514,36 @@ public class TestObjectPut {
     assertEquals("Conflict", exception.getCode());
     assertEquals(409, exception.getHttpCode());
     Mockito.verify(protocol, times(1)).createDirectory(any(), any(), any());
+  }
+
+  @Test
+  public void testInvalidSHA256() {
+    HttpHeaders headers = Mockito.mock(HttpHeaders.class);
+    ByteArrayInputStream body = new ByteArrayInputStream(CONTENT.getBytes(UTF_8));
+    when(headers.getHeaderString(X_AMZ_CHECKSUM_SHA256)).thenReturn("123");
+    OS3Exception e = assertThrows(OS3Exception.class, () -> {
+      objectEndpoint.put(bucketName, keyName, 10, 1, null, body);
+    });
+    assertEquals(S3ErrorTable.CHECKSUM_MISMATCH.getErrorMessage(),
+        e.getErrorMessage());
+  }
+
+  @Test
+  public void testValidSHA256() throws IOException, OS3Exception {
+    HttpHeaders headers = Mockito.mock(HttpHeaders.class);
+    ByteArrayInputStream body = new ByteArrayInputStream(CONTENT.getBytes(UTF_8));
+    String checksum = Base64.getEncoder().encodeToString(DigestUtils.sha256(CONTENT));
+    when(headers.getHeaderString(X_AMZ_CHECKSUM_SHA256)).thenReturn(checksum);
+    Response response = objectEndpoint.put(bucketName, keyName, 10, 1, null, body);
+    assertEquals(200, response.getStatus());
+  }
+
+  @Test
+  public void testEmptySHA256() throws IOException, OS3Exception {
+    HttpHeaders headers = Mockito.mock(HttpHeaders.class);
+    ByteArrayInputStream body = new ByteArrayInputStream(CONTENT.getBytes(UTF_8));
+    when(headers.getHeaderString(X_AMZ_CHECKSUM_SHA256)).thenReturn(null);
+    Response response = objectEndpoint.put(bucketName, keyName, 10, 1, null, body);
+    assertEquals(200, response.getStatus());
   }
 }
