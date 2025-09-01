@@ -20,12 +20,17 @@ package org.apache.hadoop.ozone.om.ratis;
 import static org.apache.hadoop.ipc_.RpcConstants.DUMMY_CLIENT_ID;
 import static org.apache.hadoop.ipc_.RpcConstants.INVALID_CALL_ID;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_HA_PREFIX;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_INITIAL_DELAY;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_INITIAL_DELAY_DEFAULT;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_PERIOD;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_PERIOD_DEFAULT;
 import static org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils.createServerTlsConfig;
 import static org.apache.hadoop.ozone.util.MetricUtil.captureLatencyNs;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.ServiceException;
 import java.io.File;
 import java.io.IOException;
@@ -43,6 +48,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
@@ -60,6 +67,7 @@ import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OMPerformanceMetrics;
 import org.apache.hadoop.ozone.om.OzoneManager;
+import org.apache.hadoop.ozone.om.balancing.LeaderCheckExecutor;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.exceptions.OMLeaderNotReadyException;
 import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
@@ -132,6 +140,10 @@ public final class OzoneManagerRatisServer {
   private final ClientId clientId = ClientId.randomId();
   private static final AtomicLong CALL_ID_COUNTER = new AtomicLong();
   private final Read.Option readOption;
+  // SDP (multi-raft): bucket raft group leadership balancing
+  private ScheduledExecutorService scheduler;
+  private final long groupTransferLeadershipSchedulingInitialDelay;
+  private final long groupTransferLeadershipSchedulingPeriod;
 
   private static long nextCallId() {
     return CALL_ID_COUNTER.getAndIncrement() & Long.MAX_VALUE;
@@ -212,6 +224,14 @@ public final class OzoneManagerRatisServer {
       }
     });
     this.perfMetrics = om.getPerfMetrics();
+    this.groupTransferLeadershipSchedulingInitialDelay = conf.getTimeDuration(
+        OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_INITIAL_DELAY,
+        OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_INITIAL_DELAY_DEFAULT,
+        TimeUnit.SECONDS);
+    this.groupTransferLeadershipSchedulingPeriod = conf.getTimeDuration(
+        OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_PERIOD,
+        OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_PERIOD_DEFAULT,
+        TimeUnit.SECONDS);
   }
 
   /**
@@ -1180,5 +1200,24 @@ public final class OzoneManagerRatisServer {
     LOG.trace("Create not leader exception for group {}, leaderId {}, leader address {}",
         groupId, leaderId, leaderAddress);
     return new OMNotLeaderException(raftPeerId, leader.getId(), leaderAddress);
+  }
+
+  /** SDP (multi-raft): the raft server hosting the OM and bucket raft groups. */
+  public RaftServer getServer() {
+    return server;
+  }
+
+  public void startSchedulingLeaderReconfiguration() {
+    scheduler = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder().setDaemon(true)
+        .setNameFormat(ozoneManager.getThreadNamePrefix() + "BucketGroupLeaderBalancer").build());
+    scheduler.scheduleAtFixedRate(
+            new LeaderCheckExecutor(this, ozoneManager.getConfiguration()),
+            groupTransferLeadershipSchedulingInitialDelay, groupTransferLeadershipSchedulingPeriod, TimeUnit.SECONDS);
+  }
+
+  public void stopSchedulingLeaderReconfiguration() {
+    if (scheduler != null) {
+      scheduler.shutdown();
+    }
   }
 }

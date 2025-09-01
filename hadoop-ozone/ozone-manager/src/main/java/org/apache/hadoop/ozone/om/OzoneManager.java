@@ -787,6 +787,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     bucketUtilizationMetrics = BucketUtilizationMetrics.create(metadataManager);
     omHostName = HddsUtils.getHostName(conf);
     raftClientProvider = RatisHelper.newRaftClient(configuration);
+
+    // SDP (multi-raft): balance the leadership of the bucket raft groups between the OMs
+    if (isMultiRaftEnabled && this.getOmRatisServer() != null) {
+      this.getOmRatisServer().startSchedulingLeaderReconfiguration();
+    }
   }
 
   /**
@@ -2673,6 +2678,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       if (omhaMetrics != null) {
         OMHAMetrics.unRegister();
       }
+
+      if (this.getOmRatisServer() != null) {
+        this.getOmRatisServer().stopSchedulingLeaderReconfiguration();
+      }
+
       omRatisServer = null;
 
       if (bucketUtilizationMetrics != null) {

@@ -82,6 +82,10 @@ public class BucketStateMachine extends OzoneManagerStateMachine {
   @Override
   public void notifyLeaderReady() {
     // OM-level leader state is driven by the OM raft group only.
+    LOG.trace("Leader ready for {} - {}. OM leader: {}",
+        getRaftGroupId(),
+        getOzoneManager().getOmRatisServer().getLeaderId(getRaftGroupId()),
+        getOzoneManager().getOmRatisServer().getLeaderId(getOzoneManager().omRatisGroupName()));
   }
 
   @Override
@@ -95,4 +99,5 @@ public class BucketStateMachine extends OzoneManagerStateMachine {
     // OM peer list is driven by the OM raft group only.
     LOG.trace("{}: configuration changed at ({}, {})", getRaftGroupId(), term, index);
   }
+
 }
