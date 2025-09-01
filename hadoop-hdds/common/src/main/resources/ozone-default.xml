@@ -4397,4 +4397,28 @@
       This is used in multi-raft feature for bucket raft groups.
     </description>
   </property>
+  <property>
+    <name>ozone.om.multi.raft.bucket.group.transfer.leader.timeout</name>
+    <value>1s</value>
+    <tag>OM</tag>
+    <description>
+      Transfer leadership request timeout.
+    </description>
+  </property>
+  <property>
+    <name>ozone.om.multi.raft.bucket.group.transfer.leader.initial.delay</name>
+    <value>30s</value>
+    <tag>OM</tag>
+    <description>
+      Initial delay for scheduling transfer leadership for multi raft bucket groups.
+    </description>
+  </property>
+  <property>
+    <name>ozone.om.multi.raft.bucket.group.transfer.leader.period</name>
+    <value>60s</value>
+    <tag>OM</tag>
+    <description>
+      Repetition period for scheduling transfer leadership for multi raft bucket groups.
+    </description>
+  </property>
 </configuration>
