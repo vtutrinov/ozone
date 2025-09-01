@@ -545,8 +545,10 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
    * Notifies the state machine that the raft peer is no longer leader.
    */
   @Override
-  public void notifyNotLeader(Collection<TransactionContext> pendingEntries)
-      throws IOException {
+  public void notifyNotLeader(Collection<TransactionContext> pendingEntries) {
+    LOG.trace("Lost leadership for {} - {}.",
+        ozoneManager.omRatisGroupName(),
+        ozoneManager.getOMNodeId());
   }
 
   @Override
@@ -818,5 +820,13 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   @VisibleForTesting
   public OzoneManagerDoubleBuffer getOzoneManagerDoubleBuffer() {
     return ozoneManagerDoubleBuffer;
+  }
+
+  @Override
+  public void notifyLeaderReady() {
+    LOG.trace("Leader ready for OM group {} - {}.",
+            ozoneManager.omRatisGroupName(),
+            ozoneManager.getOmRatisServer().getLeaderId(ozoneManager.omRatisGroupName())
+    );
   }
 }

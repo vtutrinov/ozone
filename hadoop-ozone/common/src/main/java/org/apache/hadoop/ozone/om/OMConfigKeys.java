@@ -624,4 +624,19 @@ public final class OMConfigKeys {
   public static final String OZONE_OM_MULTI_RAFT_BUCKET_ENABLED =
           "ozone.om.multi.raft.bucket.enabled";
   public static final boolean OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT = false;
+
+  public static final String OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_TIMEOUT
+          = "ozone.om.multi.raft.bucket.group.transfer.leader.timeout";
+  public static final String OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_TIMEOUT_DEFAULT
+          = "1s";
+
+  public static final String OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_INITIAL_DELAY
+          = "ozone.om.multi.raft.bucket.group.transfer.leader.initial.delay";
+  public static final String OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_INITIAL_DELAY_DEFAULT
+          = "30s";
+
+  public static final String OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_PERIOD
+          = "ozone.om.multi.raft.bucket.group.transfer.leader.period";
+  public static final String OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_PERIOD_DEFAULT
+          = "60s";
 }

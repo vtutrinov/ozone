@@ -751,6 +751,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     raftClientProvider = RatisHelper.newRaftClient(configuration);
 
     bucketUtilizationMetrics = BucketUtilizationMetrics.create(metadataManager);
+
+    if (this.getOmRatisServer() != null) {
+      this.getOmRatisServer().startSchedulingLeaderReconfiguration();
+    }
   }
 
   @SuppressWarnings("checkstyle:EmptyBlock")
@@ -2402,6 +2406,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       if (omhaMetrics != null) {
         OMHAMetrics.unRegister();
       }
+
+      if (this.getOmRatisServer() != null) {
+        this.getOmRatisServer().stopSchedulingLeaderReconfiguration();
+      }
+
       omRatisServer = null;
 
       if (bucketUtilizationMetrics != null) {
