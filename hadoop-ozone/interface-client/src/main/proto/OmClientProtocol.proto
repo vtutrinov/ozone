@@ -292,9 +292,9 @@ message OMRequest {
   optional GetContentSummaryRequest         getContentSummaryRequest       = 143;
 
   optional CreateBucketRaftGroupsRequest    CreateBucketRaftGroupsRequest         = 144;
-  optional GetRaftGroupHealthStateRequest   getRaftGroupHealthStateRequest      = 145;
-  optional hadoop.hdds.UUID                 raftGroupId                    = 146; // Used for raft group that the request should be executed in
-  optional BucketRaftGroupsStateChangedRequest bucketRaftGroupsStateChangedRequest = 147; // Used to notify OM about bucket raft groups state changes
+  optional GetRaftGroupHealthStateRequest   getRaftGroupHealthStateRequest      = 146;
+  optional hadoop.hdds.UUID                 raftGroupId                    = 147; // Used for raft group that the request should be executed in
+  optional BucketRaftGroupsStateChangedRequest bucketRaftGroupsStateChangedRequest = 148; // Used to notify OM about bucket raft groups state changes
 }
 
 message OMResponse {
@@ -2101,7 +2101,6 @@ message GetS3VolumeContextResponse {
 
 message CreateBucketRaftGroupsRequest {
   repeated hadoop.hdds.UUID groupIds = 1;
-  optional bool purgeExistingRaftGroups = 2 [default = false];
 }
 
 message CreateBucketRaftGroupsResponse {

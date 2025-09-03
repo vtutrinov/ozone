@@ -221,6 +221,7 @@ import org.apache.ratis.util.ExitUtils;
 import org.apache.ratis.util.FileUtils;
 import org.apache.ratis.util.JvmPauseMonitor;
 import org.apache.ratis.util.LifeCycle;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -413,11 +414,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
   private final OMMetrics metrics;
   private OMHAMetrics omhaMetrics;
-
-  public OMHAMultiRaftMetrics getOmMultiRaftMetrics() {
-    return omMultiRaftMetrics;
-  }
-
   private OMHAMultiRaftMetrics omMultiRaftMetrics;
   private final ProtocolMessageMetrics<ProtocolMessageEnum>
       omClientProtocolMetrics;
