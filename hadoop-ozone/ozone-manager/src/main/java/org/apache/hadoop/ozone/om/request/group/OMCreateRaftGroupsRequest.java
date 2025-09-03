@@ -10,12 +10,19 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateB
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateBucketRaftGroupsResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMResponse;
+import org.apache.ratis.protocol.RaftGroup;
 import org.apache.ratis.protocol.RaftGroupId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
 
 /**
  * Handles create raft group request.
  */
 public class OMCreateRaftGroupsRequest extends OMClientRequest {
+
+  public static final Logger LOG = LoggerFactory.getLogger(OMCreateRaftGroupsRequest.class);
 
   public OMCreateRaftGroupsRequest(OMRequest omRequest) {
     super(omRequest);
@@ -23,9 +30,21 @@ public class OMCreateRaftGroupsRequest extends OMClientRequest {
 
   @Override
   public OMClientResponse validateAndUpdateCache(OzoneManager ozoneManager, long transactionLogIndex) {
-
     OMRequest omRequest = getOmRequest();
     CreateBucketRaftGroupsRequest createBucketRaftGroupsRequest = omRequest.getCreateBucketRaftGroupsRequest();
+    if (createBucketRaftGroupsRequest.getPurgeExistingRaftGroups()) {
+      try {
+        Iterable<RaftGroup> existingRaftGroups = ozoneManager.getOmRatisServer().getServer().getGroups();
+        for (RaftGroup group : existingRaftGroups) {
+          if (!group.getGroupId().equals(ozoneManager.getOmRatisServer().getCurrentRaftGroupId())) {
+            ozoneManager.getOmRatisServer().removeBucketRaftGroup(group.getGroupId());
+          }
+        }
+      } catch (IOException e) {
+        LOG.warn("Something went wrong on deleting existing raft groups", e);
+      }
+    }
+
     createBucketRaftGroupsRequest.getGroupIdsList().forEach(groupId -> {
       ozoneManager.createRaftGroupForBucket(RaftGroupId.valueOf(HddsUtils.fromProtobuf(groupId)));
       ozoneManager.getOmRaftGroupManager().addGroupIdToRaftGroupCounter(HddsUtils.fromProtobuf(groupId));

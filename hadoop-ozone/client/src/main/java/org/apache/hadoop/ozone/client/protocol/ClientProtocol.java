@@ -64,7 +64,6 @@ import org.apache.hadoop.ozone.om.helpers.TenantUserInfoValue;
 import org.apache.hadoop.ozone.om.helpers.TenantUserList;
 import org.apache.hadoop.ozone.om.protocol.OzoneManagerProtocol;
 import org.apache.hadoop.ozone.om.protocol.S3Auth;
-import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRoleInfo;
@@ -1200,8 +1199,10 @@ public interface ClientProtocol {
   void setTimes(OzoneObj obj, String keyName, long mtime, long atime)
       throws IOException;
 
-  void createRaftGroups(List<UUID> raftGroupIds) throws IOException;
+  void createRaftGroups(List<UUID> raftGroupIds, boolean purgeExistingRaftGroups) throws IOException;
 
   GetRaftGroupHealthStateResponse getRaftGroupHealthState(GetRaftGroupHealthStateRequest request) throws IOException;
+
+  void moveOmToSafeMode() throws IOException;
 
 }

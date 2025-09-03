@@ -63,7 +63,7 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
       if (existingRaftGroups.size() == 1) { // consist of only main raft group, as like as an initial setup
         List<RaftGroupId> raftGroupIds = ozoneManager.getOmRaftGroupManager()
             .generateRaftGroups(currentMultiRaftTerm, expectedRaftGroupsCount);
-        ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()));
+        ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()), true);
       } else {
         for (RaftGroup raftGroup : existingRaftGroups) {
           if (raftGroup.getGroupId().equals(mainRaftGroup.getGroupId())) continue;
@@ -120,15 +120,17 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
           }
         }
         if (!groupsToBeReconfigured.isEmpty()) {
+          ozoneManager.moveOmToSafeMode();
           groupsToBeReconfigured.forEach(this::deleteRaftGroup);
           List<RaftGroupId> raftGroupIds = ozoneManager.getOmRaftGroupManager()
               .generateRaftGroups(currentMultiRaftTerm + 1, groupsToBeReconfigured.size());
-          ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()));
+          ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()),
+              false);
         }
         if (existingRaftGroups.size() < expectedRaftGroupsCount + 1) {
           List<RaftGroupId> ids = ozoneManager.getOmRaftGroupManager().generateRaftGroups(currentMultiRaftTerm,
               expectedRaftGroupsCount - existingRaftGroups.size() + 1);
-          ozoneManager.createRaftGroups(ids.stream().map(RaftId::getUuid).collect(Collectors.toList()));
+          ozoneManager.createRaftGroups(ids.stream().map(RaftId::getUuid).collect(Collectors.toList()), false);
         }
       }
       boolean raftGroupsReconfigured = existingRaftGroups.size() == 1 || !groupsToBeReconfigured.isEmpty() ||

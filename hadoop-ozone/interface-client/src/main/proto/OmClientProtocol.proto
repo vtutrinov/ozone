@@ -151,6 +151,7 @@ enum Type {
   CreateBucketRaftGroups = 144;
   GetRaftGroupHealthState = 146;
   BucketRaftGroupsStateChanged = 147;
+  MoveOmToSafeMode = 148;
 }
 
 enum SafeMode {
@@ -2100,6 +2101,7 @@ message GetS3VolumeContextResponse {
 
 message CreateBucketRaftGroupsRequest {
   repeated hadoop.hdds.UUID groupIds = 1;
+  optional bool purgeExistingRaftGroups = 2 [default = false];
 }
 
 message CreateBucketRaftGroupsResponse {
