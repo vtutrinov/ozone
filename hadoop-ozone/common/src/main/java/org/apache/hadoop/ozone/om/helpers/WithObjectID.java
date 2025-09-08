@@ -17,13 +17,17 @@
  */
 package org.apache.hadoop.ozone.om.helpers;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static org.apache.hadoop.ozone.OzoneConsts.OBJECT_ID_RECLAIM_BLOCKS;
 
 /**
  * Mixin class to handle ObjectID and UpdateID.
  */
 public class WithObjectID extends WithMetadata {
-
+  private static final Logger LOG = LoggerFactory
+      .getLogger(WithObjectID.class);
   /**
    * ObjectIDs are unique and immutable identifier for each object in the
    * System.
@@ -109,10 +113,11 @@ public class WithObjectID extends WithMetadata {
     if ((!isMultiraftEnabled || currentMultiraftTerm == multiRaftTerm)
         && isRatisEnabled && updateId < this.updateID
     ) {
+      LOG.error("IsMultiraftEnabled: {}, current multiraft are equals: {}, ratis enabled: {}", isMultiraftEnabled, currentMultiraftTerm == multiRaftTerm, isRatisEnabled );
       throw new IllegalArgumentException(String.format(
           "Trying to set updateID to %d which is not greater than the " +
-          "current value of %d for %s", updateId, this.updateID,
-          getObjectInfo()));
+          "current value of %d for %s. Multiraft term: %s", updateId, this.updateID,
+          getObjectInfo(), multiRaftTerm));
     }
 
     if (isMultiraftEnabled && currentMultiraftTerm != multiRaftTerm) {

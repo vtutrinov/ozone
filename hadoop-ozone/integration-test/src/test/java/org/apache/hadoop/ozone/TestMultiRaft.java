@@ -310,11 +310,80 @@ public class TestMultiRaft {
   }
 
   private void writeKey(ClientProtocol proxy, String volume, String bucket4, String key) throws IOException {
+    writeKey(proxy, volume, bucket4, key, key);
+  }
+
+  private void writeKey(ClientProtocol proxy, String volume, String bucket, String key, String fileText) throws IOException {
     try (OzoneOutputStream stream = proxy.createKey(
-        volume, bucket4, key, key.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap())
+        volume, bucket, key, key.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap())
     ) {
-      stream.write(key.getBytes(UTF_8));
+      stream.write(fileText.getBytes(UTF_8));
     }
+  }
+
+  @Test
+  public void testUpdateFileAfterMultiraftReconfiguration() throws InterruptedException, TimeoutException, IOException {
+    cluster = initClusterWithMultiRaft(true, 4);
+
+    ClientProtocol proxy = cluster.createClient().getProxy();
+    String volume = "testvolume";
+    proxy.createVolume(volume);
+    String bucket = "testbucket";
+    proxy.createBucket(volume, bucket);
+    String key = "testkey";
+    writeKey(proxy, volume, bucket, key);
+
+    cluster.getOzoneManager(0).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
+    cluster.getOzoneManager(1).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
+    cluster.getOzoneManager(2).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
+
+    cluster.restartOzoneManager();
+    cluster.waitForClusterToBeReady();
+
+    OzoneManager om0 = cluster.getOzoneManager(0);
+    OzoneManager om1 = cluster.getOzoneManager(1);
+    OzoneManager om2 = cluster.getOzoneManager(2);
+
+    GenericTestUtils.waitFor(() -> om0.getOmRaftGroups().size() == 1 &&
+        om1.getOmRaftGroups().size() == 1 &&
+        om2.getOmRaftGroups().size() == 1, 100, 100000);
+
+    String key1 = "testkey1";
+    writeKey(proxy, volume, bucket, key1);
+    long keyUpdateId1 = getKeyUpdateId(volume, bucket, key1);
+    cluster.getOzoneManager(0).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, true);
+    cluster.getOzoneManager(1).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, true);
+    cluster.getOzoneManager(2).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, true);
+
+    cluster.restartOzoneManager();
+    cluster.waitForClusterToBeReady();
+
+    GenericTestUtils.waitFor(() -> om0.getOmRaftGroups().size() == 5 &&
+        om1.getOmRaftGroups().size() == 5 &&
+        om2.getOmRaftGroups().size() == 5, 100, 80000);
+    assertEquals(5, om1.getOmRaftGroups().size());
+
+    writeKey(proxy, volume, bucket, key1, "updated text 1");
+    Thread.sleep(1000L);
+    checkKeyReading(volume, bucket, key1, "updated text 1");
+    long keyUpdateId2 = getKeyUpdateId(volume, bucket, key1);
+    assertTrue(keyUpdateId2 < keyUpdateId1);
+    cluster.getOzoneManager(0).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
+    cluster.getOzoneManager(1).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
+    cluster.getOzoneManager(2).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
+
+    cluster.restartOzoneManager();
+    cluster.waitForClusterToBeReady();
+
+    GenericTestUtils.waitFor(() -> om0.getOmRaftGroups().size() == 1 &&
+        om1.getOmRaftGroups().size() == 1 &&
+        om2.getOmRaftGroups().size() == 1, 100, 90000);
+
+    writeKey(proxy, volume, bucket, key1, "updated text 2");
+    checkKeyReading(volume, bucket, key1, "updated text 2");
+
+    long keyUpdateId3 = getKeyUpdateId(volume, bucket, key1);
+    assertTrue(keyUpdateId3 > keyUpdateId2);
   }
 
   @Test
@@ -383,5 +452,26 @@ public class TestMultiRaft {
       String result = sb.toString();
       assertEquals(key, result);
     }
+  }
+
+  private void checkKeyReading(String volume, String bucket, String key, String expectedText) throws IOException {
+    try (
+        OzoneInputStream ozoneInputStream = cluster.createClient().getProxy().getKey(volume, bucket, key);
+        BufferedReader br = new BufferedReader(new InputStreamReader(ozoneInputStream, UTF_8));
+    ) {
+
+      StringBuilder sb = new StringBuilder();
+      String line;
+      while ((line = br.readLine()) != null) {
+        sb.append(line);
+      }
+      String result = sb.toString();
+      assertEquals(expectedText, result);
+    }
+  }
+
+  private long getKeyUpdateId(String volume, String bucket, String key) throws IOException {
+    OzoneKeyDetails ozoneKeyDetails = cluster.createClient().getProxy().getKeyDetails(volume, bucket, key);
+    return ozoneKeyDetails.getUpdateId();
   }
 }

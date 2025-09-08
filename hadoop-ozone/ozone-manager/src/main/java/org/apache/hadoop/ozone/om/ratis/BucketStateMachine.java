@@ -225,7 +225,7 @@ public class BucketStateMachine extends BaseStateMachine {
       OzoneManagerProtocolProtos.OMRequest request,
       long trxLogIndex
   ) {
-    LOG.trace("Run command {} - {}", request.getCmdType(), trxLogIndex);
+    LOG.error("Run command {} - {}", request.getCmdType(), trxLogIndex);
     try {
       final OMClientResponse omClientResponse = handler.handleWriteRequest(
           request, trxLogIndex);
