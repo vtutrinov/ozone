@@ -1,7 +1,6 @@
-package org.apache.hadoop.ozone.om.protocolPB;
+package org.apache.hadoop.ozone.om.request.invocation;
 
 import org.apache.hadoop.classification.InterfaceStability;
-import org.apache.hadoop.io.retry.RetryInvocationHandler;
 import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
@@ -21,8 +20,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class AsyncCallHandler {
-  public static final Logger LOG = LoggerFactory.getLogger(
-      org.apache.hadoop.io.retry.AsyncCallHandler.class);
+  public static final Logger LOG = LoggerFactory.getLogger(AsyncCallHandler.class);
 
   private static final ThreadLocal<AsyncGet<?, Exception>>
       LOWER_LAYER_ASYNC_RETURN = new ThreadLocal<>();
@@ -209,7 +207,7 @@ public class AsyncCallHandler {
     }
   }
 
-  static class AsyncCall extends OzoneRetryInvocationHandler.Call {
+  static class AsyncCall extends Call {
     private final AsyncCallHandler asyncCallHandler;
 
     private final AsyncValue<CallReturn> asyncCallReturn = new AsyncValue<>();

@@ -1,4 +1,4 @@
-package org.apache.hadoop.ozone.om.protocolPB;
+package org.apache.hadoop.ozone.om.request.invocation;
 
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 

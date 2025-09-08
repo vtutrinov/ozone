@@ -130,6 +130,7 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetFile
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetFileStatusResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetKeyInfoRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetKeyInfoResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetS3SecretRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetS3SecretResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetS3VolumeContextRequest;
@@ -2622,7 +2623,7 @@ public final class OzoneManagerProtocolClientSideTranslatorPB
   }
 
   @Override
-  public OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse getRaftGroupHealthState(
+  public GetRaftGroupHealthStateResponse getRaftGroupHealthState(
       OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest request) throws IOException {
     OMRequest omRequest = createOMRequest(Type.GetRaftGroupHealthState)
         .setGetRaftGroupHealthStateRequest(request)

@@ -2036,9 +2036,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       );
       omRaftGroupManager =
               new OmRaftGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
-//      if (isMultiRaftEnabled) {
-//        initBucketRaftGroups();
-//      }
     }
   }
 
@@ -3391,12 +3388,21 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         .create(getOMNodeId(), leaderId, raftGroupId);
     omMultiRaftMetrics = OMHAMultiRaftMetrics.create(this);
     tmpLeadersMap.forEach(
-        (raftGroupId1, leaderId1) -> {
+        (bucketRaftGroupId, bucketRaftGroupNodeId) -> {
           LOG_MULTI_RAFT.info("Moving raft group {} leader {} to OMHAMetrics",
-              raftGroupId1, leaderId1);
-          omhaMetrics.defineRaftGroupLeader(raftGroupId1, leaderId1, false);
+              bucketRaftGroupId, bucketRaftGroupNodeId);
+          omhaMetrics.defineRaftGroupLeader(bucketRaftGroupId, bucketRaftGroupNodeId, false);
         });
     tmpLeadersMap.clear();
+  }
+  
+  public long getBucketRaftGroupsReconfigurationIndex() throws IOException {
+    return getMetadataManager().getMultiRaftInfoTable().get("term");
+  }
+
+  public void updateBucketRaftGroupsReconfigurationIndex(long index)
+      throws IOException {
+    getMetadataManager().getMultiRaftInfoTable().put("term", index);
   }
 
   @VisibleForTesting

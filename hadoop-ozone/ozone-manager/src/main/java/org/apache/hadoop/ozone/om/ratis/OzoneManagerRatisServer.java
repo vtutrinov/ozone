@@ -333,11 +333,12 @@ public final class OzoneManagerRatisServer {
   public OMResponse submitBucketWriteRequest(
           OMRequest omRequest, String volumeName, String bucketName
   ) throws ServiceException {
-    return commonSubmitRequest(
-            omRequest,
-            omRequest.hasRaftGroupId() ? ozoneManager.raftGroupName(volumeName, bucketName, omRequest.getRaftGroupId()) :
-                ozoneManager.raftGroupName(volumeName, bucketName)
-    );
+    RaftGroupId raftGroupIdToHandleRequestIn = omRequest.hasRaftGroupId() ?
+        // use the group id from the request and increment usage for it
+        ozoneManager.raftGroupName(volumeName, bucketName, omRequest.getRaftGroupId()) :
+        // select the group id based on usage, increment the usage and assign the group id for the bucket
+        ozoneManager.raftGroupName(volumeName, bucketName);
+    return commonSubmitRequest(omRequest, raftGroupIdToHandleRequestIn);
   }
 
   public OMResponse commonSubmitRequest(
@@ -1060,7 +1061,7 @@ public final class OzoneManagerRatisServer {
     final RaftPeerId leaderId = getLeaderId(raftGroupId);
     final RaftPeer leader = leaderId == null ? null : getServerDivision(raftGroupId).getRaftConf().getPeer(leaderId);
     if (leader == null) {
-      // current peer is not a leader, and the leader is not elected yet for the raft group
+      // the current peer is not a leader, and the leader is not elected yet for the raft group
       return new OMNotLeaderException(raftPeerId, raftGroupId);
     }
     final String leaderAddress = getRaftLeaderAddress(leader);

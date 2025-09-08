@@ -86,8 +86,7 @@ public class TestS3GrpcOmTransport {
 
     // TODO: Set suggest leaderID. Right now, client is not using suggest
     // leaderID. Need to fix this.
-    OMNotLeaderException notLeaderException =
-        new OMNotLeaderException(raftPeerId, null);
+    OMNotLeaderException notLeaderException = new OMNotLeaderException(raftPeerId);
     LOG.debug(notLeaderException.getMessage());
     return new ServiceException(notLeaderException);
   }

@@ -30,6 +30,7 @@ import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
 import org.apache.hadoop.ozone.om.ha.HadoopRpcOMFailoverProxyProvider;
+import org.apache.hadoop.ozone.om.request.invocation.OzoneRetryInvocationHandler;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMResponse;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -53,7 +54,7 @@ public class Hadoop3OmTransport implements OmTransport {
   private static final Logger LOG =
       LoggerFactory.getLogger(Hadoop3OmTransport.class);
 
-  private final HadoopRpcOMFailoverProxyProvider omFailoverProxyProvider;
+  private final HadoopRpcOMFailoverProxyProvider<OzoneManagerProtocolPB> omFailoverProxyProvider;
 
   private final OzoneManagerProtocolPB rpcProxy;
 
@@ -66,15 +67,15 @@ public class Hadoop3OmTransport implements OmTransport {
         OzoneManagerProtocolPB.class,
         ProtobufRpcEngine.class);
 
-    this.omFailoverProxyProvider = new HadoopRpcOMFailoverProxyProvider(
-            conf, ugi, omServiceId, OzoneManagerProtocolPB.class);
+    this.omFailoverProxyProvider = new HadoopRpcOMFailoverProxyProvider<>(
+        conf, ugi, omServiceId, OzoneManagerProtocolPB.class);
 
     int maxFailovers = conf.getInt(
         OzoneConfigKeys.OZONE_CLIENT_FAILOVER_MAX_ATTEMPTS_KEY,
         OzoneConfigKeys.OZONE_CLIENT_FAILOVER_MAX_ATTEMPTS_DEFAULT);
-    this.retryInvocationHandler = new OzoneRetryInvocationHandler<>(
+    this.retryInvocationHandler = new OzoneRetryInvocationHandler<OzoneManagerProtocolPB>(
         omFailoverProxyProvider, omFailoverProxyProvider.getRetryPolicy(maxFailovers));
-    this.rpcProxy = createRetryProxy(omFailoverProxyProvider, retryInvocationHandler);
+    this.rpcProxy = createRetryProxy(retryInvocationHandler);
   }
 
   @Override
@@ -114,14 +115,8 @@ public class Hadoop3OmTransport implements OmTransport {
    * fails over on network exception or if the current proxy
    * is not the leader OM.
    */
-  private OzoneManagerProtocolPB createRetryProxy(
-      HadoopRpcOMFailoverProxyProvider<OzoneManagerProtocolPB> failoverProxyProvider,
-      InvocationHandler invocationHandler) {
-
-    // TODO create custom proxy with replacing an instance of RetryInvocationHandler
-
-    return (OzoneManagerProtocolPB) Proxy.newProxyInstance(
-        failoverProxyProvider.getInterface().getClassLoader(),
+  private OzoneManagerProtocolPB createRetryProxy(InvocationHandler invocationHandler) {
+    return (OzoneManagerProtocolPB) Proxy.newProxyInstance(getClass().getClassLoader(),
         new Class<?>[] { OzoneManagerProtocolPB.class },
         invocationHandler);
   }

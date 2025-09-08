@@ -149,9 +149,9 @@ enum Type {
   RenameSnapshot = 131;
   GetContentSummary = 143;
   CreateBucketRaftGroups = 144;
-  GetRaftGroupHealthState = 146;
-  BucketRaftGroupsStateChanged = 147;
-  MoveOmToSafeMode = 148;
+  GetRaftGroupHealthState = 145;
+  BucketRaftGroupsStateChanged = 146;
+  MoveOmToSafeMode = 147;
 }
 
 enum SafeMode {
@@ -292,9 +292,9 @@ message OMRequest {
   optional GetContentSummaryRequest         getContentSummaryRequest       = 143;
 
   optional CreateBucketRaftGroupsRequest    CreateBucketRaftGroupsRequest         = 144;
-  optional GetRaftGroupHealthStateRequest   getRaftGroupHealthStateRequest      = 146;
-  optional hadoop.hdds.UUID                 raftGroupId                    = 147; // Used for raft group that the request should be executed in
-  optional BucketRaftGroupsStateChangedRequest bucketRaftGroupsStateChangedRequest = 148; // Used to notify OM about bucket raft groups state changes
+  optional GetRaftGroupHealthStateRequest   getRaftGroupHealthStateRequest      = 145;
+  optional hadoop.hdds.UUID                 raftGroupId                    = 146; // Used for raft group that the request should be executed in
+  optional BucketRaftGroupsStateChangedRequest bucketRaftGroupsStateChangedRequest = 147; // Used to notify OM about bucket raft groups state changes
 }
 
 message OMResponse {
@@ -420,8 +420,8 @@ message OMResponse {
   optional RenameSnapshotResponse            RenameSnapshotResponse        = 132;
   optional GetContentSummaryResponse         getContentSummaryResponse     = 143;
   optional CreateBucketRaftGroupsResponse    CreateBucketRaftGroupsResponse = 144;
-  optional GetRaftGroupHealthStateResponse   getRaftGroupHealthStateResponse     = 146;
-  optional BucketRaftGroupsStateChangedResponse bucketRaftGroupsStateChangedResponse = 147;
+  optional GetRaftGroupHealthStateResponse   getRaftGroupHealthStateResponse     = 145;
+  optional BucketRaftGroupsStateChangedResponse bucketRaftGroupsStateChangedResponse = 146;
 }
 
 enum Status {

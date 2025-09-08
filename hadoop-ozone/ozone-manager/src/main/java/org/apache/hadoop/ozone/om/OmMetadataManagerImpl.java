@@ -241,7 +241,6 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
       "compactionLogTable";
   public static final String MULTI_RAFT_INFO_TABLE =
       "multiRaftInfoTable";
-  public static final String RAFT_GROUP_CONFIG_TABLE = "raftGroupConfigTable";
   static final String[] ALL_TABLES = new String[] {
       USER_TABLE,
       VOLUME_TABLE,
@@ -265,8 +264,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
       SNAPSHOT_INFO_TABLE,
       SNAPSHOT_RENAMED_TABLE,
       COMPACTION_LOG_TABLE,
-      MULTI_RAFT_INFO_TABLE,
-      RAFT_GROUP_CONFIG_TABLE
+      MULTI_RAFT_INFO_TABLE
   };
 
   private DBStore store;
@@ -639,9 +637,6 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
         .addTable(SNAPSHOT_RENAMED_TABLE)
         .addTable(COMPACTION_LOG_TABLE)
         .addTable(MULTI_RAFT_INFO_TABLE)
-        .addTable(RAFT_GROUP_CONFIG_TABLE)
-        .addCodec(RaftGroupId.class, OMRatisHelper.getRaftGroupIdRocksDbCodec())
-        .addCodec(RaftProtos.RaftConfigurationProto.class, OMRatisHelper.getRaftConfigurationRocksDbCodec())
         .addCodec(OzoneTokenIdentifier.class, TokenIdentifierCodec.get())
         .addCodec(OmKeyInfo.class, OmKeyInfo.getCodec(true))
         .addCodec(RepeatedOmKeyInfo.class, RepeatedOmKeyInfo.getCodec(true))

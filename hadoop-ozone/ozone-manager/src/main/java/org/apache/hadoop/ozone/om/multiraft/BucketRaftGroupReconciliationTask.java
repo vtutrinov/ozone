@@ -53,7 +53,7 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
   public BackgroundTaskResult call() throws Exception {
     OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
     RaftGroup mainRaftGroup = omRatisServer.getCurrentRaftGroup();
-    Long currentMultiRaftTerm = ozoneManager.getMetadataManager().getMultiRaftInfoTable().get("term");
+    Long currentMultiRaftTerm = ozoneManager.getBucketRaftGroupsReconfigurationIndex();
     if (currentMultiRaftTerm == null) {
       currentMultiRaftTerm = 0L;
     }
@@ -100,20 +100,14 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
                                 .build())
                             .build());
               }
-              AtomicBoolean isGroupHealthy = new AtomicBoolean(true);
-              raftGroupHealthState.getPeerHealthInfoList().forEach(
-                  peerHealthInfo -> {
-                    if (!peerHealthInfo.getIsHealthy()) {
-                      BackgroundService.LOG.warn("Raft group {} peer {} is not healthy, removing it.",
-                          groupId, peerHealthInfo.getPeerId());
-                      isGroupHealthy.set(false);
-                    }
-                  });
-              if (!isGroupHealthy.get()) {
+              boolean isNotHealthy = raftGroupHealthState.getPeerHealthInfoList()
+                  .stream()
+                  .anyMatch(it -> !it.getIsHealthy());
+              if (isNotHealthy) {
                 groupsToBeReconfigured.add(raftGroup);
               }
             } catch (Exception e) {
-              BackgroundService.LOG.warn("Failed to get raft group health state for group {}: {}",
+              LOG.warn("Failed to get raft group health state for group {}: {}",
                   groupId, e.getMessage());
               groupsToBeReconfigured.add(raftGroup);
             }

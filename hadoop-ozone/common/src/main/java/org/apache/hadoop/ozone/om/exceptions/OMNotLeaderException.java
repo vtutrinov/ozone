@@ -69,6 +69,10 @@ public class OMNotLeaderException extends IOException {
     this.raftGroupId = raftGroupId;
   }
 
+  public OMNotLeaderException(RaftPeerId currentPeerId) {
+    this(currentPeerId, null);
+  }
+
   public OMNotLeaderException(RaftPeerId currentPeerId,
       RaftPeerId suggestedLeaderPeerId, RaftGroupId raftGroupId) {
     this(currentPeerId, suggestedLeaderPeerId, null, raftGroupId);
