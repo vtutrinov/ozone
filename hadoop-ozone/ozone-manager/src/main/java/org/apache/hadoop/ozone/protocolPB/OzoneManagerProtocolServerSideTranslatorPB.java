@@ -349,7 +349,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
             createClientRequest(request, ozoneManager);
         request = omClientRequest.preExecute(ozoneManager);
         long index = transactionIndex.incrementAndGet();
-        LOG.error("Run command {} - {}", request.getCmdType(), index);
+        LOG.trace("Run command {} - {}", request.getCmdType(), index);
         omClientResponse = handler.handleWriteRequest(request, index);
       }
     } catch (IOException ex) {
