@@ -24,6 +24,7 @@ import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus;
 import org.apache.ratis.protocol.RaftGroupId;
 
 import java.io.IOException;
@@ -285,7 +286,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
     if (isFollowerReadEnabled()) {
       return handler.handleReadRequest(request);
     } else {
-      OzoneManagerRatisServer.RaftServerStatus raftServerStatus = omRatisServer.checkOmLeaderStatus();
+      RaftServerStatus raftServerStatus = omRatisServer.checkOmLeaderStatus();
       if (raftServerStatus == LEADER_AND_READY || request.getCmdType().equals(PrepareStatus)) {
         return handler.handleReadRequest(request);
       } else {
@@ -295,7 +296,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
   }
 
   private ServiceException createLeaderErrorException(
-          RaftGroupId raftGroupId, OzoneManagerRatisServer.RaftServerStatus raftServerStatus) {
+          RaftGroupId raftGroupId, RaftServerStatus raftServerStatus) {
     if (raftServerStatus == NOT_LEADER) {
       return new ServiceException(omRatisServer.newOMNotLeaderException(raftGroupId));
     } else {

@@ -255,6 +255,7 @@ import java.util.TimerTask;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
@@ -489,11 +490,15 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private final BucketUtilizationMetrics bucketUtilizationMetrics;
 
   private boolean fsSnapshotEnabled;
-  private long multiRaftTerm;
+  private AtomicLong multiRaftTerm;
   private BiFunction<RaftPeer, GrpcTlsConfig, RaftClient> raftClientProvider;
 
   public long getCurrentMultiRaftTerm() {
-    return multiRaftTerm;
+    return multiRaftTerm.get();
+  }
+
+  public void setCurrentMultiRaftTerm(long multiRaftTerm) {
+    this.multiRaftTerm.set(multiRaftTerm);
   }
 
   /**
@@ -774,7 +779,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     raftClientProvider = RatisHelper.newRaftClient(configuration);
 
     bucketUtilizationMetrics = BucketUtilizationMetrics.create(metadataManager);
-    multiRaftTerm = Optional.fromNullable(metadataManager.getMultiRaftInfoTable().get("term")).or(0L);
+    multiRaftTerm = new AtomicLong(Optional.fromNullable(metadataManager.getMultiRaftInfoTable().get("term")).or(0L));
     omSafeModeManager = new SafeModeManager(configuration);
     bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
   }
