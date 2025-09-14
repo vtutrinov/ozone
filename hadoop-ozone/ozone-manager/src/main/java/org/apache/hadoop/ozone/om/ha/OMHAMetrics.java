@@ -182,4 +182,9 @@ public final class OMHAMetrics implements MetricsSource {
   public int getOmhaInfoOzoneManagerHALeaderState() {
     return omhaMetricsInfo.getOzoneManagerHALeaderState();
   }
+
+  @VisibleForTesting
+  public Map<RaftGroupId, String> getOmHaInfoRaftGroupsLeaders() {
+    return raftGroupsLeaders;
+  }
 }

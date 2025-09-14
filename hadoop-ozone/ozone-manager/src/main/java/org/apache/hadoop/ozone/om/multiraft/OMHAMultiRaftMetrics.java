@@ -1,12 +1,15 @@
 package org.apache.hadoop.ozone.om.multiraft;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
-import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OzoneManager;
+
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT;
 
 @Metrics(
     about = "Ozone Manager HA Multi-Raft Metrics",
@@ -35,18 +38,34 @@ public class OMHAMultiRaftMetrics implements MetricsSource  {
   public void getMetrics(MetricsCollector metricsCollector, boolean b) {
     metricsCollector.addRecord(OMHAMultiRaftMetrics.class.getSimpleName())
         .setContext("ozone")
-        .addGauge(Interns.info("RaftGroupsCount", "OM Raft Groups Count"), ozoneManager.getOmRaftGroups().size())
+        .addGauge(Interns.info("RaftGroupsCount", "OM Raft Groups Count"), getOmRaftGroupsCount())
         .endRecord();
     metricsCollector.addRecord(OMHAMultiRaftMetrics.class.getSimpleName())
         .setContext("ozone")
         .addGauge(Interns.info("RaftGroupsExpectedCount", "OM Raft Groups Expected Count"),
-            ozoneManager.getConfiguration().getInt(OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
-                OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT) + 1)
+            getRaftGroupsExpectedCount())
         .endRecord();
     metricsCollector.addRecord(OMHAMultiRaftMetrics.class.getSimpleName())
         .setContext("ozone")
         .addGauge(Interns.info("OMInSafeMode", "Ozone Manager is in safe mode"),
-            ozoneManager.getSafeModeManager().isInSafeMode() ? 1 : 0)
+            getIsOzoneManagerInSafeMode())
         .endRecord();
+  }
+
+  @VisibleForTesting
+  public int getIsOzoneManagerInSafeMode() {
+    return ozoneManager.getSafeModeManager().isInSafeMode() ? 1 : 0;
+  }
+
+  @VisibleForTesting
+  public int getOmRaftGroupsCount() {
+    return ozoneManager.getOmRaftGroups().size();
+  }
+
+  @VisibleForTesting
+  public int getRaftGroupsExpectedCount() {
+    return ozoneManager.getConfiguration().getPositiveIntOrDefault(
+        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
+        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT) + 1;
   }
 }
