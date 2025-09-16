@@ -979,6 +979,13 @@ public class SCMClientProtocolServer implements
   }
 
   @Override
+  public ReplicationManagerReport getInstantReplicationManagerReport(int count) {
+    AUDIT.logReadSuccess(buildAuditMessageForSuccess(
+            SCMAction.GET_REPLICATION_MANAGER_REPORT, null));
+    return scm.getReplicationManager().instantProcessContainers(count);
+  }
+
+  @Override
   public StatusAndMessages finalizeScmUpgrade(String upgradeClientID) throws
       IOException {
     // check admin authorization

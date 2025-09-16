@@ -65,24 +65,55 @@ public class ECReplicationCheckHandler extends AbstractCheck {
           = ((ContainerHealthResult.UnderReplicatedHealthResult) health);
       if (underHealth.isUnrecoverable()) {
         if (underHealth.isMissing()) {
-          report.incrementAndSample(
-              ReplicationManagerReport.HealthState.MISSING, containerID);
+          if (request.isInstant()) {
+            request.getReport().incrementAndSampleInstant(
+                    ReplicationManagerReport.HealthState.MISSING,
+                    container.containerID(), request.getCount());
+          } else {
+            request.getReport().incrementAndSample(
+                    ReplicationManagerReport.HealthState.MISSING,
+                    container.containerID());
+          }
         } else {
-          // A container which is unrecoverable but not missing must have too
-          // many unhealthy replicas. Therefore it is UNHEALTHY rather than
-          // missing.
-          report.incrementAndSample(
-              ReplicationManagerReport.HealthState.UNHEALTHY, containerID);
+          if (request.isInstant()) {
+            request.getReport().incrementAndSampleInstant(
+                    ReplicationManagerReport.HealthState.UNHEALTHY,
+                    container.containerID(), request.getCount());
+          } else {
+            // A container which is unrecoverable but not missing must have too
+            // many unhealthy replicas. Therefore it is UNHEALTHY rather than
+            // missing.
+            request.getReport().incrementAndSample(
+                    ReplicationManagerReport.HealthState.UNHEALTHY,
+                    container.containerID());
+          }
         }
         // An EC container can be both unrecoverable and have offline replicas. In this case, we need
         // to report both states as the decommission monitor needs to wait for an extra copy to be
         // made of the offline replica before decommission can complete.
         if (underHealth.hasUnreplicatedOfflineIndexes()) {
-          report.incrementAndSample(ReplicationManagerReport.HealthState.UNDER_REPLICATED, containerID);
+          if (request.isInstant()) {
+            report.incrementAndSampleInstant(ReplicationManagerReport.HealthState.UNDER_REPLICATED,
+                    containerID, request.getCount());
+          } else {
+            report.incrementAndSample(
+                    ReplicationManagerReport.HealthState.UNDER_REPLICATED,
+                    containerID);
+          }
         }
       } else {
-        report.incrementAndSample(
-            ReplicationManagerReport.HealthState.UNDER_REPLICATED, containerID);
+        if (request.isInstant()) {
+          report.incrementAndSampleInstant(
+                  ReplicationManagerReport.HealthState.UNDER_REPLICATED,
+                  containerID, request.getCount());
+          report.incrementAndSample(
+                  ReplicationManagerReport.HealthState.UNDER_REPLICATED,
+                  containerID);
+        } else {
+          report.incrementAndSample(
+                  ReplicationManagerReport.HealthState.UNDER_REPLICATED,
+                  containerID);
+        }
       }
       if (!underHealth.isReplicatedOkAfterPending() &&
           (!underHealth.isUnrecoverable()
@@ -98,8 +129,15 @@ public class ECReplicationCheckHandler extends AbstractCheck {
       return true;
     } else if (health.getHealthState()
         == ContainerHealthResult.HealthState.OVER_REPLICATED) {
-      report.incrementAndSample(
-          ReplicationManagerReport.HealthState.OVER_REPLICATED, containerID);
+      if (request.isInstant()) {
+        report.incrementAndSampleInstant(
+                ReplicationManagerReport.HealthState.OVER_REPLICATED,
+                containerID, request.getCount());
+      } else {
+        report.incrementAndSample(
+                ReplicationManagerReport.HealthState.OVER_REPLICATED,
+                containerID);
+      }
       ContainerHealthResult.OverReplicatedHealthResult overHealth
           = ((ContainerHealthResult.OverReplicatedHealthResult) health);
       if (!overHealth.isReplicatedOkAfterPending()) {

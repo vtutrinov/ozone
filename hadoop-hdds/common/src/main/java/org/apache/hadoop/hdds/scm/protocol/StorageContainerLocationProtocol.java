@@ -385,6 +385,8 @@ public interface StorageContainerLocationProtocol extends Closeable {
    */
   ReplicationManagerReport getReplicationManagerReport() throws IOException;
 
+  ReplicationManagerReport getInstantReplicationManagerReport(int count) throws IOException;
+
   /**
    * Start ContainerBalancer.
    * @return {@link StartContainerBalancerResponseProto} that contains the

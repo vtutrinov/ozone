@@ -76,6 +76,7 @@ import org.apache.ratis.protocol.exceptions.NotLeaderException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
@@ -383,7 +384,7 @@ public class ReplicationManager implements SCMService {
       }
       report.increment(c.getState());
       if (rmConf.isLegacyEnabled() && !isEC(c.getReplicationConfig())) {
-        legacyReplicationManager.processContainer(c, report);
+        legacyReplicationManager.processContainer(c, report, null);
         continue;
       }
       try {
@@ -399,6 +400,27 @@ public class ReplicationManager implements SCMService {
     LOG.info("Replication Monitor Thread took {} milliseconds for" +
             " processing {} containers.", clock.millis() - start,
         containers.size());
+  }
+
+  public synchronized ReplicationManagerReport instantProcessContainers(int count) {
+    final List<ContainerInfo> containers = containerManager.getContainers();
+    ReplicationManagerReport report = new ReplicationManagerReport();
+    ReplicationQueue newRepQueue = new ReplicationQueue();
+    for (ContainerInfo c : containers) {
+      report.increment(c.getState());
+      if (rmConf.isLegacyEnabled() && !isEC(c.getReplicationConfig())) {
+        legacyReplicationManager.processContainer(c, report, count);
+        continue;
+      }
+      try {
+        processContainer(c, newRepQueue, report, false, count);
+        // TODO - send any commands contained in the health result
+      } catch (ContainerNotFoundException e) {
+        LOG.error("Container {} not found", c.getContainerID(), e);
+      }
+    }
+    report.setComplete();
+    return report;
   }
 
   public void sendCloseContainerEvent(ContainerID containerID) {
@@ -846,12 +868,12 @@ public class ReplicationManager implements SCMService {
   protected void processContainer(ContainerInfo containerInfo,
       ReplicationQueue repQueue, ReplicationManagerReport report)
       throws ContainerNotFoundException {
-    processContainer(containerInfo, repQueue, report, false);
+    processContainer(containerInfo, repQueue, report, false, null);
   }
 
   protected boolean processContainer(ContainerInfo containerInfo,
       ReplicationQueue repQueue, ReplicationManagerReport report,
-      boolean readOnly) throws ContainerNotFoundException {
+      boolean readOnly, @Nullable Integer count) throws ContainerNotFoundException {
     synchronized (containerInfo) {
       ContainerID containerID = containerInfo.containerID();
       final boolean isEC = isEC(containerInfo.getReplicationConfig());
@@ -869,6 +891,7 @@ public class ReplicationManager implements SCMService {
           .setPendingOps(pendingOps)
           .setReplicationQueue(repQueue)
           .setReadOnly(readOnly)
+          .setCount(count)
           .build();
       // This will call the chain of container health handlers in turn which
       // will issue commands as needed, update the report and perhaps add
@@ -999,7 +1022,7 @@ public class ReplicationManager implements SCMService {
   public boolean checkContainerStatus(ContainerInfo containerInfo,
       ReplicationManagerReport report) throws ContainerNotFoundException {
     report.increment(containerInfo.getState());
-    return processContainer(containerInfo, nullReplicationQueue, report, true);
+    return processContainer(containerInfo, nullReplicationQueue, report, true, null);
   }
 
   /**
