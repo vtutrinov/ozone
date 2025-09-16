@@ -81,10 +81,11 @@ message ScmContainerLocationRequest {
   optional TransferLeadershipRequestProto transferScmLeadershipRequest = 42;
   optional GetFailedDeletedBlocksTxnRequestProto getFailedDeletedBlocksTxnRequest = 43;
   optional DecommissionScmRequestProto decommissionScmRequest = 44;
+  optional InstantReplicationManagerReportRequestProto instantReplicationManagerReportRequest = 45;
 //  optional SingleNodeQueryRequestProto singleNodeQueryRequest = 45;
 //  optional GetContainersOnDecomNodeRequestProto getContainersOnDecomNodeRequest = 46;
 //  optional GetMetricsRequestProto getMetricsRequest = 47;
-  optional ContainerBalancerStatusInfoRequestProto containerBalancerStatusInfoRequest = 45;
+  optional ContainerBalancerStatusInfoRequestProto containerBalancerStatusInfoRequest = 46;
 }
 
 message ScmContainerLocationResponse {
@@ -137,10 +138,11 @@ message ScmContainerLocationResponse {
   optional TransferLeadershipResponseProto  transferScmLeadershipResponse = 42;
   optional GetFailedDeletedBlocksTxnResponseProto getFailedDeletedBlocksTxnResponse = 43;
   optional DecommissionScmResponseProto decommissionScmResponse = 44;
+  optional InstantReplicationManagerReportResponseProto getInstantReplicationManagerReportResponse = 45;
 //  optional SingleNodeQueryResponseProto singleNodeQueryResponse = 45;
 //  optional GetContainersOnDecomNodeResponseProto getContainersOnDecomNodeResponse = 46;
 //  optional GetMetricsResponseProto getMetricsResponse = 47;
-  optional ContainerBalancerStatusInfoResponseProto containerBalancerStatusInfoResponse = 45;
+  optional ContainerBalancerStatusInfoResponseProto containerBalancerStatusInfoResponse = 46;
 
   enum Status {
     OK = 1;
@@ -196,6 +198,7 @@ enum Type {
   GetContainersOnDecomNode = 42;
   GetMetrics = 43;
   GetContainerBalancerStatusInfo = 44;
+  GetInstantReplicationManagerReport = 45;
 }
 
 /**
@@ -507,7 +510,16 @@ message ReplicationManagerReportRequestProto {
   optional string traceID = 1;
 }
 
+message InstantReplicationManagerReportRequestProto {
+  optional string traceID = 1;
+  optional int32 count = 2;
+}
+
 message ReplicationManagerReportResponseProto {
+  required ReplicationManagerReportProto report = 1;
+}
+
+message InstantReplicationManagerReportResponseProto {
   required ReplicationManagerReportProto report = 1;
 }
 

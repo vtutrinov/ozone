@@ -146,6 +146,46 @@ public class TestReportSubCommand {
     }
   }
 
+  @Test
+  public void testInstantReportWithCountOver100() throws Exception {
+    final int requested = 200;
+
+    ScmClient scmClient = mock(ScmClient.class);
+    Mockito.when(scmClient.getInstantReplicationManagerReport(requested))
+            .thenAnswer(invocation -> createReport(requested));
+
+    CommandLine c = new CommandLine(cmd);
+    c.parseArgs("--count", String.valueOf(requested));
+
+    cmd.execute(scmClient);
+
+    String output = outContent.toString(DEFAULT_ENCODING);
+
+    for (ReplicationManagerReport.HealthState state :
+            ReplicationManagerReport.HealthState.values()) {
+
+      Pattern p = Pattern.compile(
+              "^" + state.toString() + ": " + requested + "$", Pattern.MULTILINE);
+      assertTrue(p.matcher(output).find());
+
+      p = Pattern.compile(
+              "^First " + requested + " " + state + " containers:\n"
+                      + containerList(0, requested) + "$", Pattern.MULTILINE);
+      assertTrue(p.matcher(output).find());
+    }
+  }
+
+  private ReplicationManagerReport createReport(int count) {
+    ReplicationManagerReport report = new ReplicationManagerReport();
+    for (ReplicationManagerReport.HealthState state
+            : ReplicationManagerReport.HealthState.values()) {
+      for (int i = 0; i < count; i++) {
+        report.incrementAndSampleInstant(state, ContainerID.valueOf(i), count);
+      }
+    }
+    return report;
+  }
+
   private ReplicationManagerReport createReport() {
     ReplicationManagerReport report = new ReplicationManagerReport();
 
@@ -156,7 +196,6 @@ public class TestReportSubCommand {
       }
       counter++;
     }
-
     // Add samples
     counter = SEED;
     for (ReplicationManagerReport.HealthState state

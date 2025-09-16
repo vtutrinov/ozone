@@ -105,6 +105,8 @@ import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolPro
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.StopReplicationManagerResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.ResetDeletedBlockRetryCountRequestProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.ResetDeletedBlockRetryCountResponseProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.InstantReplicationManagerReportResponseProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.InstantReplicationManagerReportRequestProto;
 import org.apache.hadoop.hdds.scm.DatanodeAdminError;
 import org.apache.hadoop.hdds.scm.ScmInfo;
 import org.apache.hadoop.hdds.scm.container.ContainerID;
@@ -563,6 +565,13 @@ public final class StorageContainerLocationProtocolServerSideTranslatorPB
             .setStatus(Status.OK)
             .setGetReplicationManagerReportResponse(getReplicationManagerReport(
                 request.getReplicationManagerReportRequest()))
+            .build();
+      case GetInstantReplicationManagerReport:
+        return ScmContainerLocationResponse.newBuilder()
+            .setCmdType(request.getCmdType())
+            .setStatus(Status.OK)
+            .setGetInstantReplicationManagerReportResponse(getInstantReplicationManagerReport(
+                request.getInstantReplicationManagerReportRequest()))
             .build();
       case StartContainerBalancer:
         return ScmContainerLocationResponse.newBuilder()
@@ -1065,6 +1074,13 @@ public final class StorageContainerLocationProtocolServerSideTranslatorPB
     return ReplicationManagerReportResponseProto.newBuilder()
         .setReport(impl.getReplicationManagerReport().toProtobuf())
         .build();
+  }
+
+  public InstantReplicationManagerReportResponseProto getInstantReplicationManagerReport(
+          InstantReplicationManagerReportRequestProto request) throws IOException {
+    return InstantReplicationManagerReportResponseProto.newBuilder()
+            .setReport(impl.getInstantReplicationManagerReport(request.getCount()).toProtobuf())
+            .build();
   }
 
   public StartContainerBalancerResponseProto startContainerBalancer(

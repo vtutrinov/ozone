@@ -468,6 +468,11 @@ public class ContainerOperationClient implements ScmClient {
   }
 
   @Override
+  public ReplicationManagerReport getInstantReplicationManagerReport(int count) throws IOException {
+    return storageContainerLocationClient.getInstantReplicationManagerReport(count);
+  }
+
+  @Override
   public StartContainerBalancerResponseProto startContainerBalancer(
       Optional<Double> threshold, Optional<Integer> iterations,
       Optional<Integer> maxDatanodesPercentageToInvolvePerIteration,
