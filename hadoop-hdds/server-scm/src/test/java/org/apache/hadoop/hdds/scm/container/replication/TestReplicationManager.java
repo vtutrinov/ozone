@@ -1705,6 +1705,33 @@ public class TestReplicationManager {
   }
 
   @Test
+  public void testInstantReportIsReadOnlyAndHonoursCount() {
+    // SDP (SDPOZN-1701)
+    int totalContainers = 120;
+    for (int i = 0; i < totalContainers; i++) {
+      ContainerInfo container = createContainerInfo(
+          RatisReplicationConfig.getInstance(THREE), i,
+          HddsProtos.LifeCycleState.CLOSED);
+      containerInfoSet.add(container);
+
+      Set<ContainerReplica> replicas = new HashSet<>();
+      replicas.add(createContainerReplica(container.containerID(), 0,
+          IN_SERVICE, ContainerReplicaProto.State.CLOSED));
+      replicas.add(createContainerReplica(container.containerID(), 0,
+          IN_SERVICE, ContainerReplicaProto.State.CLOSED));
+      containerReplicaMap.put(container.containerID(), replicas);
+    }
+
+    ReplicationManagerReport report = replicationManager.instantProcessContainers(150);
+
+    assertEquals(totalContainers, report.getStat(ContainerHealthState.UNDER_REPLICATED));
+    assertEquals(totalContainers, report.getSample(ContainerHealthState.UNDER_REPLICATED).size());
+    // read-only: nothing queued, no commands sent
+    assertEquals(0, replicationManager.getQueue().underReplicatedQueueSize());
+    assertEquals(0, commandsSent.size());
+  }
+
+  @Test
   public void testReconfigureContainerSampleLimit() {
     // Create 120 under replicated containers
     int totalContainers = 120;

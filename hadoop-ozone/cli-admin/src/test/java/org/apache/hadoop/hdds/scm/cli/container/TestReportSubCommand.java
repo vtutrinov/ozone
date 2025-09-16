@@ -19,7 +19,10 @@ package org.apache.hadoop.hdds.scm.cli.container;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -150,6 +153,59 @@ public class TestReportSubCommand {
     }
   }
 
+  @Test
+  public void testInstantReportWhenCountExceedsSampleLimit() throws Exception {
+    final int requested = 200;
+
+    ScmClient scmClient = mock(ScmClient.class);
+    when(scmClient.getReplicationManagerReport()).thenAnswer(invocation -> new ReplicationManagerReport(100));
+    when(scmClient.getInstantReplicationManagerReport(requested))
+        .thenAnswer(invocation -> createReport(requested));
+
+    CommandLine c = new CommandLine(cmd);
+    c.parseArgs("--count", String.valueOf(requested));
+
+    cmd.execute(scmClient);
+
+    String output = outContent.toString(DEFAULT_ENCODING);
+
+    for (ContainerHealthState state : ContainerHealthState.values()) {
+      Pattern p = Pattern.compile(
+          "^" + state.toString() + ": " + requested + "$", Pattern.MULTILINE);
+      assertTrue(p.matcher(output).find());
+
+      p = Pattern.compile(
+          "^First " + requested + " " + state + " containers:\n"
+              + containerList(0, requested) + "$", Pattern.MULTILINE);
+      assertTrue(p.matcher(output).find());
+    }
+  }
+
+  @Test
+  public void testNoInstantReportWithinSampleLimit() throws Exception {
+    ScmClient scmClient = mock(ScmClient.class);
+    when(scmClient.getReplicationManagerReport()).thenAnswer(invocation -> new ReplicationManagerReport(100));
+
+    CommandLine c = new CommandLine(cmd);
+    c.parseArgs("--count", "100");
+    cmd.execute(scmClient);
+
+    verify(scmClient, never()).getInstantReplicationManagerReport(anyInt());
+  }
+
+  private ReplicationManagerReport createReport(int count) {
+    ReplicationManagerReport report = new ReplicationManagerReport(count);
+    for (ContainerHealthState state : ContainerHealthState.values()) {
+      for (int i = 0; i < count; i++) {
+        ContainerInfo container = mock(ContainerInfo.class);
+        when(container.containerID()).thenReturn(ContainerID.valueOf(i));
+        when(container.getHealthState()).thenReturn(state);
+        report.incrementAndSample(state, container);
+      }
+    }
+    return report;
+  }
+
   private ReplicationManagerReport createReport() {
     ReplicationManagerReport report = new ReplicationManagerReport(100);
 
@@ -160,7 +216,6 @@ public class TestReportSubCommand {
       }
       counter++;
     }
-
     // Add samples
     counter = SEED;
     for (ContainerHealthState state : ContainerHealthState.values()) {

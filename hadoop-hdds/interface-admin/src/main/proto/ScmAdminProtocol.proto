@@ -89,6 +89,9 @@ message ScmContainerLocationRequest {
   optional GetDeletedBlocksTxnSummaryRequestProto getDeletedBlocksTxnSummaryRequest = 50;
   optional SCMListContainerIDsRequestProto scmListContainerIDsRequest = 51;
   optional SuppressContainerRequestProto suppressContainerRequest = 52;
+
+    // SDP extensions (SDP numbers are kept in the 1000+ range)
+    optional InstantReplicationManagerReportRequestProto instantReplicationManagerReportRequest = 1001;
 }
 
 message ScmContainerLocationResponse {
@@ -156,6 +159,9 @@ message ScmContainerLocationResponse {
     CONTAINER_IS_MISSING = 3;
     SCM_NOT_LEADER = 4;
   }
+
+    // SDP extensions (SDP numbers are kept in the 1000+ range)
+    optional InstantReplicationManagerReportResponseProto getInstantReplicationManagerReportResponse = 1001;
 }
 
 enum Type {
@@ -208,6 +214,9 @@ enum Type {
   GetDeletedBlocksTransactionSummary = 46;
   ListContainerIDs = 47;
   SuppressContainer = 48;
+
+    // SDP extensions (SDP numbers are kept in the 1000+ range)
+    GetInstantReplicationManagerReport = 1001;
 }
 
 /**
@@ -544,7 +553,17 @@ message ReplicationManagerReportRequestProto {
   optional string traceID = 1;
 }
 
+// SDP (SDPOZN-1701): replication manager report computed on demand with a given sample size
+message InstantReplicationManagerReportRequestProto {
+  optional string traceID = 1;
+  optional int32 count = 2;
+}
+
 message ReplicationManagerReportResponseProto {
+  required ReplicationManagerReportProto report = 1;
+}
+
+message InstantReplicationManagerReportResponseProto {
   required ReplicationManagerReportProto report = 1;
 }
 

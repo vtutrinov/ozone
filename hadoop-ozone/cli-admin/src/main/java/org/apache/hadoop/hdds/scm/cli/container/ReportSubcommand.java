@@ -125,6 +125,11 @@ public class ReportSubcommand extends ScmSubcommand {
 
   private void printReport(ScmClient scmClient) throws IOException {
     ReplicationManagerReport report = scmClient.getReplicationManagerReport();
+    if (count > report.getSampleLimit()) {
+      // SDP (SDPOZN-1701): the periodic report keeps only the configured number of samples;
+      // let SCM compute a report with the requested number of samples now
+      report = scmClient.getInstantReplicationManagerReport(count);
+    }
     if (report.getReportTimeStamp() == 0) {
       System.err.println("The Container Report is not available until Replication Manager completes" +
           " its first run after startup or fail over. All values will be zero until that time.");

@@ -387,6 +387,25 @@ public class ReplicationManager implements SCMService, ContainerReplicaPendingOp
         containers.size());
   }
 
+  /**
+   * SDP (SDPOZN-1701): computes a replication manager report now, in read-only mode (no commands are sent and
+   * the replication queue is not changed), with up to {@code count} sample container IDs per health state.
+   * The periodic report keeps the configured sample limit.
+   */
+  public ReplicationManagerReport instantProcessContainers(int count) {
+    final ReplicationManagerReport report = new ReplicationManagerReport(
+        count > 0 ? count : rmConf.getContainerSampleLimit());
+    for (ContainerInfo c : containerManager.getContainers()) {
+      try {
+        checkContainerStatus(c, report);
+      } catch (ContainerNotFoundException e) {
+        LOG.debug("Container {} not found while building the instant report", c.getContainerID(), e);
+      }
+    }
+    report.setComplete();
+    return report;
+  }
+
   public void sendCloseContainerEvent(ContainerID containerID) {
     eventPublisher.fireEvent(SCMEvents.CLOSE_CONTAINER, containerID);
   }

@@ -1159,6 +1159,22 @@ public class SCMClientProtocolServer implements
   }
 
   @Override
+  public ReplicationManagerReport getInstantReplicationManagerReport(int count) throws IOException {
+    // SDP (SDPOZN-1701): evaluates every container now, so (read-only) admin access is required
+    Map<String, String> auditMap = Maps.newHashMap();
+    auditMap.put("count", String.valueOf(count));
+    try {
+      getScm().checkAdminAccess(getRemoteUser(), true);
+      ReplicationManagerReport report = scm.getReplicationManager().instantProcessContainers(count);
+      AUDIT.logReadSuccess(buildAuditMessageForSuccess(SCMAction.GET_REPLICATION_MANAGER_REPORT, auditMap));
+      return report;
+    } catch (IOException ex) {
+      AUDIT.logReadFailure(buildAuditMessageForFailure(SCMAction.GET_REPLICATION_MANAGER_REPORT, auditMap, ex));
+      throw ex;
+    }
+  }
+
+  @Override
   public StatusAndMessages finalizeScmUpgrade(String upgradeClientID) throws
       IOException {
     final Map<String, String> auditMap = Maps.newHashMap();
