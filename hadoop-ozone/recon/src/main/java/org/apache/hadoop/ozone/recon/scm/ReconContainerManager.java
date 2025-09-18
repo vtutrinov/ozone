@@ -89,7 +89,7 @@ public class ReconContainerManager extends ContainerManagerImpl {
       ContainerReplicaPendingOps pendingOps)
       throws IOException {
     super(conf, scmhaManager, sequenceIdGen, pipelineManager, containerStore,
-        pendingOps);
+        pendingOps, null);
     this.scmClient = scm;
     this.pipelineManager = pipelineManager;
     this.containerHealthSchemaManager = containerHealthSchemaManager;

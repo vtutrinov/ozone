@@ -221,6 +221,13 @@ public interface StorageContainerLocationProtocol extends Closeable {
   void deleteContainer(long containerID) throws IOException;
 
   /**
+   * Purge a container  from SCM and its data blocks in datanodes.
+   * @param containerID
+   * @throws IOException
+   */
+  void purgeContainerWithDataBlocks(long containerID) throws IOException;
+
+  /**
    *  Queries a list of Node Statuses. Passing a null for either opState or
    *  state acts like a wildcard returning all nodes in that state.
    * @param opState The node operational state

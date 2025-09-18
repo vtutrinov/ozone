@@ -34,6 +34,7 @@ import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolPro
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.FinalizeScmUpgradeResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.GetFailedDeletedBlocksTxnRequestProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.GetFailedDeletedBlocksTxnResponseProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.PurgeContainerWithDataBlocksRequestProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.QueryUpgradeFinalizationProgressRequestProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.QueryUpgradeFinalizationProgressResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.SafeModeRuleStatusProto;
@@ -455,6 +456,19 @@ public final class StorageContainerLocationProtocolClientSideTranslatorPB
     submitRequest(Type.DeleteContainer,
         builder -> builder.setScmDeleteContainerRequest(request));
 
+  }
+
+  @Override
+  public void purgeContainerWithDataBlocks(long containerID) throws IOException {
+    Preconditions.checkState(containerID >= 0,
+        "Container ID cannot be negative");
+    PurgeContainerWithDataBlocksRequestProto request = PurgeContainerWithDataBlocksRequestProto
+        .newBuilder()
+        .setTraceID(TracingUtil.exportCurrentSpan())
+        .setContainerID(containerID)
+        .build();
+    submitRequest(Type.PurgeContainerWithDataBlocks,
+        builder -> builder.setPurgeContainerWithDataBlocksRequest(request));
   }
 
   /**

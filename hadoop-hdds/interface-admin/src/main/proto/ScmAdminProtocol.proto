@@ -85,6 +85,7 @@ message ScmContainerLocationRequest {
 //  optional GetContainersOnDecomNodeRequestProto getContainersOnDecomNodeRequest = 46;
 //  optional GetMetricsRequestProto getMetricsRequest = 47;
   optional ContainerBalancerStatusInfoRequestProto containerBalancerStatusInfoRequest = 45;
+  optional PurgeContainerWithDataBlocksRequestProto purgeContainerWithDataBlocksRequest = 46;
 }
 
 message ScmContainerLocationResponse {
@@ -141,6 +142,7 @@ message ScmContainerLocationResponse {
 //  optional GetContainersOnDecomNodeResponseProto getContainersOnDecomNodeResponse = 46;
 //  optional GetMetricsResponseProto getMetricsResponse = 47;
   optional ContainerBalancerStatusInfoResponseProto containerBalancerStatusInfoResponse = 45;
+  optional PurgeContainerWithDataBlocksResponseProto purgeContainerWithDataBlocksResponse = 46;
 
   enum Status {
     OK = 1;
@@ -196,6 +198,7 @@ enum Type {
   GetContainersOnDecomNode = 42;
   GetMetrics = 43;
   GetContainerBalancerStatusInfo = 44;
+  PurgeContainerWithDataBlocks = 45;
 }
 
 /**
@@ -635,6 +638,16 @@ message DecommissionScmResponseProto {
   required bool success = 1;
   optional string errorMsg = 2;
 }
+
+message PurgeContainerWithDataBlocksRequestProto {
+  required int64 containerID = 1;
+  optional string traceID = 2;
+}
+
+message PurgeContainerWithDataBlocksResponseProto {
+  // Empty response
+}
+
 
 /**
  * Protocol used from an HDFS node to StorageContainerManager.  See the request

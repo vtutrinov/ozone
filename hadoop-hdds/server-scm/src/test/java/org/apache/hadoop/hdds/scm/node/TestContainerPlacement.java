@@ -162,7 +162,7 @@ public class TestContainerPlacement {
         scmhaManager, sequenceIdGen, pipelineManager,
         SCMDBDefinition.CONTAINERS.getTable(dbStore),
         new ContainerReplicaPendingOps(
-            Clock.system(ZoneId.systemDefault())));
+            Clock.system(ZoneId.systemDefault())), null);
   }
 
   /**
