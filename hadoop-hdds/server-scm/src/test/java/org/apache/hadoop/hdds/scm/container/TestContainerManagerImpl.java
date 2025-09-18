@@ -92,7 +92,7 @@ public class TestContainerManagerImpl {
     pendingOpsMock = Mockito.mock(ContainerReplicaPendingOps.class);
     containerManager = new ContainerManagerImpl(conf,
         scmhaManager, sequenceIdGen, pipelineManager,
-        SCMDBDefinition.CONTAINERS.getTable(dbStore), pendingOpsMock);
+        SCMDBDefinition.CONTAINERS.getTable(dbStore), pendingOpsMock, null);
   }
 
   @AfterEach

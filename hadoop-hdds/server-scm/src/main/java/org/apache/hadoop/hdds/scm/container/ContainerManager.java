@@ -29,6 +29,8 @@ import org.apache.hadoop.hdds.protocol.proto.HddsProtos.LifeCycleEvent;
 import org.apache.hadoop.hdds.scm.pipeline.Pipeline;
 import org.apache.hadoop.hdds.utils.db.Table;
 import org.apache.hadoop.ozone.common.statemachine.InvalidStateTransitionException;
+import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.security.token.TokenIdentifier;
 
 /**
  * ContainerManager is responsible for keeping track of all Containers and
@@ -214,6 +216,8 @@ public interface ContainerManager extends Closeable {
   void deleteContainer(ContainerID containerID)
       throws IOException;
 
+  void purgeContainerWithDataBlocks(ContainerID containerID, Token<? extends TokenIdentifier> token)
+      throws IOException;
   /**
    * Returns containerStateManger.
    * @return containerStateManger

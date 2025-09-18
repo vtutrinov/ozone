@@ -75,6 +75,8 @@ import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolPro
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.ListPipelineResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.NodeQueryResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.PipelineResponseProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.PurgeContainerWithDataBlocksRequestProto;
+import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.PurgeContainerWithDataBlocksResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.QueryUpgradeFinalizationProgressRequestProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.QueryUpgradeFinalizationProgressResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.RecommissionNodesRequestProto;
@@ -462,6 +464,13 @@ public final class StorageContainerLocationProtocolServerSideTranslatorPB
             .setStatus(Status.OK)
             .setNodeQueryResponse(queryNode(request.getNodeQueryRequest(),
                 request.getVersion()))
+            .build();
+      case PurgeContainerWithDataBlocks:
+        return ScmContainerLocationResponse.newBuilder()
+            .setCmdType(request.getCmdType())
+            .setStatus(Status.OK)
+            .setPurgeContainerWithDataBlocksResponse(purgeContainerWithDataBlocks(
+                request.getPurgeContainerWithDataBlocksRequest()))
             .build();
       case CloseContainer:
         return ScmContainerLocationResponse.newBuilder()
@@ -862,6 +871,12 @@ public final class StorageContainerLocationProtocolServerSideTranslatorPB
     impl.deleteContainer(request.getContainerID());
     return SCMDeleteContainerResponseProto.newBuilder().build();
 
+  }
+
+  public PurgeContainerWithDataBlocksResponseProto purgeContainerWithDataBlocks(
+      PurgeContainerWithDataBlocksRequestProto request) throws IOException {
+    impl.purgeContainerWithDataBlocks(request.getContainerID());
+    return PurgeContainerWithDataBlocksResponseProto.newBuilder().build();
   }
 
   public NodeQueryResponseProto queryNode(

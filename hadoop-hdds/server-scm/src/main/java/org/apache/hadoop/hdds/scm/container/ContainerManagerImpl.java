@@ -28,27 +28,44 @@ import java.util.NavigableSet;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdds.client.BlockID;
 import org.apache.hadoop.hdds.client.ECReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
+import org.apache.hadoop.hdds.client.StandaloneReplicationConfig;
+import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos;
+import org.apache.hadoop.hdds.protocol.datanode.proto.ContainerProtos.ListBlockResponseProto;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos.ContainerInfoProto;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos.LifeCycleState;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos.LifeCycleEvent;
 import org.apache.hadoop.hdds.scm.ScmConfigKeys;
+import org.apache.hadoop.hdds.scm.XceiverClientManager;
+import org.apache.hadoop.hdds.scm.XceiverClientSpi;
+import org.apache.hadoop.hdds.scm.client.ClientTrustManager;
 import org.apache.hadoop.hdds.scm.container.metrics.SCMContainerManagerMetrics;
 import org.apache.hadoop.hdds.scm.container.replication.ContainerReplicaPendingOps;
 import org.apache.hadoop.hdds.scm.ha.SCMHAManager;
 import org.apache.hadoop.hdds.scm.ha.SequenceIdGenerator;
 import org.apache.hadoop.hdds.scm.pipeline.Pipeline;
 import org.apache.hadoop.hdds.scm.pipeline.PipelineManager;
+import org.apache.hadoop.hdds.scm.server.StorageContainerManager;
+import org.apache.hadoop.hdds.scm.storage.ContainerProtocolCalls;
+import org.apache.hadoop.hdds.security.x509.certificate.client.CACertificateProvider;
+import org.apache.hadoop.hdds.utils.HAUtils;
 import org.apache.hadoop.hdds.utils.db.Table;
+import org.apache.hadoop.ozone.OzoneSecurityUtil;
+import org.apache.hadoop.ozone.common.BlockGroup;
 import org.apache.hadoop.ozone.common.statemachine.InvalidStateTransitionException;
+import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,6 +103,12 @@ public class ContainerManagerImpl implements ContainerManager {
   @SuppressWarnings("java:S2245") // no need for secure random
   private final Random random = new Random();
 
+  private XceiverClientManager xceiverClientManager;
+
+  private final StorageContainerManager scm;
+
+  private final OzoneConfiguration conf;
+
   /**
    *
    */
@@ -95,7 +118,8 @@ public class ContainerManagerImpl implements ContainerManager {
       final SequenceIdGenerator sequenceIdGen,
       final PipelineManager pipelineManager,
       final Table<ContainerID, ContainerInfo> containerStore,
-      final ContainerReplicaPendingOps containerReplicaPendingOps)
+      final ContainerReplicaPendingOps containerReplicaPendingOps,
+      StorageContainerManager scm)
       throws IOException {
     // Introduce builder for this class?
     this.lock = new ReentrantLock();
@@ -116,6 +140,8 @@ public class ContainerManagerImpl implements ContainerManager {
             ScmConfigKeys.OZONE_SCM_PIPELINE_OWNER_CONTAINER_COUNT_DEFAULT);
 
     this.scmContainerManagerMetrics = SCMContainerManagerMetrics.create();
+    this.scm = scm;
+    this.conf = new OzoneConfiguration(conf);
   }
 
   @Override
@@ -431,6 +457,62 @@ public class ContainerManagerImpl implements ContainerManager {
     } else {
       scmContainerManagerMetrics.incNumFailureDeleteContainers();
       throwContainerNotFoundException(cid);
+    }
+  }
+
+  @Override
+  public void purgeContainerWithDataBlocks(ContainerID containerID, Token<? extends TokenIdentifier> token)
+      throws IOException {
+    ContainerInfo container = getContainer(containerID);
+    Pipeline pipeline = scm.getPipelineManager().createPipelineForRead(
+            StandaloneReplicationConfig.getInstance(HddsProtos.ReplicationFactor.THREE),
+        scm.getContainerManager().getContainerReplicas(containerID));
+
+    if (OzoneSecurityUtil.isSecurityEnabled(conf)) {
+      CACertificateProvider caCerts = () -> HAUtils.buildCAX509List(scm.getScmCertificateClient(),
+          (OzoneConfiguration) conf);
+      this.xceiverClientManager = new XceiverClientManager(conf,
+          conf.getObject(XceiverClientManager.ScmClientConfig.class),
+          new ClientTrustManager(caCerts, null));
+    } else {
+      this.xceiverClientManager = new XceiverClientManager(conf);
+    }
+
+    try (XceiverClientSpi xceiverClientSpi = xceiverClientManager.acquireClient(pipeline)) {
+      ListBlockResponseProto listBlockResponseProto = ContainerProtocolCalls.listBlock(xceiverClientSpi,
+          containerID.getId(), null, Integer.MAX_VALUE, token);
+      List<ContainerProtos.BlockData> blockDataList = listBlockResponseProto.getBlockDataList();
+      int blockGroupSize = 10;
+      int counter = 0;
+      int previousBlockGroupId = 0;
+      BlockGroup.Builder blockGroup = BlockGroup.newBuilder()
+          .setKeyName(String.valueOf(UUID.nameUUIDFromBytes((0 + containerID.toString())
+              .getBytes())));
+      List<BlockID> blockIDList = new ArrayList<>();
+      List<BlockGroup> blockGroupList = new ArrayList<>();
+      for (ContainerProtos.BlockData blockData : blockDataList) {
+        counter++;
+        blockIDList.add(new BlockID(blockData.getBlockID().getContainerID(), blockData.getBlockID().getLocalID()));
+        int currentBlockGroupId = counter / blockGroupSize;
+        if (currentBlockGroupId != previousBlockGroupId) {
+          blockGroup.addAllBlockIDs(blockIDList);
+          blockGroupList.add(blockGroup.build());
+          blockGroup = BlockGroup.newBuilder()
+              .setKeyName(String.valueOf(UUID.nameUUIDFromBytes((currentBlockGroupId + containerID.toString())
+                  .getBytes())));
+          previousBlockGroupId = currentBlockGroupId;
+          blockIDList = new ArrayList<>();
+        }
+      }
+      if (!blockIDList.isEmpty()) {
+        blockGroup.addAllBlockIDs(blockIDList);
+        blockGroupList.add(blockGroup.build());
+      }
+      scm.getScmBlockManager().deleteBlocks(blockGroupList);
+      // TODO: consider deleting the container directly from datanode and store some info in SCM metadata to tell
+      //  not to restore the container by ReplicationManager (the method call below deletes the container
+      //  from one of the datanode, but should delete all replicas from all of the nodes related to the pipeline)
+      // ContainerProtocolCalls.deleteContainer(xceiverClientSpi, containerID.getId(), true, token.encodeToUrlString());
     }
   }
 

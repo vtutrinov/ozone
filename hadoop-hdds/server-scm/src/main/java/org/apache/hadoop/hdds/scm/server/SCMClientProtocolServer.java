@@ -591,6 +591,26 @@ public class SCMClientProtocolServer implements
   }
 
   @Override
+  public void purgeContainerWithDataBlocks(long containerID) throws IOException {
+    Map<String, String> auditMap = Maps.newHashMap();
+    auditMap.put("containerID", String.valueOf(containerID));
+    UserGroupInformation remoteUser = getRemoteUser();
+    auditMap.put("remoteUser", remoteUser.getUserName());
+    try {
+      getScm().checkAdminAccess(remoteUser, false);
+      Token<?> containerToken = getContainerToken(ContainerID.valueOf(containerID));
+      scm.getContainerManager().purgeContainerWithDataBlocks(
+          ContainerID.valueOf(containerID), containerToken);
+      AUDIT.logWriteSuccess(buildAuditMessageForSuccess(
+          SCMAction.PURGE_CONTAINER_WITH_DATA_BLOCKS, auditMap));
+    } catch (Exception ex) {
+      AUDIT.logWriteFailure(buildAuditMessageForFailure(
+          SCMAction.PURGE_CONTAINER_WITH_DATA_BLOCKS, auditMap, ex));
+      throw new IOException("Failed to purge container " + containerID, ex);
+    }
+  }
+
+  @Override
   public List<HddsProtos.Node> queryNode(
       HddsProtos.NodeOperationalState opState, HddsProtos.NodeState state,
       HddsProtos.QueryScope queryScope, String poolName, int clientVersion)
