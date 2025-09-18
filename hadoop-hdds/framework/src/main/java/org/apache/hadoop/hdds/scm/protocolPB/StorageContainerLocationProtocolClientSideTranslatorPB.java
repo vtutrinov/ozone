@@ -972,6 +972,18 @@ public final class StorageContainerLocationProtocolClientSideTranslatorPB
   }
 
   @Override
+  public void purgeContainerWithDataBlocks(long containerID) throws IOException {
+    Preconditions.checkState(containerID >= 0, "Container ID cannot be negative");
+    StorageContainerLocationProtocolProtos.PurgeContainerWithDataBlocksRequestProto request =
+        StorageContainerLocationProtocolProtos.PurgeContainerWithDataBlocksRequestProto.newBuilder()
+            .setTraceID(TracingUtil.exportCurrentSpan())
+            .setContainerID(containerID)
+            .build();
+    submitRequest(Type.PurgeContainerWithDataBlocks,
+        builder -> builder.setPurgeContainerWithDataBlocksRequest(request));
+  }
+
+  @Override
   public ReplicationManagerReport getInstantReplicationManagerReport(int count) throws IOException {
     StorageContainerLocationProtocolProtos.InstantReplicationManagerReportRequestProto request =
             StorageContainerLocationProtocolProtos.InstantReplicationManagerReportRequestProto.newBuilder()

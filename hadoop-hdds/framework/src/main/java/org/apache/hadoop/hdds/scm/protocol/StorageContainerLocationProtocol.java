@@ -450,6 +450,13 @@ public interface StorageContainerLocationProtocol extends Closeable {
   ReplicationManagerReport getInstantReplicationManagerReport(int count) throws IOException;
 
   /**
+   * SDP (SDPOZN-1910): deletes all the data blocks of the container on its datanodes; the empty container is then
+   * removed by ReplicationManager. OM keys referring to these blocks are not changed.
+   * @param containerID container to purge
+   */
+  void purgeContainerWithDataBlocks(long containerID) throws IOException;
+
+  /**
    * Start ContainerBalancer.
    * @return {@link StartContainerBalancerResponseProto} that contains the
    * start status and an optional message.

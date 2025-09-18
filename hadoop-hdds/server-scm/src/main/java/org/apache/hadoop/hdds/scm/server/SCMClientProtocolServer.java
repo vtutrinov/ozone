@@ -1159,6 +1159,23 @@ public class SCMClientProtocolServer implements
   }
 
   @Override
+  public void purgeContainerWithDataBlocks(long containerID) throws IOException {
+    Map<String, String> auditMap = Maps.newHashMap();
+    auditMap.put("containerID", String.valueOf(containerID));
+    UserGroupInformation remoteUser = getRemoteUser();
+    auditMap.put("remoteUser", remoteUser.getUserName());
+    try {
+      getScm().checkAdminAccess(remoteUser, false);
+      ContainerID id = ContainerID.valueOf(containerID);
+      new ContainerPurger(scm).purgeContainerWithDataBlocks(id, getContainerToken(id));
+      AUDIT.logWriteSuccess(buildAuditMessageForSuccess(SCMAction.PURGE_CONTAINER_WITH_DATA_BLOCKS, auditMap));
+    } catch (Exception ex) {
+      AUDIT.logWriteFailure(buildAuditMessageForFailure(SCMAction.PURGE_CONTAINER_WITH_DATA_BLOCKS, auditMap, ex));
+      throw new IOException("Failed to purge container " + containerID, ex);
+    }
+  }
+
+  @Override
   public ReplicationManagerReport getInstantReplicationManagerReport(int count) throws IOException {
     // SDP (SDPOZN-1701): evaluates every container now, so (read-only) admin access is required
     Map<String, String> auditMap = Maps.newHashMap();

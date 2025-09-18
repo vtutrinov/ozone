@@ -594,6 +594,14 @@ public final class StorageContainerLocationProtocolServerSideTranslatorPB
             .setGetReplicationManagerReportResponse(getReplicationManagerReport(
                 request.getReplicationManagerReportRequest()))
             .build();
+      case PurgeContainerWithDataBlocks:
+        impl.purgeContainerWithDataBlocks(request.getPurgeContainerWithDataBlocksRequest().getContainerID());
+        return ScmContainerLocationResponse.newBuilder()
+            .setCmdType(request.getCmdType())
+            .setStatus(Status.OK)
+            .setPurgeContainerWithDataBlocksResponse(
+                StorageContainerLocationProtocolProtos.PurgeContainerWithDataBlocksResponseProto.getDefaultInstance())
+            .build();
       case GetInstantReplicationManagerReport:
         return ScmContainerLocationResponse.newBuilder()
             .setCmdType(request.getCmdType())

@@ -17,30 +17,30 @@
 
 package org.apache.hadoop.hdds.scm.cli.container;
 
-import org.apache.hadoop.hdds.cli.AdminSubcommand;
+import java.io.IOException;
 import org.apache.hadoop.hdds.cli.HddsVersionProvider;
-import org.kohsuke.MetaInfServices;
-import picocli.CommandLine.Command;
+import org.apache.hadoop.hdds.scm.cli.ScmSubcommand;
+import org.apache.hadoop.hdds.scm.client.ScmClient;
+import picocli.CommandLine;
 
 /**
- * Subcommand to group container related operations.
+ * SDP (SDPOZN-1910): deletes all the data blocks of the given containers; the empty containers are then
+ * removed by ReplicationManager. Keys referring to these blocks become unreadable.
  */
-@Command(
-    name = "container",
-    description = "Container specific operations",
+@CommandLine.Command(
+    name = "delete",
+    description = "Delete all data blocks of the given containers (keys referring to them become unreadable)",
     mixinStandardHelpOptions = true,
-    versionProvider = HddsVersionProvider.class,
-    subcommands = {
-        ListSubcommand.class,
-        InfoSubcommand.class,
-        CreateSubcommand.class,
-        CloseSubcommand.class,
-        ReportSubcommand.class,
-        UpgradeSubcommand.class,
-        ReconcileSubcommand.class,
-        DeleteSubcommand.class
-    })
-@MetaInfServices(AdminSubcommand.class)
-public class ContainerCommands implements AdminSubcommand {
+    versionProvider = HddsVersionProvider.class)
+public class DeleteSubcommand extends ScmSubcommand {
 
+  @CommandLine.Mixin
+  private ContainerIDParameters containerList;
+
+  @Override
+  protected void execute(ScmClient client) throws IOException {
+    for (long id : containerList.getValidatedIDs()) {
+      client.purgeContainerWithDataBlocks(id);
+    }
+  }
 }

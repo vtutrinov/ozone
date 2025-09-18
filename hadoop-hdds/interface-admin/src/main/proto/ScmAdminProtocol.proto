@@ -92,6 +92,7 @@ message ScmContainerLocationRequest {
 
     // SDP extensions (SDP numbers are kept in the 1000+ range)
     optional InstantReplicationManagerReportRequestProto instantReplicationManagerReportRequest = 1001;
+    optional PurgeContainerWithDataBlocksRequestProto purgeContainerWithDataBlocksRequest = 1002;
 }
 
 message ScmContainerLocationResponse {
@@ -162,6 +163,7 @@ message ScmContainerLocationResponse {
 
     // SDP extensions (SDP numbers are kept in the 1000+ range)
     optional InstantReplicationManagerReportResponseProto getInstantReplicationManagerReportResponse = 1001;
+    optional PurgeContainerWithDataBlocksResponseProto purgeContainerWithDataBlocksResponse = 1002;
 }
 
 enum Type {
@@ -217,6 +219,7 @@ enum Type {
 
     // SDP extensions (SDP numbers are kept in the 1000+ range)
     GetInstantReplicationManagerReport = 1001;
+    PurgeContainerWithDataBlocks = 1002;
 }
 
 /**
@@ -751,4 +754,13 @@ message SuppressContainerResponseProto {
  */
 service StorageContainerLocationProtocolService {
   rpc submitRequest (ScmContainerLocationRequest) returns (ScmContainerLocationResponse);
+}
+
+// SDP (SDPOZN-1910): delete all data blocks of a container
+message PurgeContainerWithDataBlocksRequestProto {
+  required int64 containerID = 1;
+  optional string traceID = 2;
+}
+
+message PurgeContainerWithDataBlocksResponseProto {
 }

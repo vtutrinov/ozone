@@ -115,6 +115,8 @@ public interface ScmClient extends Closeable {
    */
   void deleteContainer(long containerId, boolean force) throws IOException;
 
+  void purgeContainerWithDataBlocks(long containerId) throws IOException;
+
   /**
    * Lists a range of containers and get their info.
    *

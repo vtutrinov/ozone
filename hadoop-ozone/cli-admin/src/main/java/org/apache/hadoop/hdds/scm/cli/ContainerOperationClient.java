@@ -529,6 +529,11 @@ public class ContainerOperationClient implements ScmClient {
   }
 
   @Override
+  public void purgeContainerWithDataBlocks(long containerId) throws IOException {
+    storageContainerLocationClient.purgeContainerWithDataBlocks(containerId);
+  }
+
+  @Override
   public ReplicationManagerReport getInstantReplicationManagerReport(int count) throws IOException {
     return storageContainerLocationClient.getInstantReplicationManagerReport(count);
   }
