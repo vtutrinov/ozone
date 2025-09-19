@@ -29,7 +29,13 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
@@ -41,7 +47,13 @@ import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ADMINISTRATORS_WILDC
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
 import static org.apache.ozone.test.GenericTestUtils.waitFor;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
 
 /**
  * Test MultiRaft.
@@ -583,7 +595,7 @@ class TestMultiRaft {
     proxy.createVolume(VOLUME_NAME);
     proxy.createBucket(VOLUME_NAME, BUCKET_NAME);
 
-    java.util.List<String> keys = new java.util.ArrayList<>();
+    List<String> keys = new ArrayList<>();
     for (int i = 0; i < 5; i++) {
       String key = "key" + i;
       writeKey(proxy, VOLUME_NAME, BUCKET_NAME, key);
@@ -648,8 +660,8 @@ class TestMultiRaft {
     OzoneManager om2 = cluster.getOzoneManager(2);
     waitOmRaftGroupsSizeOnNodesEqual(om0, om1, om2, 5);
 
-    for (OzoneManager om : java.util.Arrays.asList(om0, om1, om2)) {
-      java.util.List<String> dirNames = getDirsList(om.getConfiguration());
+    for (OzoneManager om : Arrays.asList(om0, om1, om2)) {
+      List<String> dirNames = getDirsList(om.getConfiguration());
       assertFalse(dirNames.isEmpty(), "Ratis metadata dir is empty on " + om.getOMNodeId());
 
       for (RaftGroupId gid : om.getOmRaftGroups().keySet()) {
