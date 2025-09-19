@@ -3409,6 +3409,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     tmpLeadersMap.clear();
   }
 
+  public OMHAMultiRaftMetrics getOmMultiRaftMetrics() {
+    return omMultiRaftMetrics;
+  }
+
   public long getBucketRaftGroupsReconfigurationIndex() throws IOException {
     return ofNullable(getMetadataManager().getMultiRaftInfoTable().get("term")).orElse(0L);
   }

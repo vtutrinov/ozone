@@ -8,6 +8,8 @@ import org.slf4j.LoggerFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SAFE_MODE_ENABLED;
@@ -22,13 +24,16 @@ public class SafeModeManager  {
   private final AtomicBoolean bucketGroupsReady = new AtomicBoolean(false);
 
   private final boolean safeModeEnabled;
+  private final boolean bucketMultiRaftEnabled;
   private final int bucketRaftGroupsExpectedCount;
   private final AtomicInteger bucketGroupsReadyCount = new AtomicInteger(0);
 
 
   public SafeModeManager(OzoneConfiguration configuration) {
     this.safeModeEnabled = configuration.getBoolean(OZONE_OM_SAFE_MODE_ENABLED, OZONE_OM_SAFE_MODE_ENABLED_DEFAULT);
-    this.bucketRaftGroupsExpectedCount = configuration.getPositiveIntOrDefault(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
+    this.bucketMultiRaftEnabled = configuration.getBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
+        OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT);
+    this.bucketRaftGroupsExpectedCount = configuration.getInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
         OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
     if (!safeModeEnabled) {
       inSafeMode.set(false);
@@ -51,7 +56,7 @@ public class SafeModeManager  {
   }
 
   public boolean isInSafeMode() {
-    return safeModeEnabled && inSafeMode.get();
+    return !safeModeEnabled || (bucketMultiRaftEnabled && inSafeMode.get());
   }
 
   public synchronized void onLeaderElected() {
