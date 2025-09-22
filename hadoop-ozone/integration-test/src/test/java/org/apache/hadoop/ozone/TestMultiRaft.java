@@ -40,7 +40,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
 
-import static java.lang.Thread.sleep;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ACL_ENABLED;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ADMINISTRATORS_WILDCARD;
@@ -148,25 +147,27 @@ class TestMultiRaft {
       throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true, 10);
     OzoneManager om = cluster.getOMLeader();
+    int expectedRaftGroupsCount = 11;
     waitFor(
-        () -> om.getOmRaftGroups().size() == 11
-              && om.getStateMachines().size() == 11,
+        () -> om.getOmRaftGroups().size() == expectedRaftGroupsCount
+              && om.getStateMachines().size() == expectedRaftGroupsCount,
         100,
         80000
     );
-    assertEquals(11, om.getOmRaftGroups().size());
-    assertEquals(11, om.getStateMachines().size());
+    assertEquals(expectedRaftGroupsCount, om.getOmRaftGroups().size());
+    assertEquals(expectedRaftGroupsCount, om.getStateMachines().size());
   }
 
   @Test
   void testChangeMultiRaftConfig() throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true, 4);
+    int expectedRaftGroupsCount;
 
-    ClientProtocol proxy = cluster.createClient().getProxy();
-    proxy.createVolume(VOLUME_NAME);
-    proxy.createBucket(VOLUME_NAME, BUCKET_NAME);
+    ClientProtocol ozoneClient = cluster.createClient().getProxy();
+    ozoneClient.createVolume(VOLUME_NAME);
+    ozoneClient.createBucket(VOLUME_NAME, BUCKET_NAME);
     String key = "testkey";
-    writeKey(proxy, VOLUME_NAME, BUCKET_NAME, key);
+    writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, key);
 
     cluster.getOzoneManager(0).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
     cluster.getOzoneManager(1).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
@@ -179,10 +180,11 @@ class TestMultiRaft {
     OzoneManager om2 = cluster.getOzoneManager(1);
     OzoneManager om3 = cluster.getOzoneManager(2);
 
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 1);
+    expectedRaftGroupsCount = 1;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
     String key1 = "testkey1";
-    writeKey(proxy, VOLUME_NAME, BUCKET_NAME, key1);
+    writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, key1);
 
     cluster.getOzoneManager(0).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, true);
     cluster.getOzoneManager(1).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, true);
@@ -190,16 +192,14 @@ class TestMultiRaft {
 
     cluster.restartOzoneManager();
     cluster.waitForClusterToBeReady();
-
-    waitFor(() -> om1.getOmRaftGroups().size() == 5 &&
-                                   om2.getOmRaftGroups().size() == 5 &&
-                                   om3.getOmRaftGroups().size() == 5, 100, 80000);
+    expectedRaftGroupsCount = 5;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
     assertEquals(5, om1.getOmRaftGroups().size());
     assertEquals(5, om2.getOmRaftGroups().size());
     assertEquals(5, om3.getOmRaftGroups().size());
 
     String key2 = "testkey2";
-    writeKey(proxy, VOLUME_NAME, BUCKET_NAME, key2);
+    writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, key2);
 
     cluster.getOzoneManager(0).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
     cluster.getOzoneManager(1).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
@@ -208,10 +208,11 @@ class TestMultiRaft {
     cluster.restartOzoneManager();
     cluster.waitForClusterToBeReady();
 
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 1);
+    expectedRaftGroupsCount = 1;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
     String key3 = "testkey3";
-    writeKey(proxy, VOLUME_NAME, BUCKET_NAME, key3);
+    writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, key3);
 
     checkKeyReading(VOLUME_NAME, BUCKET_NAME, key);
     checkKeyReading(VOLUME_NAME, BUCKET_NAME, key1);
@@ -222,7 +223,7 @@ class TestMultiRaft {
   @Test
   void testChangeMultiRaftGroupsSize() throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true, 4);
-
+    int expectedRaftGroupsCount;
     cluster.getOzoneManager(0).getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, 10);
     cluster.getOzoneManager(1).getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, 10);
     cluster.getOzoneManager(2).getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, 10);
@@ -233,22 +234,21 @@ class TestMultiRaft {
     OzoneManager om1 = cluster.getOzoneManager(0);
     OzoneManager om2 = cluster.getOzoneManager(1);
     OzoneManager om3 = cluster.getOzoneManager(2);
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 11);
+    expectedRaftGroupsCount = 11;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
-    ClientProtocol proxy = cluster.createClient().getProxy();
-    proxy.createVolume(VOLUME_NAME);
-    proxy.createBucket(VOLUME_NAME, BUCKET_NAME);
-    OzoneBucket bucketDetails = proxy.getBucketDetails(VOLUME_NAME, BUCKET_NAME);
+    ClientProtocol ozoneClient = cluster.createClient().getProxy();
+    ozoneClient.createVolume(VOLUME_NAME);
+    ozoneClient.createBucket(VOLUME_NAME, BUCKET_NAME);
+    OzoneBucket bucketDetails = ozoneClient.getBucketDetails(VOLUME_NAME, BUCKET_NAME);
     assertNotNull(bucketDetails);
     assertEquals(BUCKET_NAME, bucketDetails.getName());
     assertEquals(VOLUME_NAME, bucketDetails.getVolumeName());
-    sleep(1000L);
 
     String key = "testkey";
-    writeKey(proxy, VOLUME_NAME, BUCKET_NAME, key);
-    sleep(1000L);
+    writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, key);
 
-    OzoneKeyDetails keyDetails = proxy.getKeyDetails(VOLUME_NAME, BUCKET_NAME, key);
+    OzoneKeyDetails keyDetails = ozoneClient.getKeyDetails(VOLUME_NAME, BUCKET_NAME, key);
     assertNotNull(keyDetails);
     assertEquals("testkey", keyDetails.getName());
 
@@ -264,35 +264,35 @@ class TestMultiRaft {
     OzoneManager om2 = cluster.getOzoneManager(1);
     OzoneManager om3 = cluster.getOzoneManager(2);
 
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 2);
+    int expectedRaftGroupsCount = 2;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
-    ClientProtocol proxy = cluster.createClient().getProxy();
-    proxy.createVolume(VOLUME_NAME);
+    ClientProtocol ozoneClient = cluster.createClient().getProxy();
+    ozoneClient.createVolume(VOLUME_NAME);
     String bucket1 = "111a";
-    proxy.createBucket(VOLUME_NAME, bucket1);
+    ozoneClient.createBucket(VOLUME_NAME, bucket1);
     String bucket2 = "222a";
-    proxy.createBucket(VOLUME_NAME, bucket2);
+    ozoneClient.createBucket(VOLUME_NAME, bucket2);
     String bucket3 = "333a";
-    proxy.createBucket(VOLUME_NAME, bucket3);
+    ozoneClient.createBucket(VOLUME_NAME, bucket3);
     String bucket4 = "444a";
-    proxy.createBucket(VOLUME_NAME, bucket4);
+    ozoneClient.createBucket(VOLUME_NAME, bucket4);
 
     String key = "testkey";
 
-    sleep(1000L);
-    writeKey(proxy, VOLUME_NAME, bucket1, key);
+    writeKey(ozoneClient, VOLUME_NAME, bucket1, key);
     waitTermIndex(om1, 4L);
     checkLastAppliedIndex(4L, om1);
 
-    writeKey(proxy, VOLUME_NAME, bucket2, key);
+    writeKey(ozoneClient, VOLUME_NAME, bucket2, key);
     waitTermIndex(om1, 8L);
     checkLastAppliedIndex(8L, om1);
 
-    writeKey(proxy, VOLUME_NAME, bucket3, key);
+    writeKey(ozoneClient, VOLUME_NAME, bucket3, key);
     waitTermIndex(om1, 12L);
     checkLastAppliedIndex(12L, om1);
 
-    writeKey(proxy, VOLUME_NAME, bucket4, key);
+    writeKey(ozoneClient, VOLUME_NAME, bucket4, key);
     waitTermIndex(om1, 16L);
     checkLastAppliedIndex(16L, om1);
 
@@ -302,28 +302,16 @@ class TestMultiRaft {
     checkKeyReading(VOLUME_NAME, bucket4, key);
   }
 
-  private void writeKey(ClientProtocol proxy, String volume, String bucket, String key) throws IOException {
-    writeKey(proxy, volume, bucket, key, key);
-  }
-
-  private void writeKey(ClientProtocol proxy, String volume, String bucket, String key, String fileText)
-      throws IOException {
-    try (OzoneOutputStream stream = proxy.createKey(
-        volume, bucket, key, key.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap())
-    ) {
-      stream.write(fileText.getBytes(UTF_8));
-    }
-  }
-
   @Test
   void testUpdateFileAfterMultiRaftReconfiguration() throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true, 4);
+    int expectedRaftGroupsCount;
 
-    ClientProtocol proxy = cluster.createClient().getProxy();
-    proxy.createVolume(VOLUME_NAME);
-    proxy.createBucket(VOLUME_NAME, BUCKET_NAME);
+    ClientProtocol ozoneClient = cluster.createClient().getProxy();
+    ozoneClient.createVolume(VOLUME_NAME);
+    ozoneClient.createBucket(VOLUME_NAME, BUCKET_NAME);
     String key = "testkey";
-    writeKey(proxy, VOLUME_NAME, BUCKET_NAME, key);
+    writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, key);
 
     cluster.getOzoneManager(0).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
     cluster.getOzoneManager(1).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
@@ -336,10 +324,11 @@ class TestMultiRaft {
     OzoneManager om2 = cluster.getOzoneManager(1);
     OzoneManager om3 = cluster.getOzoneManager(2);
 
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 1);
+    expectedRaftGroupsCount = 1;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
     String key1 = "testkey1";
-    writeKey(proxy, VOLUME_NAME, BUCKET_NAME, key1);
+    writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, key1);
     long keyUpdateId1 = getKeyUpdateId(VOLUME_NAME, BUCKET_NAME, key1);
     cluster.getOzoneManager(0).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, true);
     cluster.getOzoneManager(1).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, true);
@@ -348,10 +337,11 @@ class TestMultiRaft {
     cluster.restartOzoneManager();
     cluster.waitForClusterToBeReady();
 
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 5);
+    expectedRaftGroupsCount = 5;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
     assertEquals(5, om2.getOmRaftGroups().size());
 
-    writeKey(proxy, VOLUME_NAME, BUCKET_NAME, key1, "updated text 1");
+    writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, key1, "updated text 1");
 
     waitFor(
         () -> isKeyEquals(VOLUME_NAME, BUCKET_NAME, key1, "updated text 1"),
@@ -369,9 +359,10 @@ class TestMultiRaft {
     cluster.restartOzoneManager();
     cluster.waitForClusterToBeReady();
 
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 1);
+    expectedRaftGroupsCount = 1;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
-    writeKey(proxy, VOLUME_NAME, BUCKET_NAME, key1, "updated text 2");
+    writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, key1, "updated text 2");
     checkKeyReading(VOLUME_NAME, BUCKET_NAME, key1, "updated text 2");
 
     long keyUpdateId3 = getKeyUpdateId(VOLUME_NAME, BUCKET_NAME, key1);
@@ -381,12 +372,12 @@ class TestMultiRaft {
   @Test
   void testCleaningRatisDirectory() throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true, 4);
-
+    int expectedRaftGroupsCount = 5;
     OzoneManager om1 = cluster.getOzoneManager(0);
     OzoneManager om2 = cluster.getOzoneManager(1);
     OzoneManager om3 = cluster.getOzoneManager(2);
 
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 5);
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
     UUID mainGroupUuid = cluster.getOzoneManager(0).getOmRatisServer().getCurrentRaftGroupId().getUuid();
     List<String> dirsListBefore0 = getDirsList(om1.getConfiguration());
@@ -399,30 +390,31 @@ class TestMultiRaft {
     cluster.restartOzoneManager();
     cluster.waitForClusterToBeReady();
 
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 5);
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
     waitMultiRaftTerm(2);
-    checkRemovedDirsDirs(om1, mainGroupUuid, dirsListBefore0);
-    checkRemovedDirsDirs(om2, mainGroupUuid, dirsListBefore1);
-    checkRemovedDirsDirs(om3, mainGroupUuid, dirsListBefore2);
+    checkRemovedDirs(om1, mainGroupUuid, dirsListBefore0);
+    checkRemovedDirs(om2, mainGroupUuid, dirsListBefore1);
+    checkRemovedDirs(om3, mainGroupUuid, dirsListBefore2);
   }
 
   @Test
   void testGroupsCorrectCreatingWhenLeaderChangingBetweenReconcilerCycles()
       throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true, 4);
+    int expectedRaftGroupsCount = 5;
 
     OzoneManager om1 = cluster.getOzoneManager(0);
     OzoneManager om2 = cluster.getOzoneManager(1);
     OzoneManager om3 = cluster.getOzoneManager(2);
 
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 5);
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
     OzoneManager omLeader = cluster.getOMLeader();
 
     cluster.shutdownOzoneManager(omLeader);
     cluster.restartOzoneManager(omLeader, false);
 
-    waitOneOfOmRaftGroupsSizeOnNodesLess(om1, om2, om3, 5);
+    waitOneOfOmRaftGroupsSizeOnNodesLess(om1, om2, om3, expectedRaftGroupsCount);
 
     waitLeaderElection();
 
@@ -446,7 +438,7 @@ class TestMultiRaft {
     waitLeaderElection();
 
     waitMultiRaftTerm(2);
-    waitOmRaftGroupsSizeOnNodesEqual(cluster.getOzoneManager(0), cluster.getOzoneManager(1), cluster.getOzoneManager(2),5);
+    waitOmRaftGroupsSizeOnNodesEqual(cluster.getOzoneManager(0), cluster.getOzoneManager(1), cluster.getOzoneManager(2),expectedRaftGroupsCount);
     assertAll("Assert groups count",
         () -> assertEquals(5, cluster.getOzoneManager(0).getOmRaftGroups().size()),
         () -> assertEquals(5, cluster.getOzoneManager(1).getOmRaftGroups().size()),
@@ -458,12 +450,14 @@ class TestMultiRaft {
   void testMultiRaftTermIncreasing()
       throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true, 4);
+    int expectedRaftGroupsCount;
 
     OzoneManager om1 = cluster.getOzoneManager(0);
     OzoneManager om2 = cluster.getOzoneManager(1);
     OzoneManager om3 = cluster.getOzoneManager(2);
 
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 5);
+    expectedRaftGroupsCount = 5;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
     OzoneManager omLeader = cluster.getOMLeader();
 
@@ -483,7 +477,7 @@ class TestMultiRaft {
 
     waitLeaderElection();
 
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 5);
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
     waitMultiRaftTerm(2);
     assertEquals(2, cluster.getOMLeader().getCurrentMultiRaftTerm());
   }
@@ -518,7 +512,10 @@ class TestMultiRaft {
 
     cluster.restartOzoneManager();
     cluster.waitForClusterToBeReady();
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 7);
+
+    int expectedRaftGroupsCount = 7;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
+
     assertEquals(7, om1.getOmRaftGroups().size());
     assertEquals(7, om2.getOmRaftGroups().size());
     assertEquals(7, om3.getOmRaftGroups().size());
@@ -538,7 +535,10 @@ class TestMultiRaft {
 
     cluster.restartOzoneManager();
     cluster.waitForClusterToBeReady();
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 7);
+
+    int expectedRaftGroupsCount = 7;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
+
     assertEquals(7, om1.getOmRaftGroups().size());
     assertEquals(7, om2.getOmRaftGroups().size());
     assertEquals(7, om3.getOmRaftGroups().size());
@@ -552,7 +552,9 @@ class TestMultiRaft {
     OzoneManager om1 = cluster.getOzoneManager(0);
     OzoneManager om2 = cluster.getOzoneManager(1);
     OzoneManager om3 = cluster.getOzoneManager(2);
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 5);
+
+    int expectedRaftGroupsCount = 5;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
     checkNodeStatistic(om1, 5);
     checkNodeStatistic(om2, 5);
@@ -575,7 +577,8 @@ class TestMultiRaft {
     cluster.restartOzoneManager();
     cluster.waitForClusterToBeReady();
 
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 11);
+    int expectedRaftGroupsCount = 11;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
     checkNodeStatistic(om1, 11);
     checkNodeStatistic(om2, 11);
@@ -591,14 +594,14 @@ class TestMultiRaft {
     OzoneManager om2 = cluster.getOzoneManager(1);
     OzoneManager om3 = cluster.getOzoneManager(2);
 
-    ClientProtocol proxy = cluster.createClient().getProxy();
-    proxy.createVolume(VOLUME_NAME);
-    proxy.createBucket(VOLUME_NAME, BUCKET_NAME);
+    ClientProtocol ozoneClient = cluster.createClient().getProxy();
+    ozoneClient.createVolume(VOLUME_NAME);
+    ozoneClient.createBucket(VOLUME_NAME, BUCKET_NAME);
 
     List<String> keys = new ArrayList<>();
     for (int i = 0; i < 5; i++) {
       String key = "key" + i;
-      writeKey(proxy, VOLUME_NAME, BUCKET_NAME, key);
+      writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, key);
       keys.add(key);
     }
 
@@ -608,7 +611,9 @@ class TestMultiRaft {
 
     cluster.restartOzoneManager();
     cluster.waitForClusterToBeReady();
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 1);
+
+    int expectedRaftGroupsCount = 1;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
     checkNodeStatistic(om1, 1);
     checkNodeStatistic(om2, 1);
@@ -620,14 +625,14 @@ class TestMultiRaft {
   }
 
   @Test
-  void testMetricAfterEnableMultiRaft() throws Exception {
+  void testKeyReadingAfterEnableMultiRaft() throws Exception {
     cluster = initClusterWithMultiRaft(false);
 
-    ClientProtocol proxy = cluster.createClient().getProxy();
-    proxy.createVolume(VOLUME_NAME);
-    proxy.createBucket(VOLUME_NAME, BUCKET_NAME);
+    ClientProtocol ozoneClient = cluster.createClient().getProxy();
+    ozoneClient.createVolume(VOLUME_NAME);
+    ozoneClient.createBucket(VOLUME_NAME, BUCKET_NAME);
 
-    writeKey(proxy, VOLUME_NAME, BUCKET_NAME, "key1");
+    writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, "key1");
     checkKeyReading(VOLUME_NAME, BUCKET_NAME, "key1");
 
     cluster.getOzoneManager(0).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, true);
@@ -644,10 +649,12 @@ class TestMultiRaft {
     OzoneManager om1 = cluster.getOzoneManager(0);
     OzoneManager om2 = cluster.getOzoneManager(1);
     OzoneManager om3 = cluster.getOzoneManager(2);
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 5);
+
+    int expectedRaftGroupsCount = 5;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
     checkKeyReading(VOLUME_NAME, BUCKET_NAME, "key1");
-    writeKey(proxy, VOLUME_NAME, BUCKET_NAME, "key2");
+    writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, "key2");
     checkKeyReading(VOLUME_NAME, BUCKET_NAME, "key2");
   }
 
@@ -658,7 +665,9 @@ class TestMultiRaft {
     OzoneManager om0 = cluster.getOzoneManager(0);
     OzoneManager om1 = cluster.getOzoneManager(1);
     OzoneManager om2 = cluster.getOzoneManager(2);
-    waitOmRaftGroupsSizeOnNodesEqual(om0, om1, om2, 5);
+
+    int expectedRaftGroupsCount = 5;
+    waitOmRaftGroupsSizeOnNodesEqual(om0, om1, om2, expectedRaftGroupsCount);
 
     for (OzoneManager om : Arrays.asList(om0, om1, om2)) {
       List<String> dirNames = getDirsList(om.getConfiguration());
@@ -677,8 +686,6 @@ class TestMultiRaft {
     omMultiRaftMetrics.getOmRaftGroupsCount();
     waitFor(() -> omMultiRaftMetrics.getOmRaftGroupsCount() == omRaftGroups, 100, 100_000);
     Assertions.assertEquals(omRaftGroups, omMultiRaftMetrics.getOmRaftGroupsCount());
-//TODO Why after disable multi raft ozone manager in safe mode? Should not be.
-//    Assertions.assertEquals(0, omMultiRaftMetrics.getIsOzoneManagerInSafeMode());
 
     MetricsCollectorImpl omMultiRaftMetricsCollector = new MetricsCollectorImpl();
     omMultiRaftMetrics.getMetrics(omMultiRaftMetricsCollector, true);
@@ -690,6 +697,19 @@ class TestMultiRaft {
     om.getOmhaMetrics().getMetrics(omHaMetricsCollector, true);
     assertEquals(omRaftGroups, omHaInfoRaftGroupsLeaders.size());
     Assertions.assertEquals(omRaftGroups + 1, omHaMetricsCollector.getRecords().size());
+  }
+
+  private void writeKey(ClientProtocol ozoneClient, String volume, String bucket, String key) throws IOException {
+    writeKey(ozoneClient, volume, bucket, key, key);
+  }
+
+  private void writeKey(ClientProtocol ozoneClient, String volume, String bucket, String key, String fileText)
+          throws IOException {
+    try (OzoneOutputStream stream = ozoneClient.createKey(
+            volume, bucket, key, key.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap())
+    ) {
+      stream.write(fileText.getBytes(UTF_8));
+    }
   }
 
 
@@ -739,11 +759,11 @@ class TestMultiRaft {
     );
   }
 
-  private void checkRemovedDirsDirs(OzoneManager om, UUID mainGroupUuid, List<String> dirsListBefore0) {
-    List<String> dirsListAfter0 = getDirsList(om.getConfiguration());
-    assertTrue(dirsListAfter0.contains(mainGroupUuid.toString()));
-    dirsListAfter0.removeAll(dirsListBefore0);
-    assertEquals(4, dirsListAfter0.size());
+  private void checkRemovedDirs(OzoneManager om, UUID mainGroupUuid, List<String> dirsListBefore) {
+    List<String> dirsListAfter = getDirsList(om.getConfiguration());
+    assertTrue(dirsListAfter.contains(mainGroupUuid.toString()));
+    dirsListAfter.removeAll(dirsListBefore);
+    assertEquals(4, dirsListAfter.size());
   }
 
   private List<String> getDirsList(OzoneConfiguration configuration) {
