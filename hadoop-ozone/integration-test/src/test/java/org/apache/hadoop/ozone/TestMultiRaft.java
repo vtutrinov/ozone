@@ -510,15 +510,9 @@ class TestMultiRaft {
     om2.getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, -15);
     om3.getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, -15);
 
-    cluster.restartOzoneManager();
-    cluster.waitForClusterToBeReady();
-
-    int expectedRaftGroupsCount = 7;
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
-
-    assertEquals(7, om1.getOmRaftGroups().size());
-    assertEquals(7, om2.getOmRaftGroups().size());
-    assertEquals(7, om3.getOmRaftGroups().size());
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            () -> cluster.restartOzoneManager());
+    assertTrue(ex.getMessage().contains(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS));
   }
 
   @Test
@@ -529,19 +523,13 @@ class TestMultiRaft {
     OzoneManager om2 = cluster.getOzoneManager(1);
     OzoneManager om3 = cluster.getOzoneManager(2);
 
-    cluster.getOzoneManager(0).getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, 0);
-    cluster.getOzoneManager(1).getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, 0);
-    cluster.getOzoneManager(2).getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, 0);
+    om1.getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, 0);
+    om2.getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, 0);
+    om3.getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, 0);
 
-    cluster.restartOzoneManager();
-    cluster.waitForClusterToBeReady();
-
-    int expectedRaftGroupsCount = 7;
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
-
-    assertEquals(7, om1.getOmRaftGroups().size());
-    assertEquals(7, om2.getOmRaftGroups().size());
-    assertEquals(7, om3.getOmRaftGroups().size());
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            () -> cluster.restartOzoneManager());
+    assertTrue(ex.getMessage().contains(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS));
   }
 
   @Test

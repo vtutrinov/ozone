@@ -51,10 +51,13 @@ public interface ConfigurationSource {
     String value = get(key);
     if (value == null) {
       return defaultValue;
-    } else {
-      int parsedInt = Integer.parseInt(value);
-      return parsedInt > 0 ? parsedInt : defaultValue;
     }
+    int parseInt = Integer.parseInt(value.trim());
+    if (parseInt <= 0) {
+      throw new IllegalArgumentException(
+              String.format("Invalid value for %s: %s (must be > 0)", key, value));
+    }
+    return parseInt;
   }
 
   /**
