@@ -512,7 +512,7 @@ class TestMultiRaft {
 
     cluster.restartOzoneManager();
     cluster.waitForClusterToBeReady();
-    // Value -15 specified in config is invalid -> fall back to default
+    // Value -15 specified in config is invalid -> fall back to the default
     int expectedRaftGroupsCount = 7;
     waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
@@ -535,7 +535,7 @@ class TestMultiRaft {
 
     cluster.restartOzoneManager();
     cluster.waitForClusterToBeReady();
-    // Value 0 specified in config is invalid -> fall back to default
+    // Value 0 specified in config is invalid -> fall back to the default
     int expectedRaftGroupsCount = 7;
     waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
