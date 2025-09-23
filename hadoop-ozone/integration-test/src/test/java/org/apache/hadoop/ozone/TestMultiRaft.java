@@ -310,8 +310,6 @@ class TestMultiRaft {
     ClientProtocol ozoneClient = cluster.createClient().getProxy();
     ozoneClient.createVolume(VOLUME_NAME);
     ozoneClient.createBucket(VOLUME_NAME, BUCKET_NAME);
-    String key = "testkey";
-    writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, key);
 
     cluster.getOzoneManager(0).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
     cluster.getOzoneManager(1).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
