@@ -510,9 +510,15 @@ class TestMultiRaft {
     om2.getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, -15);
     om3.getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, -15);
 
-    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-            () -> cluster.restartOzoneManager());
-    assertTrue(ex.getMessage().contains(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS));
+    cluster.restartOzoneManager();
+    cluster.waitForClusterToBeReady();
+    // Value -15 specified in config is invalid -> fall back to default
+    int expectedRaftGroupsCount = 7;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
+
+    assertEquals(7, om1.getOmRaftGroups().size());
+    assertEquals(7, om2.getOmRaftGroups().size());
+    assertEquals(7, om3.getOmRaftGroups().size());
   }
 
   @Test
@@ -527,9 +533,15 @@ class TestMultiRaft {
     om2.getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, 0);
     om3.getConfiguration().setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, 0);
 
-    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-            () -> cluster.restartOzoneManager());
-    assertTrue(ex.getMessage().contains(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS));
+    cluster.restartOzoneManager();
+    cluster.waitForClusterToBeReady();
+    // Value 0 specified in config is invalid -> fall back to default
+    int expectedRaftGroupsCount = 7;
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
+
+    assertEquals(7, om1.getOmRaftGroups().size());
+    assertEquals(7, om2.getOmRaftGroups().size());
+    assertEquals(7, om3.getOmRaftGroups().size());
   }
 
   @Test

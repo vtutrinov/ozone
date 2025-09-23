@@ -4344,11 +4344,12 @@
   </property>
   <property>
     <name>ozone.om.multi.raft.bucket.groups</name>
-    <value>4</value>
+    <value>6</value>
     <tag>OZONE, OM</tag>
     <description>
       Multi Raft groups max amount for processing bucket write requests in OzoneManager side.
-      Can't been changed after cluster initialization.
+      Can't be changed after cluster initialization. If the value is invalid (e.g., 0 or -1),
+      it falls back to the default of 6.
     </description>
   </property>
   <property>
