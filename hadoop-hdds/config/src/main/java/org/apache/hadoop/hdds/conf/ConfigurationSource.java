@@ -52,12 +52,12 @@ public interface ConfigurationSource {
     if (value == null) {
       return defaultValue;
     }
-    int parseInt = Integer.parseInt(value.trim());
-    if (parseInt <= 0) {
+    int parsedInt = Integer.parseInt(value.trim());
+    if (parsedInt <= 0) {
       throw new IllegalArgumentException(
               String.format("Invalid value for %s: %s (must be > 0)", key, value));
     }
-    return parseInt;
+    return parsedInt;
   }
 
   /**
