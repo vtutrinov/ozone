@@ -303,7 +303,7 @@ class TestMultiRaft {
   }
 
   @Test
-  void testUpdateFileAfterMultiRaftReconfiguration() throws InterruptedException, TimeoutException, IOException {
+  void testKeyConsistencyAfterMultiRaftReconfiguration() throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true, 4);
     int expectedRaftGroupsCount;
 
@@ -342,7 +342,7 @@ class TestMultiRaft {
     assertEquals(5, om2.getOmRaftGroups().size());
 
     writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, key1, "updated text 1");
-
+    // verify updated value is visible after enabling MultiRaft
     waitFor(
         () -> isKeyEquals(VOLUME_NAME, BUCKET_NAME, key1, "updated text 1"),
         500,
@@ -363,8 +363,13 @@ class TestMultiRaft {
     waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
 
     writeKey(ozoneClient, VOLUME_NAME, BUCKET_NAME, key1, "updated text 2");
+    // verify updated value is visible after disabling MultiRaft
+    waitFor(
+            () -> isKeyEquals(VOLUME_NAME, BUCKET_NAME, key1, "updated text 2"),
+            500,
+            2000
+    );
     checkKeyReading(VOLUME_NAME, BUCKET_NAME, key1, "updated text 2");
-
     long keyUpdateId3 = getKeyUpdateId(VOLUME_NAME, BUCKET_NAME, key1);
     assertTrue(keyUpdateId3 > keyUpdateId2);
   }
