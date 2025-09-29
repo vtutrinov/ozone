@@ -7,6 +7,8 @@ import org.apache.hadoop.io.retry.Idempotent;
 import java.io.IOException;
 import java.lang.reflect.Method;
 
+import static org.apache.hadoop.ozone.om.request.invocation.OzoneRetryInvocationHandler.LOG;
+
 class ProxyDescriptor<T> {
   private final FailoverProxyProvider<T> fpp;
   /**
@@ -45,8 +47,8 @@ class ProxyDescriptor<T> {
       fpp.performFailover(proxyInfo.proxy);
       failoverCount++;
     } else {
-      OzoneRetryInvocationHandler.LOG.warn("A failover has occurred since the start of call #" + callId
-          + " " + proxyInfo.getString(method.getName()));
+      LOG.warn("A failover has occurred since the start of call #{} {}", callId,
+          proxyInfo.getString(method.getName()));
     }
     proxyInfo = fpp.getProxy();
   }

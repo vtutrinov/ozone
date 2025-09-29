@@ -225,7 +225,7 @@ public class BucketStateMachine extends BaseStateMachine {
       OzoneManagerProtocolProtos.OMRequest request,
       long trxLogIndex
   ) {
-    LOG.error("Run command {} - {}", request.getCmdType(), trxLogIndex);
+    LOG.trace("Run command {} - {}", request.getCmdType(), trxLogIndex);
     try {
       final OMClientResponse omClientResponse = handler.handleWriteRequest(
           request, trxLogIndex);
@@ -544,10 +544,7 @@ public class BucketStateMachine extends BaseStateMachine {
   @Override
   public void notifyGroupRemove() {
     LOG.trace("Start removing group {}", currentRaftGroupId);
-    ozoneManager.getStateMachines().remove(currentRaftGroupId);
-    ozoneManager.getOmRaftGroups().remove(currentRaftGroupId);
-    ozoneManager.getOmhaMetrics().deleteRaftGroup(currentRaftGroupId);
-    ozoneManager.getOmRaftGroupManager().reset();
+    ozoneManager.getOmRaftGroupManager().removeGroup(currentRaftGroupId);
     try {
       LOG.trace("Deleting transaction for group {}", currentRaftGroupId);
       TransactionInfo.deleteTransactionInfo(

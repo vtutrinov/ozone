@@ -115,9 +115,8 @@ public class OzoneRetryInvocationHandler<T> implements RpcInvocationHandler {
       // fail.
       if (retryInfo.getAction().reason != null) {
         if (LOG.isDebugEnabled()) {
-          LOG.debug("Exception while invoking call #" + callId + " "
-              + proxyDescriptor.getProxyInfo().getString(method.getName())
-              + ". Not retrying because " + retryInfo.getAction().reason, e);
+          LOG.debug("Exception while invoking call #{} {}. Not retrying because {}", callId,
+              proxyDescriptor.getProxyInfo().getString(method.getName()), retryInfo.getAction().reason, e);
         }
       }
       throw retryInfo.getFailException();

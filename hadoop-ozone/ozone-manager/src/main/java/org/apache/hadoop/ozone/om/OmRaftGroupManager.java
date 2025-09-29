@@ -154,8 +154,12 @@ public class OmRaftGroupManager {
     return RaftGroupId.valueOf(groupUuid);
   }
 
-  public void addGroupIdListToRaftGroupCounter(List<UUID> groupUuid) {
-    bucketsPerRaftGroupCounter.clear();
-    groupUuid.forEach(it -> bucketsPerRaftGroupCounter.put(it, 0));
+  public void removeGroup(RaftGroupId raftGroupId) {
+    bucketRaftGroups.entrySet().stream()
+            .filter(e -> e.getValue().equals(raftGroupId.getUuid()))
+            .map(Map.Entry::getKey)
+            .forEach(bucketRaftGroups::remove);
+    bucketsPerRaftGroupCounter.remove(raftGroupId.getUuid());
   }
+
 }

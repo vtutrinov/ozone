@@ -1679,18 +1679,20 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     File ratisMetadataDir = new File(ratisDir);
     List<String> listOfRaftGroupsToReset = new ArrayList<>();
     if (ratisMetadataDir.exists()) {
-      String[] list = ratisMetadataDir.list((dir, name) -> {
+      String[] listOfRatisDirs = ratisMetadataDir.list((dir, name) -> {
         String exceptRaftGroupDirName = exceptRaftGroupDir.getUuid().toString();
         return !name.equals(exceptRaftGroupDirName);
       });
-      for (String s : list) {
-        File file = new File(ratisMetadataDir, s);
-        try {
-          deleteDirectory(file);
-          listOfRaftGroupsToReset.add(s);
-        } catch (IOException e) {
-          LOG.error("Can't delete directory {} in ratis metadata dir {}",
-              file.getAbsolutePath(), ratisMetadataDir.getAbsolutePath(), e);
+      if (listOfRatisDirs != null) {
+        for (String s : listOfRatisDirs) {
+          File file = new File(ratisMetadataDir, s);
+          try {
+            deleteDirectory(file);
+            listOfRaftGroupsToReset.add(s);
+          } catch (IOException e) {
+            LOG.error("Can't delete directory {} in ratis metadata dir {}",
+                file.getAbsolutePath(), ratisMetadataDir.getAbsolutePath(), e);
+          }
         }
       }
       try {

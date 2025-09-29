@@ -96,7 +96,7 @@ public class AsyncCallHandler {
 
     void addCall(AsyncCall call) {
       if (LOG.isDebugEnabled()) {
-        LOG.debug("add " + call);
+        LOG.debug("add {}", call);
       }
       queue.offer(call);
       processor.tryStart();
@@ -156,7 +156,7 @@ public class AsyncCallHandler {
           final boolean set = running.compareAndSet(current, daemon);
           Preconditions.checkState(set);
           if (LOG.isDebugEnabled()) {
-            LOG.debug("Starting AsyncCallQueue.Processor " + daemon);
+            LOG.debug("Starting AsyncCallQueue.Processor {}", daemon);
           }
           daemon.start();
         }
@@ -170,7 +170,7 @@ public class AsyncCallHandler {
 
       void kill(Daemon d) {
         if (LOG.isDebugEnabled()) {
-          LOG.debug("Killing " + d);
+          LOG.debug("Killing {}" , d);
         }
         final boolean set = running.compareAndSet(d, null);
         Preconditions.checkState(set);

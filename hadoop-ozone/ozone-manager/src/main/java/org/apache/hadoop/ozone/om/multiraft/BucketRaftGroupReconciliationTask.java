@@ -177,14 +177,14 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
             new GrpcTlsConfig(ozoneManager.getCertificateClient().getClientKeyStoresFactory().getKeyManagers()[0],
                 ozoneManager.getCertificateClient().getClientKeyStoresFactory().getTrustManagers()[0], true);
       } catch (IOException ex) {
-        LOG.error("Can't retrieve cert key store factory");
+        LOG.error("Can't retrieve cert key store factory", ex);
       }
     }
     LOG.trace("{} Delete raft group {}.", ozoneManager.getOMNodeId(), raftGroup.getGroupId());
     OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
     GrpcTlsConfig finalTlsConfig = tlsConfig;
     raftGroup.getPeers().stream()
-        .filter(pear -> !pear.getId().equals(omRatisServer.getRaftPeerId()))
+        .filter(peer -> !peer.getId().equals(omRatisServer.getRaftPeerId()))
         .forEach(peer -> {
           try (RaftClient raftClient = RatisHelper.newRaftClient(SupportedRpcType.valueOfIgnoreCase(rpcType),
               peer, retryPolicy, finalTlsConfig, ozoneManager.getConfiguration())) {
