@@ -4421,33 +4421,4 @@
       Repetition period for scheduling transfer leadership for multi raft bucket groups.
     </description>
   </property>
-  <property>
-    <name>ozone.om.safemode.enabled</name>
-    <value>true</value>
-    <tag>OM, OZONE</tag>
-    <description>
-        Enable/disable OzoneManager safemode. If enabled, OzoneManager will not allow any write operations
-        until it is exited from safemode.
-        This used in case of activated multiraft feature. OM will stay in safemode until OM main raft group elects a leader and all the expected
-        bucket raft groups are created
-    </description>
-  </property>
-  <property>
-    <name>ozone.om.bucket.raft.groups.reconciler.interval</name>
-    <value>60s</value>
-    <tag>OM, OZONE</tag>
-    <description>
-      If the multi-raft feature is enabled then a special background job named as BucketRaftGroupsReconciler runs and monitors a health state
-      of the bucket raft groups. The configuration property is to set the job execution interval
-    </description>
-  </property>
-  <property>
-    <name>ozone.om.ratis.unhealthy.peer.timeout</name>
-    <value>30s</value>
-    <tag>OM, OZONE</tag>
-    <description>
-      Timeout to consider a Ratis peer as unhealthy if no heartbeat is received.
-      This is used in multi-raft feature for bucket raft groups.
-    </description>
-  </property>
 </configuration>

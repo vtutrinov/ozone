@@ -85,7 +85,7 @@ public class Hadoop3OmTransport implements OmTransport {
       OMResponse omResponse =
           rpcProxy.submitRequest(NULL_RPC_CONTROLLER, payload);
 
-      if (omResponse.hasLeaderOMNodeId() && omFailoverProxyProvider != null) {
+      if (omResponse.hasLeaderOMNodeId()) {
         String leaderOmId = omResponse.getLeaderOMNodeId();
 
         // Failover to the OM node returned by OMResponse leaderOMNodeId if

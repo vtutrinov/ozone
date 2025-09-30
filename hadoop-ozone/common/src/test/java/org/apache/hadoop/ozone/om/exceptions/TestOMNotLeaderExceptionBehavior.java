@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * Tests for OMNotLeaderException.
  */
-public class TestOMNotLeaderException {
+public class TestOMNotLeaderExceptionBehavior {
 
   @Test
   public void testStringParametrizedConstructor() {

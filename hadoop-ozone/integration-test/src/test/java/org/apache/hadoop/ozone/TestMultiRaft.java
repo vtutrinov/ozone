@@ -687,7 +687,7 @@ class TestMultiRaft {
   private static void checkNodeStatistic(OzoneManager om, int omRaftGroups)
       throws TimeoutException, InterruptedException {
     OMHAMultiRaftMetrics omMultiRaftMetrics = om.getOmMultiRaftMetrics();
-    omMultiRaftMetrics.getOmRaftGroupsCount();
+    
     waitFor(() -> omMultiRaftMetrics.getOmRaftGroupsCount() == omRaftGroups, 100, 100_000);
     Assertions.assertEquals(omRaftGroups, omMultiRaftMetrics.getOmRaftGroupsCount());
 

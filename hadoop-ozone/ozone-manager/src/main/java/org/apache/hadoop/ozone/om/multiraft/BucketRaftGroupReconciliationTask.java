@@ -65,8 +65,7 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
       List<RaftGroup> existingRaftGroups = (List<RaftGroup>) omRatisServer.getServer().getGroups();
       if (existingRaftGroups.size() == 1) { // consist of only main raft group, as like as an initial setup
         LOG.trace("Create all raft groups");
-        List<RaftGroupId> raftGroupIds = ozoneManager.getOmRaftGroupManager()
-            .generateRaftGroups(currentMultiRaftTerm, expectedRaftGroupsCount);
+        List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm, expectedRaftGroupsCount);
         ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()), true);
       } else {
         for (RaftGroup raftGroup : existingRaftGroups) {
