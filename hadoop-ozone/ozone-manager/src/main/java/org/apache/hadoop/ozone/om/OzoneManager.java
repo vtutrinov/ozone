@@ -221,7 +221,6 @@ import org.apache.ratis.util.ExitUtils;
 import org.apache.ratis.util.FileUtils;
 import org.apache.ratis.util.JvmPauseMonitor;
 import org.apache.ratis.util.LifeCycle;
-import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -499,8 +498,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return multiRaftTerm.get();
   }
 
-  public void setCurrentMultiRaftTerm(long multiRaftTerm) {
-    this.multiRaftTerm.set(multiRaftTerm);
+  public void setCurrentMultiRaftTerm(long multiRaftUpdateIndex) {
+    this.multiRaftTerm.set(multiRaftUpdateIndex);
   }
 
   /**
@@ -756,7 +755,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     this.omRatisSnapshotInfo = new RatisSnapshotInfo();
 
     initializeRatisDirs(conf);
-    listOfRaftGroupToReset = cleanUpRaftGroups(OzoneManagerRatisUtils.getOMRatisDirectory(configuration), omRaftGroupName());
+    listOfRaftGroupToReset = cleanUpRaftGroups(OzoneManagerRatisUtils.getOMRatisDirectory(configuration),
+        omRaftGroupName());
     initializeRatisServer(isBootstrapping || isForcedBootstrapping);
 
     omClientProtocolMetrics = ProtocolMessageMetrics
@@ -1052,7 +1052,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
   }
 
-  public GetRaftGroupHealthStateResponse getRaftGroupHealthState(GetRaftGroupHealthStateRequest request) throws IOException {
+  public GetRaftGroupHealthStateResponse getRaftGroupHealthState(GetRaftGroupHealthStateRequest request)
+      throws IOException {
     long unhealthyPeerTimeout = configuration.getTimeDuration(
         OZONE_OM_RATIS_UNHEALTHY_PEER_TIMEOUT,
         OZONE_OM_RATIS_UNHEALTHY_PEER_TIMEOUT_DEFAULT,
@@ -1072,7 +1073,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         .setLastRpcResponseTimeMs(0)
         .build());
     for (RaftProtos.ServerRpcProto followerInfo : followerInfoList) {
-      responseBuilder.addPeerHealthInfo( PeerHealthInfo.newBuilder()
+      responseBuilder.addPeerHealthInfo(PeerHealthInfo.newBuilder()
           .setIsHealthy(followerInfo.getLastRpcElapsedTimeMs() < unhealthyPeerTimeout)
           .setPeerId(followerInfo.getId().getId().toStringUtf8())
           .setLastRpcResponseTimeMs(followerInfo.getLastRpcElapsedTimeMs())
@@ -2048,7 +2049,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
     bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
     bucketRaftGroupsReconciler.start();
-    listOfRaftGroupToReset = cleanUpRaftGroups(OzoneManagerRatisUtils.getOMRatisDirectory(configuration), omRaftGroupName());
+    listOfRaftGroupToReset = cleanUpRaftGroups(OzoneManagerRatisUtils.getOMRatisDirectory(configuration),
+        omRaftGroupName());
     cleanUpRaftGroupsTransactions();
   }
 

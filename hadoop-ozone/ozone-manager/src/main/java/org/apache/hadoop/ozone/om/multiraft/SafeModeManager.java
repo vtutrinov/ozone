@@ -15,6 +15,9 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SAFE_MODE_ENABLED;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SAFE_MODE_ENABLED_DEFAULT;
 
+/**
+ * Class to manage Ozone Manager safe mode state.
+ */
 public class SafeModeManager  {
 
   public static final Logger LOG = LoggerFactory.getLogger(SafeModeManager.class);

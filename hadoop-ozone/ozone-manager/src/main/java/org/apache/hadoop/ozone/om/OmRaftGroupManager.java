@@ -93,9 +93,8 @@ public class OmRaftGroupManager {
 
     while (bucketsPerRaftGroupCounter.size() < omRaftGroupCount) {
       try {
-        LOG.info(
-                "Waiting for group initiating {}-{}. {}", bucketsPerRaftGroupCounter.size(), omRaftGroupCount, bucketsPerRaftGroupCounter
-        );
+        LOG.info("Waiting for group initiating {}-{}. {}", bucketsPerRaftGroupCounter.size(), omRaftGroupCount,
+            bucketsPerRaftGroupCounter);
         wait(1000);
       } catch (InterruptedException e) {
         throw new RuntimeException(e);

@@ -11,6 +11,9 @@ import org.apache.hadoop.ozone.om.OzoneManager;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT;
 
+/**
+ * Class to maintain metrics related to OM HA Multi-Raft.
+ */
 @Metrics(
     about = "Ozone Manager HA Multi-Raft Metrics",
     context = "ozone")

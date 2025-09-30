@@ -424,13 +424,12 @@ class TestMultiRaft {
     Stream.of(om1, om2, om3)
         .min(Comparator.comparingInt(el -> el.getOmRaftGroups().size()))
         .ifPresent(it -> {
-              try {
-                cluster.getOMLeader().transferLeadership(it.getOMNodeId());
-              } catch (IOException e) {
-                throw new RuntimeException(e);
-              }
-            }
-        );
+          try {
+            cluster.getOMLeader().transferLeadership(it.getOMNodeId());
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        });
 
     waitLeaderElection();
 
@@ -441,7 +440,8 @@ class TestMultiRaft {
     waitLeaderElection();
 
     waitMultiRaftTerm(2);
-    waitOmRaftGroupsSizeOnNodesEqual(cluster.getOzoneManager(0), cluster.getOzoneManager(1), cluster.getOzoneManager(2),expectedRaftGroupsCount);
+    waitOmRaftGroupsSizeOnNodesEqual(cluster.getOzoneManager(0), cluster.getOzoneManager(1), cluster.getOzoneManager(2),
+        expectedRaftGroupsCount);
     assertAll("Assert groups count",
         () -> assertEquals(5, cluster.getOzoneManager(0).getOmRaftGroups().size()),
         () -> assertEquals(5, cluster.getOzoneManager(1).getOmRaftGroups().size()),
@@ -684,7 +684,8 @@ class TestMultiRaft {
     }
   }
 
-  private static void checkNodeStatistic(OzoneManager om, int omRaftGroups) throws TimeoutException, InterruptedException {
+  private static void checkNodeStatistic(OzoneManager om, int omRaftGroups)
+      throws TimeoutException, InterruptedException {
     OMHAMultiRaftMetrics omMultiRaftMetrics = om.getOmMultiRaftMetrics();
     omMultiRaftMetrics.getOmRaftGroupsCount();
     waitFor(() -> omMultiRaftMetrics.getOmRaftGroupsCount() == omRaftGroups, 100, 100_000);
@@ -716,7 +717,8 @@ class TestMultiRaft {
   }
 
 
-  private static void waitOmRaftGroupsSizeOnNodesEqual(OzoneManager om1, OzoneManager om2, OzoneManager om3, int expectedGroupSize)
+  private static void waitOmRaftGroupsSizeOnNodesEqual(OzoneManager om1, OzoneManager om2, OzoneManager om3,
+                                                       int expectedGroupSize)
       throws TimeoutException, InterruptedException {
     waitFor(
         () ->
@@ -728,7 +730,8 @@ class TestMultiRaft {
     );
   }
 
-  private static void waitOneOfOmRaftGroupsSizeOnNodesLess(OzoneManager om1, OzoneManager om2, OzoneManager om3, int expectedGroupSize)
+  private static void waitOneOfOmRaftGroupsSizeOnNodesLess(OzoneManager om1, OzoneManager om2, OzoneManager om3,
+                                                           int expectedGroupSize)
       throws TimeoutException, InterruptedException {
     waitFor(
         () ->
@@ -812,7 +815,7 @@ class TestMultiRaft {
     }
   }
 
-  private boolean isKeyEquals(String volume, String bucket, String key, String expectedText){
+  private boolean isKeyEquals(String volume, String bucket, String key, String expectedText) {
     try (
         OzoneInputStream ozoneInputStream = cluster.createClient().getProxy().getKey(volume, bucket, key);
         BufferedReader br = new BufferedReader(new InputStreamReader(ozoneInputStream, UTF_8));

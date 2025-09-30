@@ -9,6 +9,9 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 
 import java.io.IOException;
 
+/**
+ * Response for BucketRaftGroupsStateUpdate request.
+ */
 @CleanupTableInfo(cleanupTables = {OmMetadataManagerImpl.MULTI_RAFT_INFO_TABLE})
 public class OMBucketRaftGroupsStateUpdateResponse extends OMClientResponse {
 
