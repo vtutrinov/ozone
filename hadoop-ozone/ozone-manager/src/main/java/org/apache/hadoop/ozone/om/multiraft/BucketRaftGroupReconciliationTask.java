@@ -81,7 +81,12 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
           } else {
             RaftPeerId raftGroupLeaderId = omRatisServer.getServer().getDivision(groupId).getInfo().getLeaderId();
 
-            try (OzoneClient omClient = OzoneClientFactory.getRpcClient(raftGroupLeaderId.toString(),
+            String omServiceId = OmUtils.getOzoneManagerServiceId(ozoneManager.getConfiguration());
+            String omHost = OmUtils.getAllOMHAAddresses(ozoneManager.getConfiguration(), omServiceId, true).stream()
+                .filter(omNodeDetails -> omNodeDetails.getNodeId().equals(raftGroupLeaderId.toString()))
+                .findFirst().get().getHostAddress();
+
+            try (OzoneClient omClient = OzoneClientFactory.getRpcClient(omHost,
                 OmUtils.getOmRpcPort(ozoneManager.getConfiguration()), ozoneManager.getConfiguration())) {
               UUID raftGroupUuid = groupId.getUuid();
               OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse raftGroupHealthState;
