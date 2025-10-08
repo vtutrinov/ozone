@@ -307,7 +307,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
             new OMNotLeaderException(raftPeerId, raftLeaderId,
                 raftLeaderAddress);
 
-    LOG.debug(notLeaderException.getMessage());
+    LOG.warn(notLeaderException.getMessage());
 
     return new ServiceException(notLeaderException);
   }
