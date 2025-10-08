@@ -38,6 +38,7 @@ import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes;
 import org.apache.hadoop.ozone.om.exceptions.OMLeaderNotReadyException;
+import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
 import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerProtocolPB;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus;
@@ -436,7 +437,9 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
   private ServiceException createLeaderErrorException(
       RaftServerStatus raftServerStatus) {
     if (raftServerStatus == NOT_LEADER) {
-      return new ServiceException(omRatisServer.newOMNotLeaderException());
+      OMNotLeaderException notLeaderException = omRatisServer.newOMNotLeaderException();
+      LOG.warn(notLeaderException.getMessage());
+      return new ServiceException(notLeaderException);
     } else {
       return createLeaderNotReadyException();
     }
