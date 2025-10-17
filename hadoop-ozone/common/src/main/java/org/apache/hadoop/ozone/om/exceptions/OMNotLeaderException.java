@@ -18,6 +18,10 @@
 package org.apache.hadoop.ozone.om.exceptions;
 
 import java.io.IOException;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.protocol.RaftPeerId;
 import org.apache.ratis.protocol.exceptions.NotLeaderException;
 
@@ -28,33 +32,68 @@ import org.apache.ratis.protocol.exceptions.NotLeaderException;
  */
 public class OMNotLeaderException extends IOException {
 
+  // SDP (multi-raft): the message carries the raft group, so that the client can retry the request on the
+  // suggested leader of that group, see OzoneRetryInvocationHandler
+  private static final Pattern EXCEPTION_PATTERN =
+      Pattern.compile("^OM:(\\S+)\\s+is not the leader(?: for raft group\\s+\\[([0-9a-fA-F-]+)\\])?\\."
+          + "\\s+Suggested leader is OM:(.+)\\[(.*)\\]\\..*$");
+
+  private final String currentPeerId;
   private final String leaderPeerId;
   private final String leaderAddress;
+  private final RaftGroupId raftGroupId;
+
+  public OMNotLeaderException(String message) {
+    super(message);
+    Matcher matcher = EXCEPTION_PATTERN.matcher(message.split("\n")[0]);
+    if (matcher.matches()) {
+      this.currentPeerId = matcher.group(1);
+      this.raftGroupId = matcher.group(2) == null ? null : RaftGroupId.valueOf(UUID.fromString(matcher.group(2)));
+      this.leaderPeerId = matcher.group(3);
+      this.leaderAddress = matcher.group(4);
+    } else {
+      this.currentPeerId = null;
+      this.raftGroupId = null;
+      this.leaderPeerId = null;
+      this.leaderAddress = null;
+    }
+  }
 
   public OMNotLeaderException(RaftPeerId currentPeerId) {
-    super("OM:" + currentPeerId + " is not the leader. Could not " +
-        "determine the leader node.");
+    this(currentPeerId, (RaftGroupId) null);
+  }
+
+  public OMNotLeaderException(RaftPeerId currentPeerId, RaftGroupId raftGroupId) {
+    super("OM:" + currentPeerId + " is not the leader" + groupInfo(raftGroupId)
+        + ". Could not determine the leader node.");
+    this.currentPeerId = String.valueOf(currentPeerId);
     this.leaderPeerId = null;
     this.leaderAddress = null;
+    this.raftGroupId = raftGroupId;
   }
 
   public OMNotLeaderException(RaftPeerId currentPeerId,
       RaftPeerId suggestedLeaderPeerId) {
-    this(currentPeerId, suggestedLeaderPeerId, null);
+    this(currentPeerId, suggestedLeaderPeerId, null, null);
   }
 
   public OMNotLeaderException(RaftPeerId currentPeerId,
       RaftPeerId suggestedLeaderPeerId, String suggestedLeaderAddress) {
-    super("OM:" + currentPeerId + " is not the leader. Suggested leader is" +
-        " OM:" + suggestedLeaderPeerId + "[" + suggestedLeaderAddress + "].");
-    this.leaderPeerId = suggestedLeaderPeerId.toString();
-    this.leaderAddress = suggestedLeaderAddress;
+    this(currentPeerId, suggestedLeaderPeerId, suggestedLeaderAddress, null);
   }
 
-  public OMNotLeaderException(String msg) {
-    super(msg);
-    this.leaderPeerId = null;
-    this.leaderAddress = null;
+  public OMNotLeaderException(RaftPeerId currentPeerId,
+      RaftPeerId suggestedLeaderPeerId, String suggestedLeaderAddress, RaftGroupId raftGroupId) {
+    super("OM:" + currentPeerId + " is not the leader" + groupInfo(raftGroupId) + ". Suggested leader is" +
+        " OM:" + suggestedLeaderPeerId + "[" + suggestedLeaderAddress + "].");
+    this.currentPeerId = String.valueOf(currentPeerId);
+    this.leaderPeerId = suggestedLeaderPeerId.toString();
+    this.leaderAddress = suggestedLeaderAddress;
+    this.raftGroupId = raftGroupId;
+  }
+
+  private static String groupInfo(RaftGroupId raftGroupId) {
+    return raftGroupId == null ? "" : " for raft group [" + raftGroupId.getUuid() + "]";
   }
 
   public String getSuggestedLeaderNodeId() {
@@ -65,28 +104,37 @@ public class OMNotLeaderException extends IOException {
     return leaderAddress;
   }
 
+  /** @return the raft group the OM is not the leader of, or null if unknown. */
+  public RaftGroupId getRaftGroupId() {
+    return raftGroupId;
+  }
+
+  public String getCurrentPeerId() {
+    return currentPeerId;
+  }
+
   /**
    * Convert {@link NotLeaderException} to {@link OMNotLeaderException}.
-   * @param notLeaderException
-   * @param currentPeer
-   * @return OMNotLeaderException
    */
   public static OMNotLeaderException convertToOMNotLeaderException(
       NotLeaderException notLeaderException, RaftPeerId currentPeer) {
+    return convertToOMNotLeaderException(notLeaderException, currentPeer, null);
+  }
+
+  /**
+   * Convert {@link NotLeaderException} of the given raft group to {@link OMNotLeaderException}.
+   */
+  public static OMNotLeaderException convertToOMNotLeaderException(
+      NotLeaderException notLeaderException, RaftPeerId currentPeer, RaftGroupId raftGroupId) {
     RaftPeerId suggestedLeader =
         notLeaderException.getSuggestedLeader() != null ?
             notLeaderException.getSuggestedLeader().getId() : null;
     String suggestedLeaderAddress =
         notLeaderException.getSuggestedLeader() != null ?
             notLeaderException.getSuggestedLeader().getAddress() : null;
-    OMNotLeaderException omNotLeaderException;
     if (suggestedLeader != null) {
-      omNotLeaderException = new OMNotLeaderException(currentPeer,
-          suggestedLeader, suggestedLeaderAddress);
-    } else {
-      omNotLeaderException =
-          new OMNotLeaderException(currentPeer);
+      return new OMNotLeaderException(currentPeer, suggestedLeader, suggestedLeaderAddress, raftGroupId);
     }
-    return omNotLeaderException;
+    return new OMNotLeaderException(currentPeer, raftGroupId);
   }
 }

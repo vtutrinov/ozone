@@ -325,6 +325,14 @@ public final class OMDBDefinition extends DBDefinition.WithMap {
           StringCodec.get(),
           CompactionLogEntry.getCodec());
 
+  // SDP (multi-raft, SDPOZN-1708)
+  public static final String MULTI_RAFT_INFO_TABLE = "multiRaftInfoTable";
+  /** multiRaftInfoTable: multi-raft state key :- value (e.g. bucket raft groups state index). */
+  public static final DBColumnFamilyDefinition<String, Long> MULTI_RAFT_INFO_TABLE_DEF
+      = new DBColumnFamilyDefinition<>(MULTI_RAFT_INFO_TABLE,
+          StringCodec.get(),
+          LongCodec.get());
+
   //---------------------------------------------------------------------------
   private static final Map<String, DBColumnFamilyDefinition<?, ?>> COLUMN_FAMILIES
       = DBColumnFamilyDefinition.newUnmodifiableMap(
@@ -350,7 +358,8 @@ public final class OMDBDefinition extends DBDefinition.WithMap {
           TENANT_STATE_TABLE_DEF,
           TRANSACTION_INFO_TABLE_DEF,
           USER_TABLE_DEF,
-          VOLUME_TABLE_DEF);
+          VOLUME_TABLE_DEF,
+          MULTI_RAFT_INFO_TABLE_DEF);
 
   private static final OMDBDefinition INSTANCE = new OMDBDefinition();
 

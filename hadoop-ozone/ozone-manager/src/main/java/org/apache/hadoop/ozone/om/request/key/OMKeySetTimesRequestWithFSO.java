@@ -78,7 +78,7 @@ public class OMKeySetTimesRequestWithFSO extends OMKeySetTimesRequest {
     Result result = null;
     try {
       volume = getVolumeName();
-      bucket = getWriteReqBucketName();
+      bucket = getWriteReqBucketName() != null ? getWriteReqBucketName() : getBucketName();
       key = getKeyName();
 
       mergeOmLockDetails(omMetadataManager.getLock()

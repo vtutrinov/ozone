@@ -145,7 +145,7 @@ public final class OzoneManagerRatisServer {
   private final long groupTransferLeadershipSchedulingInitialDelay;
   private final long groupTransferLeadershipSchedulingPeriod;
 
-  private static long nextCallId() {
+  public static long nextCallId() {
     return CALL_ID_COUNTER.getAndIncrement() & Long.MAX_VALUE;
   }
 
@@ -341,9 +341,14 @@ public final class OzoneManagerRatisServer {
 
   private OMResponse createOmResponse(OMRequest omRequest,
       RaftClientReply raftClientReply) throws ServiceException {
+    return createOmResponse(omRequest, raftClientReply, raftGroupId);
+  }
+
+  private OMResponse createOmResponse(OMRequest omRequest,
+      RaftClientReply raftClientReply, RaftGroupId groupId) throws ServiceException {
     return captureLatencyNs(
         perfMetrics.getCreateOmResponseLatencyNs(),
-        () -> createOmResponseImpl(omRequest, raftClientReply));
+        () -> createOmResponseImpl(omRequest, raftClientReply, groupId));
   }
 
   private RaftClientReply submitRequestToRatis(
@@ -371,11 +376,15 @@ public final class OzoneManagerRatisServer {
    */
   public OMResponse submitBucketWriteRequest(OMRequest omRequest, String volumeName, String bucketName)
       throws ServiceException {
-    RaftGroupId bucketRaftGroupId = ozoneManager.ratisGroupName(volumeName, bucketName);
+    final RaftGroupId bucketRaftGroupId = omRequest.hasRaftGroupId()
+        // use the group id from the request (client retry after OMNotLeaderException)
+        ? ozoneManager.raftGroupName(volumeName, bucketName, omRequest.getRaftGroupId())
+        // select the group id based on usage and assign it to the bucket
+        : ozoneManager.raftGroupName(volumeName, bucketName);
     if (ozoneManager.getPrepareState().requestAllowed(omRequest.getCmdType())) {
       RaftClientRequest raftClientRequest = createRaftRequest(omRequest, true, bucketRaftGroupId);
       RaftClientReply raftClientReply = submitRequestToRatis(raftClientRequest);
-      return createOmResponse(omRequest, raftClientReply);
+      return createOmResponse(omRequest, raftClientReply, bucketRaftGroupId);
     }
     return submitRequest(omRequest, true);
   }
@@ -389,7 +398,7 @@ public final class OzoneManagerRatisServer {
       throws ServiceException {
     LOG.trace("Submit write request to Ratis Server {} - {} - {} - {}",
         omRequest.getCmdType(), cliId, callId, bucketName);
-    return submitRequest(omRequest, cliId, callId, ozoneManager.ratisGroupName(volumeName, bucketName));
+    return submitRequest(omRequest, cliId, callId, ozoneManager.raftGroupName(volumeName, bucketName));
   }
 
   /**
@@ -418,7 +427,7 @@ public final class OzoneManagerRatisServer {
         .build();
     RaftClientReply raftClientReply =
         submitRequestToRatis(raftClientRequest);
-    return createOmResponse(omRequest, raftClientReply);
+    return createOmResponse(omRequest, raftClientReply, groupId);
   }
 
   private RaftClientReply submitRequestToRatisImpl(
@@ -696,7 +705,7 @@ public final class OzoneManagerRatisServer {
    * @throws ServiceException
    */
   private OMResponse createOmResponseImpl(OMRequest omRequest,
-      RaftClientReply reply) throws ServiceException {
+      RaftClientReply reply, RaftGroupId groupId) throws ServiceException {
     // NotLeader exception is thrown only when the raft server to which the
     // request is submitted is not the leader. This can happen first time
     // when client is submitting request to OM.
@@ -706,7 +715,7 @@ public final class OzoneManagerRatisServer {
       if (notLeaderException != null) {
         throw new ServiceException(
             OMNotLeaderException.convertToOMNotLeaderException(
-                  notLeaderException, getRaftPeerId()));
+                  notLeaderException, getRaftPeerId(), groupId));
       }
 
       LeaderNotReadyException leaderNotReadyException =
@@ -1194,12 +1203,37 @@ public final class OzoneManagerRatisServer {
     final RaftPeer leader = leaderId == null ? null : getServerDivision(groupId).getRaftConf().getPeer(leaderId);
     if (leader == null) {
       // current peer is not a leader, and the leader is not elected yet for the raft group
-      return new OMNotLeaderException(raftPeerId);
+      return new OMNotLeaderException(raftPeerId, groupId);
     }
     final String leaderAddress = getRaftLeaderAddress(leader);
     LOG.trace("Create not leader exception for group {}, leaderId {}, leader address {}",
         groupId, leaderId, leaderAddress);
-    return new OMNotLeaderException(raftPeerId, leader.getId(), leaderAddress);
+    return new OMNotLeaderException(raftPeerId, leader.getId(), leaderAddress, groupId);
+  }
+
+  /** SDP (multi-raft): removes a bucket raft group from this raft server (and deletes its storage). */
+  public void removeBucketRaftGroup(RaftGroupId groupId) throws IOException {
+    GroupManagementRequest request = GroupManagementRequest.newRemove(clientId, server.getId(), nextCallId(),
+        groupId, true, false);
+    LOG.trace("Remove bucket raft group: {}", groupId);
+    RaftClientReply reply;
+    try {
+      reply = server.groupManagement(request);
+    } catch (Exception ex) {
+      throw new IOException(ex.getMessage(), ex);
+    }
+    NotLeaderException notLeaderException = reply.getNotLeaderException();
+    if (notLeaderException != null) {
+      throw notLeaderException;
+    }
+    StateMachineException stateMachineException = reply.getStateMachineException();
+    if (stateMachineException != null) {
+      throw stateMachineException;
+    }
+  }
+
+  public ClientId getCurrentClientId() {
+    return clientId;
   }
 
   /** SDP (multi-raft): the raft server hosting the OM and bucket raft groups. */

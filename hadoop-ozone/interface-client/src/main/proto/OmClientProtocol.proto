@@ -160,6 +160,11 @@ enum Type {
 
     // SDP extensions (SDP numbers are kept in the 1000+ range)
     GetContentSummary = 1001;
+    // SDP multi-raft (SDPOZN-1708; 144-147 on SDP 1.4)
+    CreateBucketRaftGroups = 1002;
+    GetRaftGroupHealthState = 1003;
+    BucketRaftGroupsStateChanged = 1004;
+    MoveOmToSafeMode = 1005;
 }
 
 enum SafeMode {
@@ -315,6 +320,13 @@ message OMRequest {
 
     // SDP extensions (SDP numbers are kept in the 1000+ range)
     optional GetContentSummaryRequest getContentSummaryRequest = 1001;
+    // SDP multi-raft (SDPOZN-1708; 144-147 on SDP 1.4)
+    optional CreateBucketRaftGroupsRequest CreateBucketRaftGroupsRequest = 1002;
+    optional GetRaftGroupHealthStateRequest getRaftGroupHealthStateRequest = 1003;
+    // Used to notify OM about bucket raft groups state changes
+    optional BucketRaftGroupsStateChangedRequest bucketRaftGroupsStateChangedRequest = 1004;
+    // Raft group that the request should be executed in
+    optional hadoop.hdds.UUID raftGroupId = 1010;
 }
 
 message OMResponse {
@@ -453,6 +465,10 @@ message OMResponse {
 
     // SDP extensions (SDP numbers are kept in the 1000+ range)
     optional GetContentSummaryResponse getContentSummaryResponse = 1001;
+    // SDP multi-raft (SDPOZN-1708; 144-146 on SDP 1.4)
+    optional CreateBucketRaftGroupsResponse CreateBucketRaftGroupsResponse = 1002;
+    optional GetRaftGroupHealthStateResponse getRaftGroupHealthStateResponse = 1003;
+    optional BucketRaftGroupsStateChangedResponse bucketRaftGroupsStateChangedResponse = 1004;
 }
 
 enum Status {
@@ -2322,6 +2338,14 @@ message GetS3VolumeContextResponse {
   optional string userPrincipal = 2;
 }
 
+message CreateBucketRaftGroupsRequest {
+  repeated hadoop.hdds.UUID groupIds = 1;
+  optional bool purgeExistingRaftGroups = 2 [default = false];
+}
+
+message CreateBucketRaftGroupsResponse {
+}
+
 /**
   This will be used internally by OM to replicate S3 Secret across quorum of
   OM's.
@@ -2512,4 +2536,26 @@ message GetContentSummaryResponse {
   optional uint64 fileCount = 2;
   optional uint64 directoryCount = 3;
   optional uint64 spaceConsumed = 4;
+}
+
+// SDP multi-raft (SDPOZN-1708)
+message PeerHealthInfo {
+  required string peerId = 1;
+  required bool isHealthy = 2;
+  required int64 lastRpcResponseTimeMs = 3;
+}
+
+message GetRaftGroupHealthStateRequest {
+  required hadoop.hdds.UUID groupId = 1;
+}
+
+message GetRaftGroupHealthStateResponse {
+  repeated PeerHealthInfo peerHealthInfo = 1;
+}
+
+message BucketRaftGroupsStateChangedRequest {
+  required uint64 stateChangedIndex = 1;
+}
+
+message BucketRaftGroupsStateChangedResponse {
 }

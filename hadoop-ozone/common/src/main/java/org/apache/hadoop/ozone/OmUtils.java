@@ -262,6 +262,7 @@ public final class OmUtils {
     case GetQuotaRepairStatus:
     case StartQuotaRepair:
     case GetContentSummary:
+    case GetRaftGroupHealthState:
       return true;
     case CreateVolume:
     case SetVolumeProperty:
@@ -323,6 +324,10 @@ public final class OmUtils {
     case QuotaRepair:
     case PutObjectTagging:
     case DeleteObjectTagging:
+    // SDP (multi-raft)
+    case CreateBucketRaftGroups:
+    case BucketRaftGroupsStateChanged:
+    case MoveOmToSafeMode:
     case UnknownCommand:
       return false;
     case EchoRPC:
@@ -439,6 +444,11 @@ public final class OmUtils {
     case QuotaRepair:
     case PutObjectTagging:
     case DeleteObjectTagging:
+    // SDP (multi-raft)
+    case CreateBucketRaftGroups:
+    case BucketRaftGroupsStateChanged:
+    case MoveOmToSafeMode:
+    case GetRaftGroupHealthState: // answered by the leader of the raft group
     case ServiceList: // OM leader should have the most up-to-date OM service list info
     case RangerBGSync: // Ranger Background Sync task is only run on leader
     case SnapshotDiff:

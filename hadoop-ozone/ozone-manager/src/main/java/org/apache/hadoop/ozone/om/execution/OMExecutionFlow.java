@@ -21,6 +21,9 @@ import static org.apache.hadoop.ozone.util.MetricUtil.captureLatencyNs;
 
 import com.google.protobuf.ServiceException;
 import java.io.IOException;
+import java.util.UUID;
+import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.ozone.om.OMPerformanceMetrics;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.helpers.OMAuditLogger;
@@ -75,13 +78,20 @@ public class OMExecutionFlow {
     final String rawBucketName = OzoneMultiRaftUtils.getBucketName(request);
     final String bucketName = rawBucketName == null || rawBucketName.isEmpty() ? null : rawBucketName;
     final String volumeName = bucketName == null ? null : OzoneMultiRaftUtils.getVolumeName(request);
-    final RaftGroupId raftGroupId = bucketName != null
-        ? ozoneManager.ratisGroupName(volumeName, bucketName) : ratisServer.getRaftGroupId();
+    final RaftGroupId raftGroupId;
+    if (request.hasRaftGroupId()) {
+      // the client retries in the raft group reported by OMNotLeaderException
+      final HddsProtos.UUID uuid = request.getRaftGroupId();
+      raftGroupId = RaftGroupId.valueOf(new UUID(uuid.getMostSigBits(), uuid.getLeastSigBits()));
+    } else {
+      raftGroupId = bucketName != null
+          ? ozoneManager.raftGroupName(volumeName, bucketName) : ratisServer.getRaftGroupId();
+    }
     LOG.trace("Continue internal processing request {}, bucket {}, group {}",
         request.getCmdType(), bucketName, raftGroupId);
     if (checkLeader) {
-      if (bucketName != null) {
-        OzoneManagerRatisUtils.checkLeaderStatus(volumeName, bucketName, ozoneManager);
+      if (bucketName != null || request.hasRaftGroupId()) {
+        OzoneManagerRatisUtils.checkLeaderStatus(raftGroupId, ozoneManager);
       } else {
         OzoneManagerRatisUtils.checkLeaderStatus(ozoneManager);
       }
@@ -107,6 +117,16 @@ public class OMExecutionFlow {
       return OzoneManagerRatisUtils.createErrorResponse(request, ex);
     }
 
+    if (bucketName != null) {
+      try {
+        // bucket raft groups are not usable while the OM is in (multi-raft) safe mode
+        ozoneManager.getSafeModeManager().checkSafeMode();
+      } catch (OMInSafeModeException ex) {
+        LOG.error("OM is in safe mode, cannot process request: {}", request.getCmdType(), ex);
+        omClientRequest.handleRequestFailure(ozoneManager);
+        throw new ServiceException(ex);
+      }
+    }
     final OMResponse response = bucketName != null
         ? ratisServer.submitBucketWriteRequest(requestToSubmit, volumeName, bucketName)
         : ratisServer.submitRequest(requestToSubmit, true);

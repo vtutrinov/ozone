@@ -27,7 +27,9 @@ import java.nio.file.InvalidPathException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.utils.TransactionInfo;
 import org.apache.hadoop.ipc_.ProtobufRpcEngine;
 import org.apache.hadoop.ozone.OmUtils;
@@ -59,6 +61,7 @@ import org.apache.hadoop.ozone.security.acl.OzoneObjInfo;
 import org.apache.hadoop.ozone.security.acl.RequestContext;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.client.AuthenticationException;
+import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.util.function.UncheckedAutoCloseableSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,6 +88,10 @@ public abstract class OMClientRequest implements RequestAuditor {
   public OMAuditLogger.Builder getAuditBuilder() {
     return auditBuilder;
   }
+  // SDP (multi-raft): raft group given by the client (retry after OMNotLeaderException)
+
+  private RaftGroupId writeRaftGroup;
+
   /**
    * Stores the result of request execution in
    * OMClientRequest#validateAndUpdateCache.
@@ -98,6 +105,10 @@ public abstract class OMClientRequest implements RequestAuditor {
   public OMClientRequest(OMRequest omRequest) {
     this.omRequest = Objects.requireNonNull(omRequest);
     this.omLockDetails.clear();
+    if (omRequest.hasRaftGroupId()) {
+      HddsProtos.UUID uuid = omRequest.getRaftGroupId();
+      setWriteRaftGroup(RaftGroupId.valueOf(new UUID(uuid.getMostSigBits(), uuid.getLeastSigBits())));
+    }
   }
 
   /**
@@ -591,6 +602,14 @@ public abstract class OMClientRequest implements RequestAuditor {
 
   public void setWriteReqVolumeName(String volumeName) {
     this.writeVolumeName = volumeName;
+  }
+
+  public RaftGroupId getWriteRaftGroup() {
+    return writeRaftGroup;
+  }
+
+  public void setWriteRaftGroup(RaftGroupId writeRaftGroup) {
+    this.writeRaftGroup = writeRaftGroup;
   }
 
   public void setWriteReqBucketName(String bucketName) {

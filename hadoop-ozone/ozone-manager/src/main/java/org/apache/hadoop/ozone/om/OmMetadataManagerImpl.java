@@ -184,6 +184,8 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   private Table<String, SnapshotInfo> snapshotInfoTable;
   private Table<String, String> snapshotRenamedTable;
   private Table<String, CompactionLogEntry> compactionLogTable;
+  // SDP (multi-raft)
+  private Table<String, Long> multiRaftInfoTable;
 
   private OzoneManager ozoneManager;
 
@@ -532,6 +534,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
     // TODO: [SNAPSHOT] Initialize table lock for snapshotRenamedTable.
 
     compactionLogTable = initializer.get(OMDBDefinition.COMPACTION_LOG_TABLE_DEF);
+    multiRaftInfoTable = initializer.get(OMDBDefinition.MULTI_RAFT_INFO_TABLE_DEF);
   }
 
   /**
@@ -1727,6 +1730,11 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   @Override
   public Table<String, String> getSnapshotRenamedTable() {
     return snapshotRenamedTable;
+  }
+
+  @Override
+  public Table<String, Long> getMultiRaftInfoTable() {
+    return multiRaftInfoTable;
   }
 
   @Override

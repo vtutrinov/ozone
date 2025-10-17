@@ -51,6 +51,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.SynchronousQueue;
@@ -171,6 +172,8 @@ import org.apache.hadoop.ozone.om.protocolPB.OmTransport;
 import org.apache.hadoop.ozone.om.protocolPB.OmTransportFactory;
 import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerClientProtocol;
 import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerProtocolClientSideTranslatorPB;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRoleInfo;
 import org.apache.hadoop.ozone.security.GDPRSymmetricKey;
 import org.apache.hadoop.ozone.security.OzoneTokenIdentifier;
@@ -2940,6 +2943,22 @@ public class RpcClient implements ClientProtocol {
         .setKeyName(keyName)
         .build();
     ozoneManagerClient.deleteObjectTagging(keyArgs);
+  }
+
+  @Override
+  public void createRaftGroups(List<UUID> raftGroupIds, boolean purgeExistingRaftGroups) throws IOException {
+    ozoneManagerClient.createRaftGroups(raftGroupIds, purgeExistingRaftGroups);
+  }
+
+  @Override
+  public GetRaftGroupHealthStateResponse getRaftGroupHealthState(GetRaftGroupHealthStateRequest request)
+      throws IOException {
+    return ozoneManagerClient.getRaftGroupHealthState(request);
+  }
+
+  @Override
+  public void moveOmToSafeMode() throws IOException {
+    ozoneManagerClient.moveOmToSafeMode();
   }
 
   private static ExecutorService createThreadPoolExecutor(

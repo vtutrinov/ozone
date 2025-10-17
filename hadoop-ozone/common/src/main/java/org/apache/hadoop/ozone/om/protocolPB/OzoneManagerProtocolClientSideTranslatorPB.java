@@ -119,6 +119,8 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CancelP
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CancelSnapshotDiffRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CheckVolumeAccessRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CommitKeyRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateBucketRaftGroupsRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateBucketRaftGroupsResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateBucketRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateDirectoryRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateFileRequest;
@@ -154,6 +156,7 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetKeyI
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetKeyInfoResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetObjectTaggingRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetObjectTaggingResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetS3SecretRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetS3SecretResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetS3VolumeContextRequest;
@@ -2825,6 +2828,34 @@ public final class OzoneManagerProtocolClientSideTranslatorPB
 
     OMResponse omResponse = submitRequest(omRequest);
     handleError(omResponse);
+  }
+
+  @Override
+  public CreateBucketRaftGroupsResponse createRaftGroups(List<UUID> groupIds, boolean purgeExistingRaftGroups)
+      throws IOException {
+
+    CreateBucketRaftGroupsRequest createGroupsRequest = CreateBucketRaftGroupsRequest.newBuilder()
+            .addAllGroupIds(groupIds.stream().map(ProtobufUtils::toProtobuf).collect(Collectors.toList()))
+            .setPurgeExistingRaftGroups(purgeExistingRaftGroups)
+            .build();
+    OMRequest omRequest = createOMRequest(Type.CreateBucketRaftGroups)
+            .setCreateBucketRaftGroupsRequest(createGroupsRequest).build();
+    return handleError(submitRequest(omRequest)).getCreateBucketRaftGroupsResponse();
+  }
+
+  @Override
+  public GetRaftGroupHealthStateResponse getRaftGroupHealthState(
+      OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest request) throws IOException {
+    OMRequest omRequest = createOMRequest(Type.GetRaftGroupHealthState)
+        .setGetRaftGroupHealthStateRequest(request)
+        .build();
+    return handleError(submitRequest(omRequest)).getGetRaftGroupHealthStateResponse();
+  }
+
+  @Override
+  public void moveOmToSafeMode() throws IOException {
+    OMRequest omRequest = createOMRequest(Type.MoveOmToSafeMode).build();
+    handleError(submitRequest(omRequest));
   }
 
   private SafeMode toProtoBuf(SafeModeAction action) {

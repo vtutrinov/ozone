@@ -18,6 +18,8 @@
 package org.apache.hadoop.ozone.om.ha;
 
 import com.google.common.annotations.VisibleForTesting;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsInfo;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
@@ -27,6 +29,7 @@ import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
+import org.apache.ratis.protocol.RaftGroupId;
 
 /**
  * Class to maintain metrics and info related to OM HA.
@@ -39,7 +42,10 @@ public final class OMHAMetrics implements MetricsSource {
   private MetricsRegistry metricsRegistry;
 
   private String currNodeId;
-  private String leaderId;
+  private volatile String leaderId;
+  // SDP (multi-raft): leaders of the OM raft group and of the bucket raft groups
+  private final Map<RaftGroupId, String> raftGroupsLeaders = new ConcurrentHashMap<>();
+  private volatile RaftGroupId mainRaftGroupId;
 
   /**
    * Private nested class to hold the values
@@ -53,6 +59,15 @@ public final class OMHAMetrics implements MetricsSource {
 
     private static final MetricsInfo NODE_ID =
         Interns.info("NodeId", "OM node Id");
+
+    private static final MetricsInfo RAFT_GROUP_ID =
+        Interns.info("RaftGroupId", "Raft Group Id");
+
+    private static final MetricsInfo BUCKET_RAFT_GROUP_LEADER_STATE =
+        Interns.info("OzoneManagerBucketRaftGroupLeaderState", "OM Bucket Raft Group Leader State");
+
+    private static final MetricsInfo MAIN_RAFT_GROUP_LEADER_STATE =
+        Interns.info("OzoneManagerRaftGroupLeaderState", "OM Main Raft Group Leader State");
 
     private int ozoneManagerHALeaderState;
     private String nodeId;
@@ -79,9 +94,13 @@ public final class OMHAMetrics implements MetricsSource {
     }
   }
 
-  private OMHAMetrics(String currNodeId, String leaderId) {
+  private OMHAMetrics(String currNodeId, String leaderId, RaftGroupId raftGroupId) {
     this.currNodeId = currNodeId;
     this.leaderId = leaderId;
+    if (raftGroupId != null) {
+      raftGroupsLeaders.put(raftGroupId, leaderId);
+    }
+    this.mainRaftGroupId = raftGroupId;
     this.metricsRegistry = new MetricsRegistry(SOURCE_NAME);
   }
 
@@ -89,9 +108,13 @@ public final class OMHAMetrics implements MetricsSource {
    * Create and return OMHAMetrics instance.
    * @return OMHAMetrics
    */
+  public static OMHAMetrics create(String nodeId, String leaderId) {
+    return create(nodeId, leaderId, null);
+  }
+
   public static OMHAMetrics create(
-      String nodeId, String leaderId) {
-    OMHAMetrics metrics = new OMHAMetrics(nodeId, leaderId);
+      String nodeId, String leaderId, RaftGroupId raftGroupId) {
+    OMHAMetrics metrics = new OMHAMetrics(nodeId, leaderId, raftGroupId);
     return OzoneMetricsSystem.instance()
         .register(SOURCE_NAME, "Metrics for OM HA", metrics);
   }
@@ -118,6 +141,44 @@ public final class OMHAMetrics implements MetricsSource {
         .addGauge(OMHAMetricsInfo.OZONE_MANAGER_HA_LEADER_STATE, state);
 
     recordBuilder.endRecord();
+
+    // SDP (multi-raft): leader state of this OM per raft group
+    for (Map.Entry<RaftGroupId, String> entry : raftGroupsLeaders.entrySet()) {
+      int raftGroupLeaderState = currNodeId.equals(entry.getValue()) ? 1 : 0;
+      MetricsRecordBuilder groupRecordBuilder = collector.addRecord(SOURCE_NAME)
+          .tag(OMHAMetricsInfo.NODE_ID, currNodeId)
+          .tag(OMHAMetricsInfo.RAFT_GROUP_ID, entry.getKey().toString());
+      if (entry.getKey().equals(mainRaftGroupId)) {
+        groupRecordBuilder.addGauge(OMHAMetricsInfo.MAIN_RAFT_GROUP_LEADER_STATE, raftGroupLeaderState);
+      } else {
+        groupRecordBuilder.addGauge(OMHAMetricsInfo.BUCKET_RAFT_GROUP_LEADER_STATE, raftGroupLeaderState);
+      }
+      groupRecordBuilder.endRecord();
+    }
+  }
+
+  public void resetMainGroup() {
+    this.leaderId = null;
+    this.mainRaftGroupId = null;
+  }
+
+  /** SDP (multi-raft): records the leader of a raft group; the main group also defines the OM leader. */
+  public OMHAMetrics defineRaftGroupLeader(RaftGroupId raftGroupId, String groupLeaderId, boolean isMainRaftGroup) {
+    raftGroupsLeaders.put(raftGroupId, groupLeaderId);
+    if (isMainRaftGroup) {
+      this.leaderId = groupLeaderId;
+      this.mainRaftGroupId = raftGroupId;
+    }
+    return this;
+  }
+
+  public void deleteRaftGroup(RaftGroupId raftGroupId) {
+    raftGroupsLeaders.remove(raftGroupId);
+  }
+
+  @VisibleForTesting
+  public Map<RaftGroupId, String> getOmHaInfoRaftGroupsLeaders() {
+    return raftGroupsLeaders;
   }
 
   @VisibleForTesting

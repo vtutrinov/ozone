@@ -24,6 +24,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.ServiceException;
 import java.io.IOException;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.io.Text;
@@ -31,10 +33,12 @@ import org.apache.hadoop.ipc_.ProtobufHelper;
 import org.apache.hadoop.ipc_.ProtobufRpcEngine;
 import org.apache.hadoop.ipc_.RPC;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
+import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
 import org.apache.hadoop.ozone.om.ha.HadoopRpcOMFailoverProxyProvider;
 import org.apache.hadoop.ozone.om.ha.HadoopRpcOMFollowerReadFailoverProxyProvider;
 import org.apache.hadoop.ozone.om.helpers.ReadConsistency;
+import org.apache.hadoop.ozone.om.request.invocation.OzoneRetryInvocationHandler;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMResponse;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -53,6 +57,8 @@ public class Hadoop3OmTransport implements OmTransport {
 
   private final HadoopRpcOMFailoverProxyProvider<OzoneManagerProtocolPB> omFailoverProxyProvider;
   private final HadoopRpcOMFollowerReadFailoverProxyProvider followerReadFailoverProxyProvider;
+  // SDP (multi-raft): retries a request in the raft group reported by OMNotLeaderException
+  private final boolean multiRaftEnabled;
 
   public Hadoop3OmTransport(ConfigurationSource conf,
       UserGroupInformation ugi, String omServiceId) throws IOException {
@@ -91,12 +97,23 @@ public class Hadoop3OmTransport implements OmTransport {
             defaultFollowerReadConsistency,
             defaultLeaderReadConsistency,
             followerReadEnabled);
-    this.rpcProxy = OzoneManagerProtocolPB.newProxy(followerReadFailoverProxyProvider, maxFailovers);
+    this.multiRaftEnabled = conf.getBoolean(OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
+        OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT);
+    if (multiRaftEnabled) {
+      // SDP (multi-raft): follower read is not supported together with bucket raft groups
+      this.rpcProxy = createRetryProxy(new OzoneRetryInvocationHandler<>(
+          omFailoverProxyProvider, omFailoverProxyProvider.getRetryPolicy(maxFailovers)));
+    } else {
+      this.rpcProxy = OzoneManagerProtocolPB.newProxy(followerReadFailoverProxyProvider, maxFailovers);
+    }
   }
 
   @Override
   public OMResponse submitRequest(OMRequest payload) throws IOException {
     try {
+      if (multiRaftEnabled) {
+        omFailoverProxyProvider.setOmRequest(payload);
+      }
       return rpcProxy.submitRequest(NULL_RPC_CONTROLLER, payload);
     } catch (ServiceException e) {
       OMNotLeaderException notLeaderException =
@@ -131,5 +148,15 @@ public class Hadoop3OmTransport implements OmTransport {
     } else {
       omFailoverProxyProvider.close();
     }
+  }
+
+
+  /**
+   * SDP (multi-raft): creates a retry proxy with the given invocation handler.
+   */
+  private static OzoneManagerProtocolPB createRetryProxy(InvocationHandler invocationHandler) {
+    return (OzoneManagerProtocolPB) Proxy.newProxyInstance(Hadoop3OmTransport.class.getClassLoader(),
+        new Class<?>[] {OzoneManagerProtocolPB.class},
+        invocationHandler);
   }
 }

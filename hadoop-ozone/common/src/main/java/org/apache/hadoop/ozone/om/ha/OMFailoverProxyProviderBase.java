@@ -25,9 +25,11 @@ import java.net.InetSocketAddress;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdds.HddsUtils;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.utils.LegacyHadoopConfigurationSource;
 import org.apache.hadoop.io.retry.FailoverProxyProvider;
 import org.apache.hadoop.io.retry.RetryPolicy;
@@ -42,6 +44,7 @@ import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.exceptions.OMLeaderNotReadyException;
 import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.SecretManager;
@@ -85,6 +88,7 @@ public abstract class OMFailoverProxyProviderBase<T> implements
   private final long waitBetweenRetries;
   private final Set<String> accessControlExceptionOMs = new HashSet<>();
   private boolean performFailoverDone;
+  private final ThreadLocal<OMRequest> omRequest = new ThreadLocal<>();
 
   private final UserGroupInformation ugi;
 
@@ -104,6 +108,18 @@ public abstract class OMFailoverProxyProviderBase<T> implements
     this.omProxies = new OMProxyInfo.OrderedMap<>(initOmProxiesFromConfigs(conf, omServiceId));
     nextProxyIndex = 0;
     currentProxyIndex = 0;
+  }
+
+  /**
+   * SDP (multi-raft): the request being submitted by this thread; on OMNotLeaderException for a raft group
+   * the request is retried with that raft group (see OzoneRetryInvocationHandler).
+   */
+  public void setOmRequest(OMRequest request) {
+    omRequest.set(request);
+  }
+
+  public OMRequest getOmRequest() {
+    return omRequest.get();
   }
 
   /**
@@ -220,6 +236,16 @@ public abstract class OMFailoverProxyProviderBase<T> implements
                 suggestedNodeId != null &&
                 omProxies.contains(suggestedNodeId, suggestedLeaderAddress)) {
               setNextOmProxy(suggestedNodeId);
+              final OMRequest request = omRequest.get();
+              if (request != null && notLeaderException.getRaftGroupId() != null) {
+                // SDP (multi-raft): retry in the raft group the OM was not the leader of
+                UUID uuid = notLeaderException.getRaftGroupId().getUuid();
+                omRequest.set(request.toBuilder().setRaftGroupId(
+                    HddsProtos.UUID.newBuilder()
+                        .setMostSigBits(uuid.getMostSignificantBits())
+                        .setLeastSigBits(uuid.getLeastSignificantBits())
+                        .build()).build());
+              }
               return getRetryAction(RetryDecision.FAILOVER_AND_RETRY,
                   failovers);
             }

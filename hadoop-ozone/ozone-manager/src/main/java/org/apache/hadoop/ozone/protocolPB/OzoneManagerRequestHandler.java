@@ -117,6 +117,8 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetKeyI
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetKeyInfoResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetObjectTaggingRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetObjectTaggingResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetS3VolumeContextResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.InfoBucketRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.InfoBucketResponse;
@@ -405,6 +407,11 @@ public class OzoneManagerRequestHandler implements RequestHandler {
         GetContentSummaryResponse contentSummary = getContentSummary(request.getGetContentSummaryRequest());
         responseBuilder.setGetContentSummaryResponse(contentSummary);
         break;
+      case GetRaftGroupHealthState:
+        GetRaftGroupHealthStateResponse getRaftGroupHealthStateResponse = getRaftGroupHealthState(
+            request.getGetRaftGroupHealthStateRequest());
+        responseBuilder.setGetRaftGroupHealthStateResponse(getRaftGroupHealthStateResponse);
+        break;
       default:
         responseBuilder.setSuccess(false);
         responseBuilder.setMessage("Unrecognized Command Type: " + cmdType);
@@ -419,6 +426,11 @@ public class OzoneManagerRequestHandler implements RequestHandler {
       }
     }
     return responseBuilder.build();
+  }
+
+  private GetRaftGroupHealthStateResponse getRaftGroupHealthState(GetRaftGroupHealthStateRequest getGroupHealthRequest)
+      throws IOException {
+    return impl.getRaftGroupHealthState(getGroupHealthRequest);
   }
 
   @Override

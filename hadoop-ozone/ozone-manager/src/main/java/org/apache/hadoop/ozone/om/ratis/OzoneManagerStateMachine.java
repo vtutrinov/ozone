@@ -49,6 +49,7 @@ import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.execution.flowcontrol.ExecutionContext;
 import org.apache.hadoop.ozone.om.helpers.OMRatisHelper;
 import org.apache.hadoop.ozone.om.lock.OMLockDetails;
+import org.apache.hadoop.ozone.om.multiraft.SafeModeManager;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.response.DummyOMClientResponse;
 import org.apache.hadoop.ozone.om.response.OMClientResponse;
@@ -212,6 +213,10 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   @Override
   public void notifyNotLeader(Collection<TransactionContext> pendingEntries) {
     LOG.info("current leader OM steps down.");
+    final SafeModeManager safeModeManager = ozoneManager.getSafeModeManager();
+    if (safeModeManager != null) {
+      safeModeManager.onLeadershipLost();
+    }
     OMMetrics metrics = ozoneManager.getMetrics();
     if (metrics != null) {
       metrics.addRatisEvent("current leader OM steps down.");
@@ -233,7 +238,16 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     // Update the previous leader for next time
     previousLeaderId = newLeaderId;
     // Initialize OMHAMetrics
-    ozoneManager.omHAMetricsInit(newLeaderId.toString());
+    if (ozoneManager.getOmhaMetrics() == null) {
+      ozoneManager.omHAMetricsInit(groupMemberId.getGroupId(), newLeaderId.toString());
+    } else {
+      // SDP (multi-raft): OMHAMetrics track the leaders of all raft groups
+      ozoneManager.getOmhaMetrics().defineRaftGroupLeader(groupMemberId.getGroupId(), newLeaderId.toString(), true);
+    }
+    final SafeModeManager safeModeManager = ozoneManager.getSafeModeManager();
+    if (safeModeManager != null) {
+      safeModeManager.onLeaderElected();
+    }
     // Notify OM service of leader change
     ozoneManager.getOMServiceManager().notifyStatusChanged();
 
@@ -686,12 +700,6 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
           request, context, ozoneManagerDoubleBuffer);
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
       OMResponse omResponse = omClientResponse.getOMResponse();
-      if (request.hasCreateBucketRequest() && ozoneManager.isMultiRaftEnabled()) {
-        String volumeName = request.getCreateBucketRequest().getBucketInfo().getVolumeName();
-        String bucketName = request.getCreateBucketRequest().getBucketInfo().getBucketName();
-        LOG.trace("Creating raft group while runCommand {}", bucketName);
-        ozoneManager.createRaftGroupForBucket(volumeName, bucketName);
-      }
       if (omLockDetails != null) {
         return omResponse.toBuilder()
             .setOmLockDetails(omLockDetails.toProtobufBuilder()).build();

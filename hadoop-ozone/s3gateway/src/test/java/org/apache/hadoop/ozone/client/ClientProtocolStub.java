@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.apache.hadoop.crypto.key.KeyProvider;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationFactor;
@@ -869,6 +870,22 @@ public class ClientProtocolStub implements ClientProtocol {
   @Override
   public void deleteObjectTagging(String volumeName, String bucketName, String keyName) throws IOException {
     getBucket(volumeName, bucketName).deleteObjectTagging(keyName);
+  }
+
+  @Override
+  public void createRaftGroups(List<UUID> raftGroupIds, boolean purgeExistingRaftGroups) throws IOException {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @Override
+  public OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse getRaftGroupHealthState(
+      OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest request) throws IOException {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @Override
+  public void moveOmToSafeMode() throws IOException {
+    throw new UnsupportedOperationException("Not supported yet.");
   }
 
 }

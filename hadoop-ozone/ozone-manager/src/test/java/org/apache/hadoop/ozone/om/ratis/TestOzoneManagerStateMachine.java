@@ -737,7 +737,7 @@ public class TestOzoneManagerStateMachine {
 
     // Same node becomes leader → should warm up EDEK cache
     verify(om).initializeEdekCache(any());
-    verify(om).omHAMetricsInit("om1");
+    verify(om).omHAMetricsInit(any(), eq("om1"));
   }
 
   @Test
@@ -754,7 +754,7 @@ public class TestOzoneManagerStateMachine {
 
     // Different node is leader → should NOT warm up cache
     verify(om, never()).initializeEdekCache(any());
-    verify(om).omHAMetricsInit("om2");
+    verify(om).omHAMetricsInit(any(), eq("om2"));
   }
 
   @Test

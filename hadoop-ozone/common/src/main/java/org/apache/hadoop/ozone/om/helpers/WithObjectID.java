@@ -28,6 +28,12 @@ import org.apache.hadoop.ozone.OzoneConsts;
 @Immutable
 public abstract class WithObjectID extends WithMetadata {
 
+  /**
+   * SDP (multi-raft): with bucket raft groups, objects are updated by transactions of different raft groups,
+   * whose log indexes (used as updateIDs) are not comparable; the monotonic updateID check is then not enforced.
+   */
+  private static volatile boolean updateIdCheckRelaxed = false;
+
   private final long objectID;
   private final long updateID;
 
@@ -63,6 +69,15 @@ public abstract class WithObjectID extends WithMetadata {
    */
   public final long getUpdateID() {
     return updateID;
+  }
+
+  /** SDP (multi-raft): see {@link #updateIdCheckRelaxed}; set by OzoneManager on startup. */
+  public static void setUpdateIdCheckRelaxed(boolean relaxed) {
+    updateIdCheckRelaxed = relaxed;
+  }
+
+  public static boolean isUpdateIdCheckRelaxed() {
+    return updateIdCheckRelaxed;
   }
 
   /** Hook method, customized in subclasses. */
@@ -124,7 +139,7 @@ public abstract class WithObjectID extends WithMetadata {
             "which is not zero. Current Object ID is " + initialObjectID);
       }
 
-      if (updateID < initialUpdateID) {
+      if (updateID < initialUpdateID && !updateIdCheckRelaxed) {
         throw new IllegalArgumentException(String.format(
             "Trying to set updateID to %d which is not greater than the " +
                 "current value of %d for %s", updateID, initialUpdateID,

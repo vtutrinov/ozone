@@ -106,7 +106,12 @@ public abstract class BackgroundService {
   public void runPeriodicalTaskNow() throws Exception {
     BackgroundTaskQueue tasks = getTasks();
     while (!tasks.isEmpty()) {
-      tasks.poll().call();
+      try {
+        tasks.poll().call();
+      } catch (Exception e) {
+        // SDP (SDPOZN-1708): run the remaining tasks
+        LOG.warn("Exception while polling tasks", e);
+      }
     }
     execTaskCompletion();
   }

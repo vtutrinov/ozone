@@ -26,8 +26,10 @@ import com.google.protobuf.ServiceException;
 import java.io.IOException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.util.UUID;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos.NodeType;
 import org.apache.hadoop.hdds.security.SecurityConfig;
 import org.apache.hadoop.hdds.security.x509.certificate.client.CertificateClient;
@@ -51,6 +53,9 @@ import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketAddAclRequest;
 import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketRemoveAclRequest;
 import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketSetAclRequest;
 import org.apache.hadoop.ozone.om.request.file.OMRecoverLeaseRequest;
+import org.apache.hadoop.ozone.om.request.group.OMBucketRaftGroupsStateUpdateRequest;
+import org.apache.hadoop.ozone.om.request.group.OMCreateRaftGroupsRequest;
+import org.apache.hadoop.ozone.om.request.group.OMMoveToSafeModeRequest;
 import org.apache.hadoop.ozone.om.request.key.OMDirectoriesPurgeRequestWithFSO;
 import org.apache.hadoop.ozone.om.request.key.OMKeyPurgeRequest;
 import org.apache.hadoop.ozone.om.request.key.OMKeyRequest;
@@ -333,6 +338,13 @@ public final class OzoneManagerRatisUtils {
       return new OMEchoRPCWriteRequest(omRequest);
     case AbortExpiredMultiPartUploads:
       return new S3ExpiredMultipartUploadsAbortRequest(omRequest);
+    // SDP (multi-raft)
+    case CreateBucketRaftGroups:
+      return new OMCreateRaftGroupsRequest(omRequest);
+    case BucketRaftGroupsStateChanged:
+      return new OMBucketRaftGroupsStateUpdateRequest(omRequest);
+    case MoveOmToSafeMode:
+      return new OMMoveToSafeModeRequest(omRequest);
     case QuotaRepair:
       return new OMQuotaRepairRequest(omRequest);
     case PutObjectTagging:
@@ -355,6 +367,10 @@ public final class OzoneManagerRatisUtils {
     if (!bucketName.isEmpty()) {
       request.setWriteReqBucketName(bucketName);
       request.setWriteReqVolumeName(volumeName);
+    }
+    if (omRequest.hasRaftGroupId()) {
+      HddsProtos.UUID uuid = omRequest.getRaftGroupId();
+      request.setWriteRaftGroup(RaftGroupId.valueOf(new UUID(uuid.getMostSigBits(), uuid.getLeastSigBits())));
     }
     return request;
   }
@@ -507,13 +523,23 @@ public final class OzoneManagerRatisUtils {
 
   public static void checkLeaderStatus(String volumeName, String bucketName, OzoneManager ozoneManager)
       throws ServiceException {
-    RaftGroupId ratisGroupId = ozoneManager.ratisGroupName(volumeName, bucketName);
+    RaftGroupId ratisGroupId = ozoneManager.raftGroupName(volumeName, bucketName);
 
     LOG.trace("Check leader status for {}", ratisGroupId);
     try {
       ozoneManager.checkLeaderStatus(ratisGroupId);
     } catch (OMNotLeaderException | OMLeaderNotReadyException e) {
-      LOG.error("{} For group {}", e.getMessage(), ratisGroupId);
+      LOG.error("{} For group {}, volume={}, bucket={}", e.getMessage(), ratisGroupId, volumeName, bucketName);
+      throw new ServiceException(e);
+    }
+  }
+
+  /** SDP (multi-raft): checks the leader status of this OM in the given raft group. */
+  public static void checkLeaderStatus(RaftGroupId raftGroupId, OzoneManager ozoneManager) throws ServiceException {
+    try {
+      ozoneManager.checkLeaderStatus(raftGroupId);
+    } catch (OMNotLeaderException | OMLeaderNotReadyException e) {
+      LOG.error("{} For group {}", e.getMessage(), raftGroupId);
       throw new ServiceException(e);
     }
   }
