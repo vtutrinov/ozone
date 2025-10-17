@@ -176,11 +176,12 @@ public class OMFileCreateRequestWithFSO extends OMFileCreateRequest {
               ozoneManager);
 
       OmKeyInfo omFileInfo = prepareFileInfo(omMetadataManager, keyArgs,
-              dbFileInfo, keyArgs.getDataSize(), locations,
-              getFileEncryptionInfo(keyArgs), ozoneManager.getPrefixManager(),
-              bucketInfo, pathInfoFSO, trxnLogIndex,
-              pathInfoFSO.getLeafNodeObjectId(),
-              ozoneManager.isRatisEnabled(), repConfig);
+          dbFileInfo, keyArgs.getDataSize(), locations,
+          getFileEncryptionInfo(keyArgs), ozoneManager.getPrefixManager(),
+          bucketInfo, pathInfoFSO, trxnLogIndex,
+          pathInfoFSO.getLeafNodeObjectId(),
+          ozoneManager.isRatisEnabled(), repConfig,
+          ozoneManager.isMultiRaftEnabled(), ozoneManager.getCurrentMultiRaftTerm());
 
       long openVersion = omFileInfo.getLatestVersionLocations().getVersion();
       long clientID = createFileRequest.getClientID();

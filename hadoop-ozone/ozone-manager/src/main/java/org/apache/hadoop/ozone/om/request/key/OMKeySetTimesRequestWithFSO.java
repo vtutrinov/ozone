@@ -79,7 +79,11 @@ public class OMKeySetTimesRequestWithFSO extends OMKeySetTimesRequest {
     Result result = null;
     try {
       volume = getVolumeName();
-      bucket = getWriteReqBucketName();
+      if (getWriteReqBucketName() != null) {
+        bucket = getWriteReqBucketName();
+      } else {
+        bucket = getBucketName();
+      }
       key = getKeyName();
 
       // check Acl
@@ -107,7 +111,12 @@ public class OMKeySetTimesRequestWithFSO extends OMKeySetTimesRequest {
       boolean isDirectory = keyStatus.isDirectory();
       operationResult = true;
       apply(omKeyInfo);
-      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled());
+      omKeyInfo.setUpdateID(
+              trxnLogIndex,
+              ozoneManager.isRatisEnabled(),
+              ozoneManager.isMultiRaftEnabled(),
+              ozoneManager.getCurrentMultiRaftTerm()
+      );
 
       // update cache.
       if (isDirectory) {

@@ -187,6 +187,11 @@ public final class TransactionInfo {
     return metadataManager.getTransactionInfoTable().get(TRANSACTION_INFO_KEY + raftGroupId);
   }
 
+  public static void deleteTransactionInfo(
+          DBStoreHAManager metadataManager, String raftGroupId) throws IOException {
+    metadataManager.getTransactionInfoTable().delete(TRANSACTION_INFO_KEY + raftGroupId);
+  }
+
   public SnapshotInfo toSnapshotInfo() {
     return new RatisSnapshotInfo(term, transactionIndex);
   }

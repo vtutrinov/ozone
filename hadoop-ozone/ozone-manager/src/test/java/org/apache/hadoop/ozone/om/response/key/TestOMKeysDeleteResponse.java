@@ -103,7 +103,7 @@ public class TestOMKeysDeleteResponse extends TestOMKeyResponse {
   protected OMClientResponse getOmKeysDeleteResponse(OMResponse omResponse,
       OmBucketInfo omBucketInfo) {
     return new OMKeysDeleteResponse(
-        omResponse, omKeyInfoList, true, omBucketInfo);
+        omResponse, omKeyInfoList, true, omBucketInfo, ozoneManager.isMultiRaftEnabled(), 0);
   }
 
   @Test

@@ -79,7 +79,7 @@ public class TestOMDirectoriesPurgeRequestAndResponse extends TestOMKeyRequest {
 
     for (String ozoneKey : ozoneKeyNames) {
       OMRequestTestUtils.deleteKey(
-          ozoneKey, omMetadataManager, trxnIndex++);
+          ozoneKey, omMetadataManager, trxnIndex++, ozoneManager.isMultiRaftEnabled());
     }
 
     return deletedKeyNames;

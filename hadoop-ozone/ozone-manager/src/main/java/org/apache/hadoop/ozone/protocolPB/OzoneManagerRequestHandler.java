@@ -80,6 +80,7 @@ import org.apache.hadoop.ozone.om.upgrade.DisallowedUntilLayoutVersion;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CancelSnapshotDiffRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CancelSnapshotDiffResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListSnapshotDiffJobRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListSnapshotDiffJobResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CheckVolumeAccessRequest;
@@ -138,6 +139,7 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.TenantG
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.TenantListUserRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.TenantListUserResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 import org.apache.hadoop.ozone.security.acl.OzoneObjInfo;
 
 import com.google.common.collect.Lists;
@@ -380,6 +382,10 @@ public class OzoneManagerRequestHandler implements RequestHandler {
         GetContentSummaryResponse contentSummary = getContentSummary(request.getGetContentSummaryRequest());
         responseBuilder.setGetContentSummaryResponse(contentSummary);
         break;
+      case GetRaftGroupHealthState:
+        GetRaftGroupHealthStateResponse getRaftGroupHealthStateResponse = getRaftGroupHealthState(
+            request.getGetRaftGroupHealthStateRequest());
+        responseBuilder.setGetRaftGroupHealthStateResponse(getRaftGroupHealthStateResponse);
       default:
         responseBuilder.setSuccess(false);
         responseBuilder.setMessage("Unrecognized Command Type: " + cmdType);
@@ -394,6 +400,11 @@ public class OzoneManagerRequestHandler implements RequestHandler {
       }
     }
     return responseBuilder.build();
+  }
+
+  private GetRaftGroupHealthStateResponse getRaftGroupHealthState(GetRaftGroupHealthStateRequest getGroupHealthRequest)
+      throws IOException {
+    return impl.getRaftGroupHealthState(getGroupHealthRequest);
   }
 
   @Override

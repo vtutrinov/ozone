@@ -89,6 +89,8 @@ public class BucketStateMachine extends BaseStateMachine {
   public static final Logger LOG =
           LoggerFactory.getLogger(BucketStateMachine.class);
 
+  public static final Logger LOG_MULTI_RAFT = LoggerFactory.getLogger("multiraft");
+
   public BucketStateMachine(RaftGroupId raftGroupId, OzoneManager om) throws IOException {
     this.ozoneManager = om;
     this.ozoneManagerDoubleBuffer =  buildDoubleBufferForRatis();
@@ -425,9 +427,17 @@ public class BucketStateMachine extends BaseStateMachine {
   @Override
   public void notifyLeaderChanged(RaftGroupMemberId groupMemberId,
                                   RaftPeerId newLeaderId) {
-    LOG.trace("Change leader in group {}. New leader {}", groupMemberId, newLeaderId);
+    LOG_MULTI_RAFT.info("Change leader in group {}. New leader {}", groupMemberId.getGroupId(), newLeaderId);
     // Initialize OMHAMetrics
-    ozoneManager.omHAMetricsInit(newLeaderId.toString());
+    if (ozoneManager.getOmhaMetrics() == null) {
+      LOG_MULTI_RAFT.info("OM ha metrics are not ready, put tmp leader {} {}", groupMemberId.getGroupId(),
+          newLeaderId.toString());
+      ozoneManager.getTmpLeadersMap().put(groupMemberId.getGroupId(), newLeaderId.toString());
+    } else {
+      LOG_MULTI_RAFT.info("OM ha metrics are ready, put leader to metrics {} {}", groupMemberId.getGroupId(),
+          newLeaderId.toString());
+      ozoneManager.getOmhaMetrics().defineRaftGroupLeader(groupMemberId.getGroupId(), newLeaderId.toString(), false);
+    }
   }
 
   /**
@@ -532,15 +542,27 @@ public class BucketStateMachine extends BaseStateMachine {
   }
 
   @Override
-  public void close() throws IOException {
-    // OM should be shutdown as the StateMachine has shutdown.
-    LOG.info("StateMachine has shutdown. Shutdown OzoneManager if not " +
-            "already shutdown.");
-    if (!ozoneManager.isStopped()) {
-      ozoneManager.shutDown("OM state machine is shutdown by Ratis server");
-    } else {
-      stop();
+  public void notifyGroupRemove() {
+    LOG.trace("Start removing group {}", currentRaftGroupId);
+    ozoneManager.getStateMachines().remove(currentRaftGroupId);
+    ozoneManager.getOmRaftGroups().remove(currentRaftGroupId);
+    ozoneManager.getOmhaMetrics().deleteRaftGroup(currentRaftGroupId);
+    ozoneManager.getOmRaftGroupManager().removeGroup(currentRaftGroupId);
+    try {
+      LOG.trace("Deleting transaction for group {}", currentRaftGroupId);
+      TransactionInfo.deleteTransactionInfo(
+              ozoneManager.getMetadataManager(), currentRaftGroupId.toString()
+      );
+    } catch (IOException e) {
+      LOG.error("Error deleting transaction for group {}", currentRaftGroupId);
+      throw new RuntimeException(e);
     }
+  }
+
+  @Override
+  public void close() throws IOException {
+    LOG.info("BucketStateMachine has shutdown.");
+    stop();
   }
 
   public void stop() {
@@ -577,13 +599,4 @@ public class BucketStateMachine extends BaseStateMachine {
     return OMRatisHelper.smProtoToString(proto);
   }
 
-
-  @Override
-  public void notifyLeaderReady() {
-    LOG.trace("Leader ready for {} - {}. OM leader: {}",
-            currentRaftGroupId,
-            ozoneManager.getOmRatisServer().getLeaderId(currentRaftGroupId),
-            ozoneManager.getOmRatisServer().getLeaderId(ozoneManager.omRatisGroupName())
-    );
-  }
 }

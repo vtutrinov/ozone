@@ -285,7 +285,11 @@ public class OMKeyRenameRequestWithFSO extends OMKeyRenameRequest {
     String bucketKey = metadataMgr.getBucketKey(
         fromKeyValue.getVolumeName(), fromKeyValue.getBucketName());
 
-    fromKeyValue.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled());
+    fromKeyValue.setUpdateID(
+        trxnLogIndex,
+        ozoneManager.isRatisEnabled(),
+        ozoneManager.isMultiRaftEnabled(),
+        ozoneManager.getCurrentMultiRaftTerm());
     // Set toFileName
     fromKeyValue.setKeyName(toKeyFileName);
     fromKeyValue.setFileName(toKeyFileName);

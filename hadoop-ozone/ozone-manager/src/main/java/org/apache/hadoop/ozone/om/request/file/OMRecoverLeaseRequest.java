@@ -227,7 +227,12 @@ public class OMRecoverLeaseRequest extends OMKeyRequest {
       String fileName, OzoneManager ozoneManager,
       long transactionLogIndex) throws IOException {
     omKeyInfo.setModificationTime(Time.now());
-    omKeyInfo.setUpdateID(transactionLogIndex, ozoneManager.isRatisEnabled());
+    omKeyInfo.setUpdateID(
+        transactionLogIndex,
+        ozoneManager.isRatisEnabled(),
+        ozoneManager.isMultiRaftEnabled(),
+        ozoneManager.getCurrentMultiRaftTerm()
+    );
 
     OMFileRequest.addFileTableCacheEntry(omMetadataManager, dbOzoneKey,
         omKeyInfo, fileName, transactionLogIndex);

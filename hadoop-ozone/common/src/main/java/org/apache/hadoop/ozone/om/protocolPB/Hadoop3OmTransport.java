@@ -17,8 +17,9 @@
  */
 package org.apache.hadoop.ozone.om.protocolPB;
 
-import java.io.IOException;
-
+import com.google.common.annotations.VisibleForTesting;
+import com.google.protobuf.RpcController;
+import com.google.protobuf.ServiceException;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.io.Text;
@@ -29,15 +30,16 @@ import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
 import org.apache.hadoop.ozone.om.ha.HadoopRpcOMFailoverProxyProvider;
+import org.apache.hadoop.ozone.om.request.invocation.OzoneRetryInvocationHandler;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMResponse;
 import org.apache.hadoop.security.UserGroupInformation;
-
-import com.google.common.annotations.VisibleForTesting;
-import com.google.protobuf.RpcController;
-import com.google.protobuf.ServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
 
 /**
  * Full-featured Hadoop RPC implementation with failover support.
@@ -52,9 +54,11 @@ public class Hadoop3OmTransport implements OmTransport {
   private static final Logger LOG =
       LoggerFactory.getLogger(Hadoop3OmTransport.class);
 
-  private final HadoopRpcOMFailoverProxyProvider omFailoverProxyProvider;
+  private final HadoopRpcOMFailoverProxyProvider<OzoneManagerProtocolPB> omFailoverProxyProvider;
 
   private final OzoneManagerProtocolPB rpcProxy;
+
+  private final OzoneRetryInvocationHandler<OzoneManagerProtocolPB> retryInvocationHandler;
 
   public Hadoop3OmTransport(ConfigurationSource conf,
       UserGroupInformation ugi, String omServiceId) throws IOException {
@@ -63,23 +67,25 @@ public class Hadoop3OmTransport implements OmTransport {
         OzoneManagerProtocolPB.class,
         ProtobufRpcEngine.class);
 
-    this.omFailoverProxyProvider = new HadoopRpcOMFailoverProxyProvider(
-            conf, ugi, omServiceId, OzoneManagerProtocolPB.class);
+    this.omFailoverProxyProvider = new HadoopRpcOMFailoverProxyProvider<>(
+        conf, ugi, omServiceId, OzoneManagerProtocolPB.class);
 
     int maxFailovers = conf.getInt(
         OzoneConfigKeys.OZONE_CLIENT_FAILOVER_MAX_ATTEMPTS_KEY,
         OzoneConfigKeys.OZONE_CLIENT_FAILOVER_MAX_ATTEMPTS_DEFAULT);
-
-    this.rpcProxy = createRetryProxy(omFailoverProxyProvider, maxFailovers);
+    this.retryInvocationHandler = new OzoneRetryInvocationHandler<OzoneManagerProtocolPB>(
+        omFailoverProxyProvider, omFailoverProxyProvider.getRetryPolicy(maxFailovers));
+    this.rpcProxy = createRetryProxy(retryInvocationHandler);
   }
 
   @Override
   public OMResponse submitRequest(OMRequest payload) throws IOException {
     try {
+      omFailoverProxyProvider.setOmRequest(payload);
       OMResponse omResponse =
           rpcProxy.submitRequest(NULL_RPC_CONTROLLER, payload);
 
-      if (omResponse.hasLeaderOMNodeId() && omFailoverProxyProvider != null) {
+      if (omResponse.hasLeaderOMNodeId()) {
         String leaderOmId = omResponse.getLeaderOMNodeId();
 
         // Failover to the OM node returned by OMResponse leaderOMNodeId if
@@ -109,14 +115,10 @@ public class Hadoop3OmTransport implements OmTransport {
    * fails over on network exception or if the current proxy
    * is not the leader OM.
    */
-  private OzoneManagerProtocolPB createRetryProxy(
-      HadoopRpcOMFailoverProxyProvider failoverProxyProvider,
-      int maxFailovers) {
-
-    OzoneManagerProtocolPB proxy = (OzoneManagerProtocolPB) RetryProxy.create(
-        OzoneManagerProtocolPB.class, failoverProxyProvider,
-        failoverProxyProvider.getRetryPolicy(maxFailovers));
-    return proxy;
+  private OzoneManagerProtocolPB createRetryProxy(InvocationHandler invocationHandler) {
+    return (OzoneManagerProtocolPB) Proxy.newProxyInstance(getClass().getClassLoader(),
+        new Class<?>[] {OzoneManagerProtocolPB.class},
+        invocationHandler);
   }
 
   @VisibleForTesting
@@ -128,4 +130,5 @@ public class Hadoop3OmTransport implements OmTransport {
   public void close() throws IOException {
     omFailoverProxyProvider.close();
   }
+
 }

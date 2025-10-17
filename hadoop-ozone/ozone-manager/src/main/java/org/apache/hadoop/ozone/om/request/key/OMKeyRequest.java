@@ -687,12 +687,13 @@ public abstract class OMKeyRequest extends OMClientRequest {
           @Nullable OmBucketInfo omBucketInfo,
           OMFileRequest.OMPathInfo omPathInfo,
           long transactionLogIndex, long objectID, boolean isRatisEnabled,
-          ReplicationConfig replicationConfig)
+          ReplicationConfig replicationConfig, boolean multiRaftEnabled,
+          long currentMultiRaftTerm)
           throws IOException {
 
     return prepareFileInfo(omMetadataManager, keyArgs, dbKeyInfo, size,
             locations, encInfo, prefixManager, omBucketInfo, omPathInfo,
-            transactionLogIndex, objectID, isRatisEnabled, replicationConfig);
+            transactionLogIndex, objectID, isRatisEnabled, replicationConfig, multiRaftEnabled, currentMultiRaftTerm);
   }
 
   /**
@@ -710,7 +711,8 @@ public abstract class OMKeyRequest extends OMClientRequest {
           @Nullable OmBucketInfo omBucketInfo,
           OMFileRequest.OMPathInfo omPathInfo,
           long transactionLogIndex, long objectID,
-          boolean isRatisEnabled, ReplicationConfig replicationConfig)
+          boolean isRatisEnabled, ReplicationConfig replicationConfig, boolean multiRaftEnabled,
+          long currentMultiRaftTerm)
           throws IOException {
     if (keyArgs.getIsMultipartKey()) {
       return prepareMultipartFileInfo(omMetadataManager, keyArgs,
@@ -732,7 +734,7 @@ public abstract class OMKeyRequest extends OMClientRequest {
       // The modification time is set in preExecute. Use the same
       // modification time.
       dbKeyInfo.setModificationTime(keyArgs.getModificationTime());
-      dbKeyInfo.setUpdateID(transactionLogIndex, isRatisEnabled);
+      dbKeyInfo.setUpdateID(transactionLogIndex, isRatisEnabled, multiRaftEnabled, currentMultiRaftTerm);
       dbKeyInfo.setReplicationConfig(replicationConfig);
 
       // Construct a new metadata map from KeyArgs.
@@ -911,9 +913,10 @@ public abstract class OMKeyRequest extends OMClientRequest {
    */
   protected RepeatedOmKeyInfo getOldVersionsToCleanUp(
       @Nonnull OmKeyInfo keyToDelete, long trxnLogIndex,
-      boolean isRatisEnabled) throws IOException {
+      boolean isRatisEnabled, boolean multiRaftEnabled,
+      long currentMultiRaftTerm) throws IOException {
     return OmUtils.prepareKeyForDelete(keyToDelete,
-          trxnLogIndex, isRatisEnabled);
+          trxnLogIndex, isRatisEnabled, multiRaftEnabled, currentMultiRaftTerm);
   }
 
   protected OzoneLockStrategy getOzoneLockStrategy(OzoneManager ozoneManager) {

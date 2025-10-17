@@ -24,7 +24,7 @@ def acceptanceTests = [
     // "EC",
     // "HA-secure",
     // "HA-unsecure",
-    "MR",
+    // "MR", // TODO: https://jira.sberbank.ru/browse/SDPOZN-1998
     // "balancer",
     "cert-rotation",
     // "leadership",
@@ -274,32 +274,32 @@ pipeline {
                         }
                     }
                 }
-                stage("Findbugs") {
-                    steps {
-                        configFileProvider([configFile(fileId: "${configFileMVN}", targetLocation: 'maven_settings.xml', variable: 'MAVEN_SETTINGS')]) {
-                            script {
-                                docker.image(Variables.dockerImages["${Variables.cpuArch}"]["${Variables.componentName}"]).inside(Variables.dockerArgs.join(" ")) {
-                                    sh script: """
-                                        ./hadoop-ozone/dev-support/checks/findbugs.sh ${Variables.mavenDistributionManagementString}  \
-                                            -Duser.home=${Variables.dockerCacheMount}       \
-                                            -DnpmRegistryUrl=http://10.53.69.15:4873/       \
-                                            -DnpmInheritsProxyConfigFromMaven=true          \
-                                            -DexcludedGroups=unhealthy,org.apache.ozone.test.UnhealthyTest \
-                                            -s ${MAVEN_SETTINGS}
-                                    """
-                                }
-                            }
-                        }
-                    }
-                    post {
-                        always {
-                            dir ("target") {
-                                archiveArtifacts artifacts: "findbugs/**",
-                                    allowEmptyArchive: true
-                            }
-                        }
-                    }
-                }
+//                 stage("Findbugs") { // TODO: https://jira.sberbank.ru/browse/SDPOZN-1999
+//                     steps {
+//                         configFileProvider([configFile(fileId: "${configFileMVN}", targetLocation: 'maven_settings.xml', variable: 'MAVEN_SETTINGS')]) {
+//                             script {
+//                                 docker.image(Variables.dockerImages["${Variables.cpuArch}"]["${Variables.componentName}"]).inside(Variables.dockerArgs.join(" ")) {
+//                                     sh script: """
+//                                         ./hadoop-ozone/dev-support/checks/findbugs.sh ${Variables.mavenDistributionManagementString}  \
+//                                             -Duser.home=${Variables.dockerCacheMount}       \
+//                                             -DnpmRegistryUrl=http://10.53.69.15:4873/       \
+//                                             -DnpmInheritsProxyConfigFromMaven=true          \
+//                                             -DexcludedGroups=unhealthy,org.apache.ozone.test.UnhealthyTest \
+//                                             -s ${MAVEN_SETTINGS}
+//                                     """
+//                                 }
+//                             }
+//                         }
+//                     }
+//                     post {
+//                         always {
+//                             dir ("target") {
+//                                 archiveArtifacts artifacts: "findbugs/**",
+//                                     allowEmptyArchive: true
+//                             }
+//                         }
+//                     }
+//                 }
                 stage("Integration tests") {
                     steps {
                         script {

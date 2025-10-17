@@ -148,6 +148,10 @@ enum Type {
   GetSnapshotInfo = 130;
   RenameSnapshot = 131;
   GetContentSummary = 143;
+  CreateBucketRaftGroups = 144;
+  GetRaftGroupHealthState = 145;
+  BucketRaftGroupsStateChanged = 146;
+  MoveOmToSafeMode = 147;
 }
 
 enum SafeMode {
@@ -286,6 +290,11 @@ message OMRequest {
   optional RenameSnapshotRequest            RenameSnapshotRequest          = 129;
 
   optional GetContentSummaryRequest         getContentSummaryRequest       = 143;
+
+  optional CreateBucketRaftGroupsRequest    CreateBucketRaftGroupsRequest         = 144;
+  optional GetRaftGroupHealthStateRequest   getRaftGroupHealthStateRequest      = 145;
+  optional hadoop.hdds.UUID                 raftGroupId                    = 146; // Used for raft group that the request should be executed in
+  optional BucketRaftGroupsStateChangedRequest bucketRaftGroupsStateChangedRequest = 147; // Used to notify OM about bucket raft groups state changes
 }
 
 message OMResponse {
@@ -410,6 +419,9 @@ message OMResponse {
   optional OMLockDetailsProto                omLockDetails                 = 131;
   optional RenameSnapshotResponse            RenameSnapshotResponse        = 132;
   optional GetContentSummaryResponse         getContentSummaryResponse     = 143;
+  optional CreateBucketRaftGroupsResponse    CreateBucketRaftGroupsResponse = 144;
+  optional GetRaftGroupHealthStateResponse   getRaftGroupHealthStateResponse     = 145;
+  optional BucketRaftGroupsStateChangedResponse bucketRaftGroupsStateChangedResponse = 146;
 }
 
 enum Status {
@@ -2087,6 +2099,14 @@ message GetS3VolumeContextResponse {
   optional string userPrincipal = 2;
 }
 
+message CreateBucketRaftGroupsRequest {
+  repeated hadoop.hdds.UUID groupIds = 1;
+  optional bool purgeExistingRaftGroups = 2 [default = false];
+}
+
+message CreateBucketRaftGroupsResponse {
+}
+
 /**
   This will be used internally by OM to replicate S3 Secret across quorum of
   OM's.
@@ -2152,6 +2172,28 @@ message GetContentSummaryResponse {
   optional uint64 directoryCount = 3;
   optional uint64 spaceConsumed = 4;
 }
+
+message PeerHealthInfo {
+  required string peerId = 1;
+  required bool isHealthy = 2;
+  required int64 lastRpcResponseTimeMs = 3;
+}
+
+message GetRaftGroupHealthStateRequest {
+  required hadoop.hdds.UUID groupId = 1;
+}
+
+message GetRaftGroupHealthStateResponse {
+  repeated PeerHealthInfo peerHealthInfo = 1;
+}
+
+message BucketRaftGroupsStateChangedRequest {
+  required uint64 stateChangedIndex = 1;
+}
+
+message BucketRaftGroupsStateChangedResponse {
+}
+
 /**
  The OM service that takes care of Ozone namespace.
 */

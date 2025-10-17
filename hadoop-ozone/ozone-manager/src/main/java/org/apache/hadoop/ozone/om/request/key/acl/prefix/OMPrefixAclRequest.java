@@ -111,7 +111,12 @@ public abstract class OMPrefixAclRequest extends OMClientRequest {
             "No prefix info for the prefix path: " + prefixPath,
             OMException.ResultCodes.PREFIX_NOT_FOUND);
       }
-      omPrefixInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled());
+      omPrefixInfo.setUpdateID(
+          trxnLogIndex,
+          ozoneManager.isRatisEnabled(),
+          ozoneManager.isMultiRaftEnabled(),
+          ozoneManager.getCurrentMultiRaftTerm()
+      );
 
       // As for remove acl list, for a prefix if after removing acl from
       // the existing acl list, if list size becomes zero, delete the

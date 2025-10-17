@@ -23,6 +23,8 @@ import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.
 import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 
 import org.apache.hadoop.ozone.om.OMConfigKeys;
+import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus;
 import org.apache.ratis.protocol.RaftGroupId;
 
 import java.io.IOException;
@@ -224,7 +226,11 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
         // To validate credentials we have already verified leader status.
         // This will skip of checking leader status again if request has S3Auth.
         if (!s3Auth) {
-          OzoneManagerRatisUtils.checkLeaderStatus(volumeName, bucketName, ozoneManager);
+          if (request.hasRaftGroupId()) {
+            OzoneManagerRatisUtils.checkLeaderStatus(omClientRequest.getWriteRaftGroup(), ozoneManager);
+          } else {
+            OzoneManagerRatisUtils.checkLeaderStatus(volumeName, bucketName, ozoneManager);
+          }
         }
         // TODO: Note: Due to HDDS-6055, createClientRequest() could now
         //  return null, which triggered the findbugs warning.
@@ -240,6 +246,12 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
 
       final OMResponse response;
       if (omClientRequest.getWriteReqBucketName() != null && ozoneManager.isMultiRaftEnabled()) {
+        try {
+          ozoneManager.getSafeModeManager().checkSafeMode();
+        } catch (OMInSafeModeException ex) {
+          LOG.error("OM is in safe mode, cannot process request: {}", request.getCmdType(), ex);
+          throw new ServiceException(ex);
+        }
         response = omRatisServer.submitBucketWriteRequest(
                 requestToSubmit,
                 omClientRequest.getWriteReqVolumeName(),
@@ -274,7 +286,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
     if (isFollowerReadEnabled()) {
       return handler.handleReadRequest(request);
     } else {
-      OzoneManagerRatisServer.RaftServerStatus raftServerStatus = omRatisServer.checkOmLeaderStatus();
+      RaftServerStatus raftServerStatus = omRatisServer.checkOmLeaderStatus();
       if (raftServerStatus == LEADER_AND_READY || request.getCmdType().equals(PrepareStatus)) {
         return handler.handleReadRequest(request);
       } else {
@@ -284,7 +296,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
   }
 
   private ServiceException createLeaderErrorException(
-          RaftGroupId raftGroupId, OzoneManagerRatisServer.RaftServerStatus raftServerStatus) {
+          RaftGroupId raftGroupId, RaftServerStatus raftServerStatus) {
     if (raftServerStatus == NOT_LEADER) {
       return new ServiceException(omRatisServer.newOMNotLeaderException(raftGroupId));
     } else {
@@ -303,9 +315,9 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
     }
 
     OMNotLeaderException notLeaderException =
-        raftLeaderId == null ? new OMNotLeaderException(raftPeerId) :
+        raftLeaderId == null ? new OMNotLeaderException(raftPeerId, omRatisServer.getCurrentRaftGroupId()) :
             new OMNotLeaderException(raftPeerId, raftLeaderId,
-                raftLeaderAddress);
+                raftLeaderAddress, omRatisServer.getCurrentRaftGroupId());
 
     LOG.warn(notLeaderException.getMessage());
 
@@ -337,6 +349,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
             createClientRequest(request, ozoneManager);
         request = omClientRequest.preExecute(ozoneManager);
         long index = transactionIndex.incrementAndGet();
+        LOG.trace("Run command {} - {}", request.getCmdType(), index);
         omClientResponse = handler.handleWriteRequest(request, index);
       }
     } catch (IOException ex) {

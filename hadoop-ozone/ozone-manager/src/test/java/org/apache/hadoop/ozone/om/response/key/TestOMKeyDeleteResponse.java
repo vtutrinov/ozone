@@ -178,7 +178,7 @@ public class TestOMKeyDeleteResponse extends TestOMKeyResponse {
 
   protected OMKeyDeleteResponse getOmKeyDeleteResponse(OmKeyInfo omKeyInfo,
       OzoneManagerProtocolProtos.OMResponse omResponse) throws Exception {
-    return new OMKeyDeleteResponse(omResponse, omKeyInfo, true, omBucketInfo);
+    return new OMKeyDeleteResponse(omResponse, omKeyInfo, true, omBucketInfo, ozoneManager.isMultiRaftEnabled(), 0);
   }
 
   protected OmBucketInfo getOmBucketInfo() {

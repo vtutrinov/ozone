@@ -176,9 +176,14 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   @Override
   public void notifyLeaderChanged(RaftGroupMemberId groupMemberId,
                                   RaftPeerId newLeaderId) {
-    LOG.trace("Change leader in group {}. New leader {}", groupMemberId, newLeaderId);
+    LOG.trace("Change leader in group {}. New leader {}", groupMemberId.getGroupId(), newLeaderId);
     // Initialize OMHAMetrics
-    ozoneManager.omHAMetricsInit(newLeaderId.toString());
+    if (ozoneManager.getOmhaMetrics() == null) {
+      ozoneManager.omHAMetricsInit(groupMemberId.getGroupId(), newLeaderId.toString());
+    } else {
+      ozoneManager.getOmhaMetrics().defineRaftGroupLeader(groupMemberId.getGroupId(), newLeaderId.toString(), true);
+    }
+    ozoneManager.getSafeModeManager().onLeaderElected();
   }
 
   /**
@@ -545,10 +550,9 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
    * Notifies the state machine that the raft peer is no longer leader.
    */
   @Override
-  public void notifyNotLeader(Collection<TransactionContext> pendingEntries) {
-    LOG.trace("Lost leadership for {} - {}.",
-        ozoneManager.omRatisGroupName(),
-        ozoneManager.getOMNodeId());
+  public void notifyNotLeader(Collection<TransactionContext> pendingEntries)
+      throws IOException {
+    ozoneManager.getSafeModeManager().onLeadershipLost(); // TODO is is necessary?
   }
 
   @Override
@@ -594,16 +598,11 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
    */
   private OMResponse runCommand(OMRequest request, long trxLogIndex) {
     try {
+      LOG.trace("Run command {} - {}", request.getCmdType(), trxLogIndex);
       OMClientResponse omClientResponse =
           handler.handleWriteRequest(request, trxLogIndex);
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
       OMResponse omResponse = omClientResponse.getOMResponse();
-      if (request.hasCreateBucketRequest() && ozoneManager.isMultiRaftEnabled()) {
-        String volumeName = request.getCreateBucketRequest().getBucketInfo().getVolumeName();
-        String bucketName = request.getCreateBucketRequest().getBucketInfo().getBucketName();
-        LOG.trace("Creating raft group while runCommand {}", bucketName);
-        ozoneManager.createRaftGroupForBucket(volumeName, bucketName);
-      }
       if (omLockDetails != null) {
         return omResponse.toBuilder()
             .setOmLockDetails(omLockDetails.toProtobufBuilder()).build();
@@ -820,13 +819,5 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   @VisibleForTesting
   public OzoneManagerDoubleBuffer getOzoneManagerDoubleBuffer() {
     return ozoneManagerDoubleBuffer;
-  }
-
-  @Override
-  public void notifyLeaderReady() {
-    LOG.trace("Leader ready for OM group {} - {}.",
-            ozoneManager.omRatisGroupName(),
-            ozoneManager.getOmRatisServer().getLeaderId(ozoneManager.omRatisGroupName())
-    );
   }
 }

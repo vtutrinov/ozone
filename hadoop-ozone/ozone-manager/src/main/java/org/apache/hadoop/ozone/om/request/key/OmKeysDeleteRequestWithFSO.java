@@ -108,7 +108,8 @@ public class OmKeysDeleteRequestWithFSO extends OMKeysDeleteRequest {
                       omKeyInfo.getFileName())),
           CacheValue.get(trxnLogIndex));
 
-      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled());
+      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(), ozoneManager.isMultiRaftEnabled(),
+              ozoneManager.getCurrentMultiRaftTerm());
       quotaReleased += sumBlockLengths(omKeyInfo);
     }
     // Mark directory keys.
@@ -123,7 +124,8 @@ public class OmKeysDeleteRequestWithFSO extends OMKeysDeleteRequest {
                   omKeyInfo.getFileName())),
           CacheValue.get(trxnLogIndex));
 
-      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled());
+      omKeyInfo.setUpdateID(trxnLogIndex, ozoneManager.isRatisEnabled(), ozoneManager.isMultiRaftEnabled(),
+              ozoneManager.getCurrentMultiRaftTerm());
       quotaReleased += sumBlockLengths(omKeyInfo);
     }
     return quotaReleased;
@@ -142,7 +144,7 @@ public class OmKeysDeleteRequestWithFSO extends OMKeysDeleteRequest {
                 .setStatus(deleteStatus).setUnDeletedKeys(unDeletedKeys))
         .setStatus(deleteStatus ? OK : PARTIAL_DELETE).setSuccess(deleteStatus)
         .build(), omKeyInfoList, dirList, ozoneManager.isRatisEnabled(),
-        omBucketInfo.copyObject(), volumeId);
+        omBucketInfo.copyObject(), volumeId, ozoneManager.isMultiRaftEnabled(), ozoneManager.getCurrentMultiRaftTerm());
     return omClientResponse;
 
   }

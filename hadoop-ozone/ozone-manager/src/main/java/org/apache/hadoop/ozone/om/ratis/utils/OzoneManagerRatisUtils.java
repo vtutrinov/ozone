@@ -22,6 +22,7 @@ import com.google.common.base.Strings;
 import com.google.protobuf.ServiceException;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.security.SecurityConfig;
 import org.apache.hadoop.hdds.security.ssl.KeyStoresFactory;
 import org.apache.hadoop.hdds.security.x509.certificate.client.CertificateClient;
@@ -45,6 +46,9 @@ import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketAddAclRequest;
 import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketRemoveAclRequest;
 import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketSetAclRequest;
 import org.apache.hadoop.ozone.om.request.file.OMRecoverLeaseRequest;
+import org.apache.hadoop.ozone.om.request.group.OMBucketRaftGroupsStateUpdateRequest;
+import org.apache.hadoop.ozone.om.request.group.OMCreateRaftGroupsRequest;
+import org.apache.hadoop.ozone.om.request.group.OMMoveToSafeModeRequest;
 import org.apache.hadoop.ozone.om.request.key.OMDirectoriesPurgeRequestWithFSO;
 import org.apache.hadoop.ozone.om.request.key.OMKeyPurgeRequest;
 import org.apache.hadoop.ozone.om.request.key.OMKeyRequest;
@@ -108,6 +112,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Paths;
+import java.util.UUID;
 
 import static org.apache.hadoop.hdds.HddsConfigKeys.OZONE_METADATA_DIRS;
 import static org.apache.hadoop.ozone.OzoneConsts.OM_RATIS_SNAPSHOT_DIR;
@@ -237,6 +242,8 @@ public final class OzoneManagerRatisUtils {
       return new OMSnapshotPurgeRequest(omRequest);
     case SetSnapshotProperty:
       return new OMSnapshotSetPropertyRequest(omRequest);
+    case CreateBucketRaftGroups:
+      return new OMCreateRaftGroupsRequest(omRequest);
     case DeleteOpenKeys:
       BucketLayout bktLayout = BucketLayout.DEFAULT;
       if (omRequest.getDeleteOpenKeysRequest().hasBucketLayout()) {
@@ -336,6 +343,10 @@ public final class OzoneManagerRatisUtils {
       return new OMEchoRPCWriteRequest(omRequest);
     case AbortExpiredMultiPartUploads:
       return new S3ExpiredMultipartUploadsAbortRequest(omRequest);
+    case BucketRaftGroupsStateChanged:
+      return new OMBucketRaftGroupsStateUpdateRequest(omRequest);
+    case MoveOmToSafeMode:
+      return new OMMoveToSafeModeRequest(omRequest);
     default:
       throw new OMException("Unrecognized write command type request "
           + cmdType, OMException.ResultCodes.INVALID_REQUEST);
@@ -346,6 +357,11 @@ public final class OzoneManagerRatisUtils {
     if (!bucketName.isEmpty()) {
       request.setWriteReqBucketName(bucketName);
       request.setWriteReqVolumeName(volumeName);
+      if (omRequest.hasRaftGroupId()) {
+        HddsProtos.UUID uuid = omRequest.getRaftGroupId();
+        RaftGroupId raftGroupId = RaftGroupId.valueOf(new UUID(uuid.getMostSigBits(), uuid.getLeastSigBits()));
+        request.setWriteRaftGroup(raftGroupId);
+      }
     }
     return request;
   }
@@ -503,13 +519,22 @@ public final class OzoneManagerRatisUtils {
 
   public static void checkLeaderStatus(String volumeName, String bucketName, OzoneManager ozoneManager)
       throws ServiceException {
-    RaftGroupId ratisGroupId = ozoneManager.ratisGroupName(volumeName, bucketName);
+    RaftGroupId ratisGroupId = ozoneManager.raftGroupName(volumeName, bucketName);
 
     LOG.trace("Check leader status for {}", ratisGroupId);
     try {
       ozoneManager.checkLeaderStatus(ratisGroupId);
     } catch (OMNotLeaderException | OMLeaderNotReadyException e) {
-      LOG.error("{} For group {}", e.getMessage(), ratisGroupId);
+      LOG.error("{} For group {}, volume={}, bucket={}", e.getMessage(), ratisGroupId, volumeName, bucketName);
+      throw new ServiceException(e);
+    }
+  }
+
+  public static void checkLeaderStatus(RaftGroupId raftGroupId, OzoneManager ozoneManager) throws ServiceException {
+    try {
+      ozoneManager.checkLeaderStatus(raftGroupId);
+    } catch (OMNotLeaderException | OMLeaderNotReadyException e) {
+      LOG.error("{} For group {}", e.getMessage(), raftGroupId);
       throw new ServiceException(e);
     }
   }

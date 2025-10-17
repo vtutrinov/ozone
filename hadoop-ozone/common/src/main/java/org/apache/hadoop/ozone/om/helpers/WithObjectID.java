@@ -17,13 +17,17 @@
  */
 package org.apache.hadoop.ozone.om.helpers;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static org.apache.hadoop.ozone.OzoneConsts.OBJECT_ID_RECLAIM_BLOCKS;
 
 /**
  * Mixin class to handle ObjectID and UpdateID.
  */
 public class WithObjectID extends WithMetadata {
-
+  private static final Logger LOG = LoggerFactory
+      .getLogger(WithObjectID.class);
   /**
    * ObjectIDs are unique and immutable identifier for each object in the
    * System.
@@ -36,6 +40,8 @@ public class WithObjectID extends WithMetadata {
    */
   @SuppressWarnings("visibilitymodifier")
   protected long updateID;
+
+  private long multiRaftTerm;
 
   /**
    * Returns objectID.
@@ -76,7 +82,9 @@ public class WithObjectID extends WithMetadata {
    * @param updateId  long
    * @param isRatisEnabled boolean
    */
-  public void setUpdateID(long updateId, boolean isRatisEnabled) {
+  public void setUpdateID(
+      long updateId, boolean isRatisEnabled, boolean isMultiraftEnabled, long currentMultiraftTerm
+  ) {
 
     // Because in non-HA, we have multiple rpc handler threads and
     // transactionID is generated in OzoneManagerServerSideTranslatorPB.
@@ -102,12 +110,19 @@ public class WithObjectID extends WithMetadata {
 
     // Main reason, in non-HA transaction Index after restart starts from 0.
     // And also because of this same reason we don't do replay checks in non-HA.
-
-    if (isRatisEnabled && updateId < this.updateID) {
+    if ((!isMultiraftEnabled || currentMultiraftTerm == multiRaftTerm)
+        && isRatisEnabled && updateId < this.updateID
+    ) {
+      LOG.error("IsMultiraftEnabled: {}, current multiraft are equals: {}, ratis enabled: {}", isMultiraftEnabled,
+          currentMultiraftTerm == multiRaftTerm, isRatisEnabled);
       throw new IllegalArgumentException(String.format(
           "Trying to set updateID to %d which is not greater than the " +
-              "current value of %d for %s", updateId, this.updateID,
-          getObjectInfo()));
+          "current value of %d for %s. Multiraft term: %s", updateId, this.updateID,
+          getObjectInfo(), multiRaftTerm));
+    }
+
+    if (isMultiraftEnabled && currentMultiraftTerm != multiRaftTerm) {
+      this.multiRaftTerm = currentMultiraftTerm;
     }
 
     this.updateID = updateId;

@@ -48,9 +48,10 @@ public class OMOpenKeysDeleteResponse extends AbstractOMKeyDeleteResponse {
       @Nonnull OMResponse omResponse,
       @Nonnull Map<String, OmKeyInfo> keysToDelete,
       boolean isRatisEnabled,
-      @Nonnull BucketLayout bucketLayout) {
+      @Nonnull BucketLayout bucketLayout, boolean multiRaftEnabled,
+      long currentMultiRaftTerm) {
 
-    super(omResponse, isRatisEnabled, bucketLayout);
+    super(omResponse, isRatisEnabled, bucketLayout, multiRaftEnabled, currentMultiRaftTerm);
     this.keysToDelete = keysToDelete;
   }
 
