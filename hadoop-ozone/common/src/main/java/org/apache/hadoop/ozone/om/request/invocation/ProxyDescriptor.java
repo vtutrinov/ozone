@@ -9,11 +9,7 @@ import java.lang.reflect.Method;
 
 import static org.apache.hadoop.ozone.om.request.invocation.OzoneRetryInvocationHandler.LOG;
 
-/**
- * Class to store info about the proxy which requests are handled through.
- * @param <T>
- */
-public class ProxyDescriptor<T> {
+class ProxyDescriptor<T> {
   private final FailoverProxyProvider<T> fpp;
   /**
    * Count the associated proxy provider has ever been failed over.

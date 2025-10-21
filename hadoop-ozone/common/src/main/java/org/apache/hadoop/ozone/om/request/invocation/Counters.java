@@ -1,9 +1,6 @@
 package org.apache.hadoop.ozone.om.request.invocation;
 
-/**
- * Class to measure request metrics - retries and fails.
- */
-public class Counters {
+class Counters {
   /**
    * Counter for retries.
    */

@@ -8,10 +8,7 @@ import java.io.InterruptedIOException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 
-/**
- * Class to store RPC call parameters.
- */
-public class Call {
+class Call {
   private final Method method;
   private final Object[] args;
   private final boolean isRpc;
