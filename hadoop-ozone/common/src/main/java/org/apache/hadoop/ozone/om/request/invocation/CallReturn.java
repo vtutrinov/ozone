@@ -15,12 +15,15 @@
  * limitations under the License.
  */
 
-
 package org.apache.hadoop.ozone.om.request.invocation;
 
 import com.google.common.base.Preconditions;
+import java.util.Objects;
 
-class CallReturn {
+/**
+ * RPC call return result.
+ */
+public class CallReturn {
   /** The return state. */
   enum State {
     /** Call is returned successfully. */
@@ -50,13 +53,16 @@ class CallReturn {
   CallReturn(Object r) {
     this(r, null, CallReturn.State.RETURNED);
   }
+
   CallReturn(Throwable t) {
     this(null, t, CallReturn.State.EXCEPTION);
-    Preconditions.checkNotNull(t);
+    Objects.requireNonNull(t);
   }
+
   private CallReturn(CallReturn.State s) {
     this(null, null, s);
   }
+
   private CallReturn(Object r, Throwable t, CallReturn.State s) {
     Preconditions.checkArgument(r == null || t == null);
     returnValue = r;

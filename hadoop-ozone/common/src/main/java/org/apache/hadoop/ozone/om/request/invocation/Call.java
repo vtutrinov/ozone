@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.hadoop.ozone.om.request.invocation;
 
 import java.io.InterruptedIOException;
@@ -25,7 +24,10 @@ import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.util.Time;
 
-class Call {
+/**
+ * Class to store RPC call parameters.
+ */
+public class Call {
   private final Method method;
   private final Object[] args;
   private final boolean isRpc;

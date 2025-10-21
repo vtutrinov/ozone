@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.hadoop.ozone.om.request.invocation;
 
 import java.util.Collections;
@@ -23,7 +22,10 @@ import org.apache.hadoop.io.retry.MultiException;
 import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.util.Time;
 
-class RetryInfo {
+/**
+ * RPC call retry info.
+ */
+public class RetryInfo {
   private final long retryTime;
   private final long delay;
   private final RetryPolicy.RetryAction action;

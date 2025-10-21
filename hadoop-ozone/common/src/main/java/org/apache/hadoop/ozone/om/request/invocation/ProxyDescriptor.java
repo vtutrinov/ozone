@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.hadoop.ozone.om.request.invocation;
 
 import static org.apache.hadoop.ozone.om.request.invocation.OzoneRetryInvocationHandler.LOG;
@@ -26,7 +25,11 @@ import org.apache.hadoop.io.retry.AtMostOnce;
 import org.apache.hadoop.io.retry.FailoverProxyProvider;
 import org.apache.hadoop.io.retry.Idempotent;
 
-class ProxyDescriptor<T> {
+/**
+ * Class to store info about the proxy which requests are handled through.
+ * @param <T>
+ */
+public class ProxyDescriptor<T> {
   private final FailoverProxyProvider<T> fpp;
   /**
    * Count the associated proxy provider has ever been failed over.

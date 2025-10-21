@@ -24,7 +24,7 @@ def acceptanceTests = [
     // "EC",
     // "HA-secure",
     // "HA-unsecure",
-    // "MR", // TODO: https://jira.sberbank.ru/browse/SDPOZN-1998
+    "MR",
     // "balancer",
     "cert-rotation",
     // "leadership",
