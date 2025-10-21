@@ -6,7 +6,10 @@ import org.apache.hadoop.util.Time;
 
 import java.util.Collections;
 
-class RetryInfo {
+/**
+ * RPC call retry info.
+ */
+public class RetryInfo {
   private final long retryTime;
   private final long delay;
   private final RetryPolicy.RetryAction action;

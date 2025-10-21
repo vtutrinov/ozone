@@ -2,7 +2,10 @@ package org.apache.hadoop.ozone.om.request.invocation;
 
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 
-class CallReturn {
+/**
+ * RPC call return result.
+ */
+public class CallReturn {
   /** The return state. */
   enum State {
     /** Call is returned successfully. */
