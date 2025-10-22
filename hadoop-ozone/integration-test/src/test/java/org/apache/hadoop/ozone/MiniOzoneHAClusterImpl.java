@@ -50,6 +50,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
@@ -529,7 +530,7 @@ public class MiniOzoneHAClusterImpl extends MiniOzoneClusterImpl {
     }
 
     /**
-     * Start OM service with multiple OMs.
+     * Start SCM service with multiple SCMs.
      */
     protected SCMHAService createSCMService()
         throws IOException, AuthenticationException {
@@ -543,6 +544,7 @@ public class MiniOzoneHAClusterImpl extends MiniOzoneClusterImpl {
 
       int retryCount = 0;
 
+      CountDownLatch scmStartCounter = new CountDownLatch(numOfSCMs);
       while (true) {
         try {
           initSCMHAConfig();
@@ -578,19 +580,29 @@ public class MiniOzoneHAClusterImpl extends MiniOzoneClusterImpl {
             }
             scmList.add(scm);
 
-            if (i <= numOfActiveSCMs) {
-              scm.start();
-              activeSCMs.add(scm);
-              LOG.info("Started SCM RPC server at {}",
-                  scm.getClientRpcAddress());
-            } else {
-              inactiveSCMs.add(scm);
-              LOG.info("Intialized SCM at {}. This SCM is currently "
-                  + "inactive (not running).", scm.getClientRpcAddress());
-            }
+            int scmCounter = i;
+            new Thread(() -> {
+              if (scmCounter <= numOfActiveSCMs) {
+                try {
+                  scm.start();
+                } catch (IOException e) {
+                  scmStartCounter.countDown();
+                  throw new RuntimeException(e);
+                }
+                activeSCMs.add(scm);
+                LOG.info("Started SCM RPC server at {}",
+                    scm.getClientRpcAddress());
+              } else {
+                inactiveSCMs.add(scm);
+                LOG.info("Initialized SCM at {}. This SCM is currently "
+                    + "inactive (not running).", scm.getClientRpcAddress());
+              }
+              scmStartCounter.countDown();
+            }).start();
           }
+          scmStartCounter.await();
           break;
-        } catch (BindException e) {
+        } catch (RuntimeException | InterruptedException e) {
           for (StorageContainerManager scm : scmList) {
             scm.stop();
             scm.join();
