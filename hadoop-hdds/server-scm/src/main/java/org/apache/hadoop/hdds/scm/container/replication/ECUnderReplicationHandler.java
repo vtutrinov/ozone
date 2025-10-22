@@ -339,7 +339,7 @@ public class ECUnderReplicationHandler implements UnhealthyReplicationHandler {
       ContainerPlacementStatus placementStatusWithSelectedTargets =
           validatePlacement(container, availableSourceNodes, selectedDatanodes);
       if (!placementStatusWithSelectedTargets.isPolicySatisfied()) {
-        LOG.debug("Target nodes + existing nodes for EC container {}" +
+        LOG.warn("Target nodes + existing nodes for EC container {}" +
                 " will not satisfy placement policy {}. Reason: {}. Selected" +
                 " nodes: {}. Available source nodes: {}. Resuming " +
                 "reconstruction regardless.",
@@ -381,7 +381,7 @@ public class ECUnderReplicationHandler implements UnhealthyReplicationHandler {
         commandsSent++;
       }
       if (targetCount != expectedTargetCount) {
-        LOG.debug("Insufficient nodes were returned from the placement policy" +
+        LOG.warn("Insufficient nodes were returned from the placement policy" +
             " to fully reconstruct container {}. Requested {} received {}",
             container.getContainerID(), expectedTargetCount, targetCount);
         if (hasOverloaded && recoveryIsCritical) {
@@ -438,7 +438,7 @@ public class ECUnderReplicationHandler implements UnhealthyReplicationHandler {
       ContainerPlacementStatus placementStatusWithSelectedTargets =
           validatePlacement(container, availableSourceNodes, selectedDatanodes);
       if (!placementStatusWithSelectedTargets.isPolicySatisfied()) {
-        LOG.debug("Target nodes + existing nodes for EC container {}" +
+        LOG.warn("Target nodes + existing nodes for EC container {}" +
                 " will not satisfy placement policy {}. Reason: {}. Selected" +
                 " nodes: {}. Available source nodes: {}. Resuming recovery " +
                 "regardless.",
