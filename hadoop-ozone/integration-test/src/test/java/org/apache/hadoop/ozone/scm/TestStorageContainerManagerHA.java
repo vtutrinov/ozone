@@ -25,6 +25,7 @@ import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.scm.ScmConfigKeys;
 import org.apache.hadoop.hdds.scm.container.ContainerID;
 import org.apache.hadoop.hdds.scm.ha.SCMHAMetrics;
+import org.apache.hadoop.hdds.scm.ha.SCMHAUtils;
 import org.apache.hadoop.hdds.scm.ha.SCMRatisServerImpl;
 import org.apache.hadoop.hdds.scm.server.SCMStorageConfig;
 import org.apache.hadoop.hdds.scm.server.StorageContainerManager;
@@ -130,6 +131,9 @@ public class TestStorageContainerManagerHA {
       if (scm.checkLeader()) {
         count++;
         leaderScm = scm;
+      }
+      if (SCMHAUtils.isSCMHAEnabled(conf)) {
+        Assertions.assertNotNull(scm.getScmHAManager().getRatisServer().getLeaderId());
       }
       Assertions.assertEquals(peerSize, numOfSCMs);
     }
