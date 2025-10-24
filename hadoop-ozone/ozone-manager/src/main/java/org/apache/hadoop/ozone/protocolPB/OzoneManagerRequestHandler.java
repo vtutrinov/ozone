@@ -165,6 +165,7 @@ import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 import org.apache.hadoop.ozone.upgrade.UpgradeFinalizer.StatusAndMessages;
 import org.apache.hadoop.util.Preconditions;
 import org.apache.hadoop.util.ProtobufUtils;
+import org.apache.ratis.protocol.RaftGroupId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -409,10 +410,11 @@ public class OzoneManagerRequestHandler implements RequestHandler {
 
   @Override
   public OMClientResponse handleWriteRequest(OMRequest omRequest,
-      long transactionLogIndex) throws IOException {
+                                             long transactionLogIndex, RaftGroupId raftGroupId) throws IOException {
     injectPause();
     OMClientRequest omClientRequest =
         OzoneManagerRatisUtils.createClientRequest(omRequest, impl);
+    omClientRequest.setWriteRaftGroup(raftGroupId);
     return captureLatencyNs(
         impl.getPerfMetrics().getValidateAndUpdateCacneLatencyNs(),
         () -> {

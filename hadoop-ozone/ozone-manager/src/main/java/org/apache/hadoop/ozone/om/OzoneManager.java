@@ -905,11 +905,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     raftClientProvider = RatisHelper.newRaftClient(configuration);
   }
 
-  public void createRaftGroupForBucket(String volumeName, String bucketName) {
-    RaftGroupId raftGroupId = raftGroupName(volumeName, bucketName);
-    createRaftGroupForBucket(raftGroupId);
-  }
-
   @SuppressWarnings("checkstyle:EmptyBlock")
   public void createRaftGroupForBucket(RaftGroupId raftGroupId) {
     InitBucketResult initBucketResult = initBucketRaftGroupAndStateMachine(raftGroupId);
@@ -962,7 +957,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
     bucketManager = new BucketManagerImpl(this, metadataManager);
 
-    omRaftGroupManager = new OmRaftGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
+    omRaftGroupManager = new OmRaftGroupManager(this, configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
 
     Class<? extends S3SecretStoreProvider> storeProviderClass =
         configuration.getClass(
@@ -2048,7 +2043,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
           OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT
       );
       omRaftGroupManager =
-          new OmRaftGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
+          new OmRaftGroupManager(this, configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
     }
 
     bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
@@ -4538,11 +4533,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   }
 
   public RaftGroupId raftGroupName(String volumeName, String bucketName) {
-    return omRaftGroupManager.raftGroupName(volumeName, bucketName);
-  }
-
-  public RaftGroupId raftGroupName(String volumeName, String bucketName, HddsProtos.UUID raftGroupId) {
-    return omRaftGroupManager.raftGroupName(volumeName, bucketName, raftGroupId);
+    return omRaftGroupManager.getRaftGroupToHandleBucketWriteRequest(volumeName, bucketName);
   }
 
   /**

@@ -38,10 +38,13 @@ import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
 import org.apache.hadoop.ozone.om.request.BucketLayoutAwareOMKeyRequestFactory;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
+import org.apache.hadoop.ozone.om.request.bucket.OMAcquireBucketRaftGroupAssignmentLockRequest;
 import org.apache.hadoop.ozone.om.request.bucket.OMBucketCreateRequest;
 import org.apache.hadoop.ozone.om.request.bucket.OMBucketDeleteRequest;
+import org.apache.hadoop.ozone.om.request.bucket.OMBucketRaftGroupAssignRequest;
 import org.apache.hadoop.ozone.om.request.bucket.OMBucketSetOwnerRequest;
 import org.apache.hadoop.ozone.om.request.bucket.OMBucketSetPropertyRequest;
+import org.apache.hadoop.ozone.om.request.bucket.OMReleaseBucketRaftGroupAssignmentLockRequest;
 import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketAddAclRequest;
 import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketRemoveAclRequest;
 import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketSetAclRequest;
@@ -347,6 +350,12 @@ public final class OzoneManagerRatisUtils {
       return new OMBucketRaftGroupsStateUpdateRequest(omRequest);
     case MoveOmToSafeMode:
       return new OMMoveToSafeModeRequest(omRequest);
+    case BucketRaftGroupAssign:
+      return new OMBucketRaftGroupAssignRequest(omRequest);
+    case AcquireBucketRaftGroupAssignmentWriteLock:
+      return new OMAcquireBucketRaftGroupAssignmentLockRequest(omRequest);
+    case ReleaseBucketRaftGroupAssignmentWriteLock:
+      return new OMReleaseBucketRaftGroupAssignmentLockRequest(omRequest);
     default:
       throw new OMException("Unrecognized write command type request "
           + cmdType, OMException.ResultCodes.INVALID_REQUEST);
@@ -513,19 +522,6 @@ public final class OzoneManagerRatisUtils {
       ozoneManager.checkOmLeaderStatus();
     } catch (OMNotLeaderException | OMLeaderNotReadyException e) {
       LOG.debug(e.getMessage());
-      throw new ServiceException(e);
-    }
-  }
-
-  public static void checkLeaderStatus(String volumeName, String bucketName, OzoneManager ozoneManager)
-      throws ServiceException {
-    RaftGroupId ratisGroupId = ozoneManager.raftGroupName(volumeName, bucketName);
-
-    LOG.trace("Check leader status for {}", ratisGroupId);
-    try {
-      ozoneManager.checkLeaderStatus(ratisGroupId);
-    } catch (OMNotLeaderException | OMLeaderNotReadyException e) {
-      LOG.error("{} For group {}, volume={}, bucket={}", e.getMessage(), ratisGroupId, volumeName, bucketName);
       throw new ServiceException(e);
     }
   }

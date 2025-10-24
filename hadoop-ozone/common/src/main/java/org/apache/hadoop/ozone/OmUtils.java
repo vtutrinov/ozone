@@ -329,6 +329,9 @@ public final class OmUtils {
     case AbortExpiredMultiPartUploads:
     case SetSnapshotProperty:
     case UnknownCommand:
+    case BucketRaftGroupAssign:
+    case AcquireBucketRaftGroupAssignmentWriteLock:
+    case ReleaseBucketRaftGroupAssignmentWriteLock:
       return false;
     case EchoRPC:
       return omRequest.getEchoRPCRequest().getReadOnly();
