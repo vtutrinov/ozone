@@ -105,6 +105,8 @@ import static org.apache.hadoop.ozone.recon.ReconServerConfigKeys.OZONE_RECON_DB
 import static org.apache.hadoop.ozone.recon.ReconServerConfigKeys.OZONE_RECON_OM_SNAPSHOT_DB_DIR;
 import static org.apache.hadoop.ozone.recon.ReconServerConfigKeys.OZONE_RECON_SCM_DB_DIR;
 import org.hadoop.ozone.recon.codegen.ReconSqlDbConfig;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -137,6 +139,7 @@ public class MiniOzoneClusterImpl implements MiniOzoneCluster {
   private CertificateClient caClient;
   private final Set<AutoCloseable> clients = ConcurrentHashMap.newKeySet();
   private SecretKeyClient secretKeyClient;
+  private static volatile MockedStatic mockDNStatic;
 
   /**
    * Creates a new MiniOzoneCluster with Recon.
@@ -529,6 +532,16 @@ public class MiniOzoneClusterImpl implements MiniOzoneCluster {
     this.secretKeyClient = client;
   }
 
+  public static void mockDatanode() {
+    if (mockDNStatic == null) {
+      synchronized (MiniOzoneClusterImpl.class) {
+        if (mockDNStatic == null) {
+          mockDNStatic = Mockito.mockStatic(HddsDatanodeService.class);
+        }
+      }
+    }
+  }
+
   private static void stopDatanodes(
       Collection<HddsDatanodeService> hddsDatanodes) {
     if (!hddsDatanodes.isEmpty()) {
@@ -838,6 +851,7 @@ public class MiniOzoneClusterImpl implements MiniOzoneCluster {
     protected List<HddsDatanodeService> createHddsDatanodes(
         List<StorageContainerManager> scms, ReconServer reconServer)
         throws IOException {
+      mockDatanode();
       configureHddsDatanodes();
       String scmAddress = getSCMAddresses(scms);
       String[] args = new String[] {};
