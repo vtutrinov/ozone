@@ -59,6 +59,7 @@ import org.apache.hadoop.ozone.om.protocol.S3Auth;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RefreshBucketUsedBytesResponse;
 import org.apache.hadoop.ozone.security.OzoneTokenIdentifier;
 import org.apache.hadoop.ozone.security.acl.OzoneObj;
 import org.apache.hadoop.ozone.snapshot.CancelSnapshotDiffResponse;
@@ -773,6 +774,12 @@ public class ClientProtocolStub implements ClientProtocol {
 
   @Override
   public void createRaftGroups(List<UUID> raftGroupIds, boolean purgeExistingRaftGroups) throws IOException {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @Override
+  public RefreshBucketUsedBytesResponse refreshBucketUsedBytes(String volumeName, String bucketName)
+      throws IOException {
     throw new UnsupportedOperationException("Not supported yet.");
   }
 }

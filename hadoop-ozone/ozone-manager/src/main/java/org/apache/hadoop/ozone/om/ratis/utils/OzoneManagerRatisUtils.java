@@ -42,6 +42,7 @@ import org.apache.hadoop.ozone.om.request.bucket.OMBucketCreateRequest;
 import org.apache.hadoop.ozone.om.request.bucket.OMBucketDeleteRequest;
 import org.apache.hadoop.ozone.om.request.bucket.OMBucketSetOwnerRequest;
 import org.apache.hadoop.ozone.om.request.bucket.OMBucketSetPropertyRequest;
+import org.apache.hadoop.ozone.om.request.bucket.OMRefreshBucketUsedBytesRequest;
 import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketAddAclRequest;
 import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketRemoveAclRequest;
 import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketSetAclRequest;
@@ -244,6 +245,8 @@ public final class OzoneManagerRatisUtils {
       return new OMSnapshotSetPropertyRequest(omRequest);
     case CreateBucketRaftGroups:
       return new OMCreateRaftGroupsRequest(omRequest);
+    case RefreshBucketUsedBytes:
+      return new OMRefreshBucketUsedBytesRequest(omRequest);
     case DeleteOpenKeys:
       BucketLayout bktLayout = BucketLayout.DEFAULT;
       if (omRequest.getDeleteOpenKeysRequest().hasBucketLayout()) {

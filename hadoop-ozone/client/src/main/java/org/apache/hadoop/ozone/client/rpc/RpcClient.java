@@ -138,6 +138,7 @@ import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerProtocolClientSideTrans
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRoleInfo;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RefreshBucketUsedBytesResponse;
 import org.apache.hadoop.ozone.security.GDPRSymmetricKey;
 import org.apache.hadoop.ozone.security.OzoneTokenIdentifier;
 import org.apache.hadoop.ozone.security.acl.IAccessAuthorizer.ACLIdentityType;
@@ -2616,6 +2617,12 @@ public class RpcClient implements ClientProtocol {
   @Override
   public void moveOmToSafeMode() throws IOException {
     ozoneManagerClient.moveOmToSafeMode();
+  }
+
+  @Override
+  public RefreshBucketUsedBytesResponse refreshBucketUsedBytes(String volumeName, String bucketName)
+      throws IOException {
+    return ozoneManagerClient.refreshBucketUsedBytes(volumeName, bucketName);
   }
 
   private static ExecutorService createThreadPoolExecutor(

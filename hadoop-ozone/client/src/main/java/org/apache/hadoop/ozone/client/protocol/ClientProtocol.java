@@ -67,6 +67,7 @@ import org.apache.hadoop.ozone.om.protocol.S3Auth;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRoleInfo;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RefreshBucketUsedBytesResponse;
 import org.apache.hadoop.ozone.security.OzoneTokenIdentifier;
 import org.apache.hadoop.ozone.security.acl.OzoneObj;
 import org.apache.hadoop.ozone.snapshot.CancelSnapshotDiffResponse;
@@ -1205,4 +1206,5 @@ public interface ClientProtocol {
 
   void moveOmToSafeMode() throws IOException;
 
+  RefreshBucketUsedBytesResponse refreshBucketUsedBytes(String volumeName, String bucketName) throws IOException;
 }

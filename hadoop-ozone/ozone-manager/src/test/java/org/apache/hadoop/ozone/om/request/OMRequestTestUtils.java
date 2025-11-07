@@ -1172,6 +1172,20 @@ public final class OMRequestTestUtils {
         .setClientId(UUID.randomUUID().toString()).build();
   }
 
+  /**
+   * Create OMRequest for refreshing the bucket usedBytes.
+   * @param volumeName
+   * @param bucketName
+   */
+  public static OMRequest createRefreshBucketUsedBytesRequest(String volumeName, String bucketName) {
+    return OMRequest.newBuilder().setRefreshBucketUsedBytesRequest(
+              OzoneManagerProtocolProtos.RefreshBucketUsedBytesRequest.newBuilder()
+                      .setBucketName(bucketName)
+                      .setVolumeName(volumeName))
+              .setCmdType(Type.RefreshBucketUsedBytes)
+              .setClientId(UUID.randomUUID().toString()).build();
+  }
+
   public static OMRequest createTenantRequest(String tenantId,
       boolean forceCreationWhenVolumeExists) {
 

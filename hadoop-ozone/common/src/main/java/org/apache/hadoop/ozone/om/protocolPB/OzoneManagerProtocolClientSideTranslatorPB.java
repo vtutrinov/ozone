@@ -191,6 +191,8 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Recover
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RecoverTrashResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RefetchSecretKeyRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RefetchSecretKeyResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RefreshBucketUsedBytesRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RefreshBucketUsedBytesResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RemoveAclRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RemoveAclResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RenameKeyRequest;
@@ -2635,6 +2637,19 @@ public final class OzoneManagerProtocolClientSideTranslatorPB
   public void moveOmToSafeMode() throws IOException {
     OMRequest omRequest = createOMRequest(Type.MoveOmToSafeMode).build();
     handleError(submitRequest(omRequest));
+  }
+
+  @Override
+  public RefreshBucketUsedBytesResponse refreshBucketUsedBytes(String volumeName, String bucketName)
+      throws IOException {
+    RefreshBucketUsedBytesRequest refreshUsedBytesRequest = RefreshBucketUsedBytesRequest.newBuilder()
+              .setVolumeName(volumeName)
+              .setBucketName(bucketName)
+              .build();
+    OMRequest omRequest = createOMRequest(Type.RefreshBucketUsedBytes)
+                .setRefreshBucketUsedBytesRequest(refreshUsedBytesRequest)
+                .build();
+    return handleError(submitRequest(omRequest)).getRefreshBucketUsedBytesResponse();
   }
 
   private SafeMode toProtoBuf(SafeModeAction action) {
