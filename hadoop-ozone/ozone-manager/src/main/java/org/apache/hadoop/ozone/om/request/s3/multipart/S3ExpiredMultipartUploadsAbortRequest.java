@@ -32,6 +32,7 @@ import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.apache.hadoop.ozone.om.helpers.OmMultipartAbortInfo;
 import org.apache.hadoop.ozone.om.helpers.OmMultipartKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.OmMultipartUpload;
+import org.apache.hadoop.ozone.om.helpers.QuotaUtil;
 import org.apache.hadoop.ozone.om.lock.OMLockDetails;
 import org.apache.hadoop.ozone.om.request.key.OMKeyRequest;
 import org.apache.hadoop.ozone.om.request.util.OMMultipartUploadUtils;
@@ -283,12 +284,10 @@ public class S3ExpiredMultipartUploadsAbortRequest extends OMKeyRequest {
           // When abort uploaded key, we need to subtract the PartKey length
           // from the volume usedBytes.
           long quotaReleased = 0;
-          int keyFactor = omMultipartKeyInfo.getReplicationConfig()
-              .getRequiredNodes();
-          for (PartKeyInfo iterPartKeyInfo : omMultipartKeyInfo.
-              getPartKeyInfoMap()) {
-            quotaReleased +=
-                iterPartKeyInfo.getPartKeyInfo().getDataSize() * keyFactor;
+          for (PartKeyInfo iterPartKeyInfo : omMultipartKeyInfo.getPartKeyInfoMap()) {
+            quotaReleased += QuotaUtil.getReplicatedSize(
+                      iterPartKeyInfo.getPartKeyInfo().getDataSize(),
+                      omMultipartKeyInfo.getReplicationConfig());
           }
           omBucketInfo.incrUsedBytes(-quotaReleased);
 

@@ -35,6 +35,7 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos
     .Status;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
+import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.apache.hadoop.ozone.om.helpers.OmMultipartKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.WithObjectID;
 import org.apache.hadoop.ozone.om.request.util.OMMultipartUploadUtils;
@@ -311,6 +312,48 @@ public class TestS3ExpiredMultipartUploadsAbortRequest
   }
 
   /**
+   * Verify that aborting expired MPUs does not make bucket usedBytes negative.
+   */
+  @ParameterizedTest
+  @MethodSource("bucketLayouts")
+  public void testAbortExpiredMPUsDoesNotMakeUsedBytesNegative(
+          BucketLayout buckLayout) throws Exception {
+    this.bucketLayout = buckLayout;
+
+    final String volumeName = UUID.randomUUID().toString();
+    final String bucketName = UUID.randomUUID().toString();
+    final String keyName = UUID.randomUUID().toString();
+
+    OMRequestTestUtils.addVolumeAndBucketToDB(volumeName, bucketName,
+            omMetadataManager, getBucketLayout());
+
+    final int numMPUs = 1;
+    final int numParts = 3;
+
+    List<String> mpuKeys = createMPUs(volumeName, bucketName, keyName,
+            numMPUs, numParts, getBucketLayout());
+
+    String bucketKey =
+            omMetadataManager.getBucketKey(volumeName, bucketName);
+    OmBucketInfo bucketInfoBefore =
+            omMetadataManager.getBucketTable().get(bucketKey);
+    long usedBytesBefore = bucketInfoBefore.getUsedBytes();
+
+    Assertions.assertTrue(usedBytesBefore > 0,
+            "Expected bucket usedBytes to be > 0 before aborting expired MPUs");
+
+    abortExpiredMPUsFromCache(volumeName, bucketName, mpuKeys);
+    OmBucketInfo bucketInfoAfter =
+            omMetadataManager.getBucketTable().get(bucketKey);
+    long usedBytesAfter = bucketInfoAfter.getUsedBytes();
+
+    Assertions.assertEquals(0L, usedBytesAfter,
+            "Bucket usedBytes should be 0 after aborting expired MPUs");
+    Assertions.assertTrue(usedBytesAfter >= 0,
+            "Bucket usedBytes must not be negative after aborting expired MPUs");
+  }
+
+  /**
    * Constructs a new {@link S3ExpiredMultipartUploadsAbortRequest} objects,
    * and calls its {@link S3ExpiredMultipartUploadsAbortRequest#preExecute}
    * method with {@code originalOMRequest}. It verifies that
@@ -481,7 +524,7 @@ public class TestS3ExpiredMultipartUploadsAbortRequest
         // Add key to open key table to be used in MPU commit processing
         OmKeyInfo omKeyInfo = OMRequestTestUtils.createOmKeyInfo(volume,
             bucket, keyName, HddsProtos.ReplicationType.RATIS,
-            HddsProtos.ReplicationFactor.ONE, parentID + j, parentID,
+            HddsProtos.ReplicationFactor.THREE, parentID + j, parentID,
             trxnLogIndex, Time.now(), true);
         String fileName = OzoneFSUtils.getFileName(keyName);
         OMRequestTestUtils.addFileToKeyTable(true, false,
@@ -563,7 +606,7 @@ public class TestS3ExpiredMultipartUploadsAbortRequest
         OMRequestTestUtils.addKeyToTable(
             true, true,
             volume, bucket, keyName, clientID, HddsProtos.ReplicationType.RATIS,
-            HddsProtos.ReplicationFactor.ONE, omMetadataManager);
+            HddsProtos.ReplicationFactor.THREE, omMetadataManager);
 
         OMClientResponse commitResponse =
             s3MultipartUploadCommitPartRequest.validateAndUpdateCache(
