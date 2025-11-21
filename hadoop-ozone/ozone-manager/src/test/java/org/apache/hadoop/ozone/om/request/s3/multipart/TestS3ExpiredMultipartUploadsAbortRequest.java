@@ -17,7 +17,7 @@
 
 package org.apache.hadoop.ozone.om.request.s3.multipart;
 
-import static org.apache.hadoop.hdds.protocol.proto.HddsProtos.ReplicationFactor.ONE;
+import static org.apache.hadoop.hdds.protocol.proto.HddsProtos.ReplicationFactor.THREE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -42,11 +42,13 @@ import org.apache.hadoop.hdds.utils.db.cache.CacheKey;
 import org.apache.hadoop.hdds.utils.db.cache.CacheValue;
 import org.apache.hadoop.ozone.om.OMMetrics;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
+import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyLocationInfoGroup;
 import org.apache.hadoop.ozone.om.helpers.OmMultipartKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.OmMultipartUpload;
 import org.apache.hadoop.ozone.om.helpers.OzoneFSUtils;
+import org.apache.hadoop.ozone.om.helpers.QuotaUtil;
 import org.apache.hadoop.ozone.om.request.OMRequestTestUtils;
 import org.apache.hadoop.ozone.om.request.util.OMMultipartUploadUtils;
 import org.apache.hadoop.ozone.om.response.OMClientResponse;
@@ -55,6 +57,7 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Expired
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ExpiredMultipartUploadsBucket;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.MultipartUploadsExpiredAbortRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.PartKeyInfo;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -310,6 +313,70 @@ public class TestS3ExpiredMultipartUploadsAbortRequest
   }
 
   /**
+   * Verify that aborting expired MPUs does not make bucket usedBytes negative.
+   */
+  @ParameterizedTest
+  @MethodSource("bucketLayouts")
+  public void testAbortExpiredMPUsDoesNotMakeUsedBytesNegative(
+          BucketLayout buckLayout) throws Exception {
+    this.bucketLayout = buckLayout;
+
+    final String volumeName = UUID.randomUUID().toString();
+    final String bucketName = UUID.randomUUID().toString();
+    final String keyName = UUID.randomUUID().toString();
+
+    OMRequestTestUtils.addVolumeAndBucketToDB(volumeName, bucketName,
+            omMetadataManager, getBucketLayout());
+
+    final int numMPUs = 1;
+    final int numParts = 3;
+
+    List<String> mpuKeys = createMPUs(volumeName, bucketName, keyName,
+            numMPUs, numParts, getBucketLayout());
+
+    String bucketKey =
+            omMetadataManager.getBucketKey(volumeName, bucketName);
+    // give the parts a size (the test helpers commit empty parts) and charge the bucket for them,
+    // as committing the parts would have done
+    final long partSize = 1000L;
+    long partsReplicatedSize = 0;
+    for (String mpuKey : mpuKeys) {
+      OmMultipartKeyInfo multipartKeyInfo = omMetadataManager.getMultipartInfoTable().get(mpuKey);
+      List<PartKeyInfo> parts = new ArrayList<>();
+      multipartKeyInfo.getPartKeyInfoMap().forEach(parts::add);
+      for (PartKeyInfo partKeyInfo : parts) {
+        multipartKeyInfo.addPartKeyInfo(partKeyInfo.toBuilder()
+            .setPartKeyInfo(partKeyInfo.getPartKeyInfo().toBuilder().setDataSize(partSize))
+            .build());
+        partsReplicatedSize += QuotaUtil.getReplicatedSize(partSize, multipartKeyInfo.getReplicationConfig());
+      }
+      omMetadataManager.getMultipartInfoTable().addCacheEntry(new CacheKey<>(mpuKey),
+          CacheValue.get(1L, multipartKeyInfo));
+    }
+    OmBucketInfo chargedBucketInfo = omMetadataManager.getBucketTable().get(bucketKey).toBuilder()
+        .setUsedBytes(partsReplicatedSize)
+        .build();
+    omMetadataManager.getBucketTable().addCacheEntry(new CacheKey<>(bucketKey),
+        CacheValue.get(1L, chargedBucketInfo));
+    OmBucketInfo bucketInfoBefore =
+            omMetadataManager.getBucketTable().get(bucketKey);
+    long usedBytesBefore = bucketInfoBefore.getUsedBytes();
+
+    assertTrue(usedBytesBefore > 0,
+            "Expected bucket usedBytes to be > 0 before aborting expired MPUs");
+
+    abortExpiredMPUsFromCache(volumeName, bucketName, mpuKeys);
+    OmBucketInfo bucketInfoAfter =
+            omMetadataManager.getBucketTable().get(bucketKey);
+    long usedBytesAfter = bucketInfoAfter.getUsedBytes();
+
+    assertEquals(0L, usedBytesAfter,
+            "Bucket usedBytes should be 0 after aborting expired MPUs");
+    assertTrue(usedBytesAfter >= 0,
+            "Bucket usedBytes must not be negative after aborting expired MPUs");
+  }
+
+  /**
    * Constructs a new {@link S3ExpiredMultipartUploadsAbortRequest} objects,
    * and calls its {@link S3ExpiredMultipartUploadsAbortRequest#preExecute}
    * method with {@code originalOMRequest}. It verifies that
@@ -478,7 +545,7 @@ public class TestS3ExpiredMultipartUploadsAbortRequest
 
         // Add key to open key table to be used in MPU commit processing
         OmKeyInfo omKeyInfo = OMRequestTestUtils.createOmKeyInfo(volume, bucket, keyName,
-                RatisReplicationConfig.getInstance(ONE), new OmKeyLocationInfoGroup(0L, new ArrayList<>(), true))
+                RatisReplicationConfig.getInstance(THREE), new OmKeyLocationInfoGroup(0L, new ArrayList<>(), true))
             .setObjectID(parentID + j)
             .setParentObjectID(parentID)
             .setUpdateID(trxnLogIndex)
@@ -562,7 +629,7 @@ public class TestS3ExpiredMultipartUploadsAbortRequest
         // Add key to open key table to be used in MPU commit processing
         OMRequestTestUtils.addKeyToTable(
             true, true,
-            volume, bucket, keyName, clientID, RatisReplicationConfig.getInstance(ONE), omMetadataManager);
+            volume, bucket, keyName, clientID, RatisReplicationConfig.getInstance(THREE), omMetadataManager);
 
         OMClientResponse commitResponse =
             s3MultipartUploadCommitPartRequest.validateAndUpdateCache(
