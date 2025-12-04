@@ -88,6 +88,7 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Allocat
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BasicKeyInfo;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketArgs;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketInfo;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketRaftGroupAssignResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CancelDelegationTokenResponseProto;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CancelPrepareRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CancelPrepareResponse;
@@ -2692,13 +2693,34 @@ public final class OzoneManagerProtocolClientSideTranslatorPB
   public ListRateLimiterResponse listRateLimiter(String volumeName, String bucketName)
       throws IOException {
     ListRateLimiterRequest listRateLimiterRequest = ListRateLimiterRequest.newBuilder()
-            .setVolumeName(volumeName)
-            .setBucketName(bucketName)
-            .build();
+        .setVolumeName(volumeName)
+        .setBucketName(bucketName)
+        .build();
     OMRequest omRequest = createOMRequest(Type.ListRateLimiter)
-            .setListRateLimiterRequest(listRateLimiterRequest)
-            .build();
+        .setListRateLimiterRequest(listRateLimiterRequest)
+        .build();
     return handleError(submitRequest(omRequest)).getListRateLimiterResponse();
+  }
+
+  public BucketRaftGroupAssignResponse assignBucketRaftGroup(
+      OzoneManagerProtocolProtos.BucketRaftGroupAssignRequest request) throws IOException {
+    OzoneManagerProtocolProtos.OMRequest omRequest =
+        createOMRequest(OzoneManagerProtocolProtos.Type.BucketRaftGroupAssign)
+            .setBucketRaftGroupAssignRequest(request)
+            .build();
+    return handleError(submitRequest(omRequest)).getBucketRaftGroupAssignResponse();
+  }
+
+  @Override
+  public void acquireBucketRaftGroupAssignmentWriteLock() throws IOException {
+    OMRequest omRequest = createOMRequest(Type.AcquireBucketRaftGroupAssignmentWriteLock).build();
+    handleError(submitRequest(omRequest));
+  }
+
+  @Override
+  public void releaseBucketRaftGroupAssignmentWriteLock() throws IOException {
+    OMRequest omRequest = createOMRequest(Type.ReleaseBucketRaftGroupAssignmentWriteLock).build();
+    handleError(submitRequest(omRequest));
   }
 
   private SafeMode toProtoBuf(SafeModeAction action) {

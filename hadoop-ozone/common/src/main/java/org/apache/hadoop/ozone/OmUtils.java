@@ -333,6 +333,9 @@ public final class OmUtils {
     case CreateRateLimiter:
     case DeleteRateLimiter:
     case UnknownCommand:
+    case BucketRaftGroupAssign:
+    case AcquireBucketRaftGroupAssignmentWriteLock:
+    case ReleaseBucketRaftGroupAssignmentWriteLock:
       return false;
     case EchoRPC:
       return omRequest.getEchoRPCRequest().getReadOnly();

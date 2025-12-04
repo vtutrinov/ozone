@@ -669,7 +669,13 @@ public abstract class OMKeyRequest extends OMClientRequest {
     CacheValue<OmBucketInfo> value = omMetadataManager.getBucketTable()
         .getCacheValue(new CacheKey<>(bucketKey));
 
-    return value != null ? value.getCacheValue() : null;
+    OmBucketInfo omBucketInfo = value != null ? value.getCacheValue() : null;
+
+    if (omBucketInfo != null) {
+      omBucketInfo.setRaftGroup(getWriteRaftGroup().getUuid());
+    }
+
+    return omBucketInfo;
   }
 
   /**

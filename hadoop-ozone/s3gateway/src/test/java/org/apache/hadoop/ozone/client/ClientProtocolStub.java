@@ -53,6 +53,8 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteR
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RateLimiterType;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RefreshBucketUsedBytesResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketRaftGroupAssignRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketRaftGroupAssignResponse;
 import org.apache.hadoop.ozone.security.OzoneTokenIdentifier;
 import org.apache.hadoop.ozone.security.acl.OzoneObj;
 import org.apache.hadoop.ozone.snapshot.CancelSnapshotDiffResponse;
@@ -756,6 +758,21 @@ public class ClientProtocolStub implements ClientProtocol {
   public ListRateLimiterResponse listRateLimiter(String volumeName,
                                                  String bucketName)
           throws IOException {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @java.lang.Override
+  public BucketRaftGroupAssignResponse assignBucketRaftGroup(BucketRaftGroupAssignRequest request) throws IOException {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @java.lang.Override
+  public void acquireBucketRaftGroupAssignmentWriteLock() throws IOException {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @java.lang.Override
+  public void releaseBucketRaftGroupAssignmentWriteLock() throws IOException {
     throw new UnsupportedOperationException("Not supported yet.");
   }
 }

@@ -396,7 +396,7 @@ public class OzoneDelegationTokenSecretManager
     // following check does not allow ANY token auth. In optimistic, it should
     // allow known tokens in.
     try {
-      ozoneManager.checkOmLeaderStatus();
+      ozoneManager.checkLeaderStatus(identifier.getRaftGroupId());
     } catch (OMNotLeaderException | OMLeaderNotReadyException e) {
       InvalidToken wrappedStandby = new InvalidToken("IOException");
       wrappedStandby.initCause(e);

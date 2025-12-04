@@ -347,19 +347,16 @@ public final class OzoneManagerRatisServer {
 
   /**
    * Submit writing to bucket request to Ratis server.
-   * @param omRequest client request
+   *
+   * @param omRequest   client request
+   * @param raftGroupId
    * @return OMResponse - response returned to the client.
    * @throws ServiceException throw when applying Ratis request
    */
   public OMResponse submitBucketWriteRequest(
-          OMRequest omRequest, String volumeName, String bucketName
-  ) throws ServiceException {
-    RaftGroupId raftGroupIdToHandleRequestIn = omRequest.hasRaftGroupId() ?
-        // use the group id from the request and increment usage for it
-        ozoneManager.raftGroupName(volumeName, bucketName, omRequest.getRaftGroupId()) :
-        // select the group id based on usage, increment the usage and assign the group id for the bucket
-        ozoneManager.raftGroupName(volumeName, bucketName);
-    return commonSubmitRequest(omRequest, raftGroupIdToHandleRequestIn);
+          OMRequest omRequest,
+          RaftGroupId raftGroupId) throws ServiceException {
+    return commonSubmitRequest(omRequest, raftGroupId);
   }
 
   public OMResponse commonSubmitRequest(
@@ -403,7 +400,8 @@ public final class OzoneManagerRatisServer {
     LOG.trace("Submit write request to Ratis Server {} - {} - {} - {}",
             omRequest.getCmdType(), clientId, callId, bucketName
     );
-    return submitRequest(omRequest, clientId, callId, ozoneManager.raftGroupName(volumeName, bucketName));
+    return submitRequest(omRequest, clientId, callId, ozoneManager.getOmRaftGroupManager()
+        .getRaftGroupToHandleBucketWriteRequest(volumeName, bucketName));
   }
 
   public OMResponse submitRequest(

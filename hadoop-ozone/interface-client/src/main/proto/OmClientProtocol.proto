@@ -156,6 +156,9 @@ enum Type {
   CreateRateLimiter = 149;
   DeleteRateLimiter = 150;
   ListRateLimiter = 151;
+  BucketRaftGroupAssign = 152;
+  AcquireBucketRaftGroupAssignmentWriteLock = 153;
+  ReleaseBucketRaftGroupAssignmentWriteLock = 154;
 }
 
 enum SafeMode {
@@ -308,6 +311,7 @@ message OMRequest {
   optional CreateRateLimiterRequest         createRateLimiterRequest = 149;
   optional DeleteRateLimiterRequest         deleteRateLimiterRequest = 150;
   optional ListRateLimiterRequest           listRateLimiterRequest = 151;
+  optional BucketRaftGroupAssignRequest     bucketRaftGroupAssignRequest    = 152;
 }
 
 message OMResponse {
@@ -439,6 +443,7 @@ message OMResponse {
   optional CreateRateLimiterResponse         createRateLimiterResponse = 148;
   optional DeleteRateLimiterResponse         deleteRateLimiterResponse = 149;
   optional ListRateLimiterResponse           listRateLimiterResponse = 150;
+  optional BucketRaftGroupAssignResponse     bucketRaftGroupAssignResponse    = 151;
 }
 
 enum Status {
@@ -2257,6 +2262,16 @@ message ListRateLimiterRequest {
 
 message ListRateLimiterResponse {
   repeated RateLimiter rateLimiters = 1;
+}
+
+message BucketRaftGroupAssignRequest {
+  required string bucketPath = 2;
+  required hdds.UUID raftGroupId = 3;
+}
+
+message BucketRaftGroupAssignResponse {
+  required string bucketPath = 1;
+  required hdds.UUID raftGroupId = 3;
 }
 
 /**

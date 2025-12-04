@@ -199,6 +199,7 @@ public class BucketStateMachine extends BaseStateMachine {
           // So, to avoid these kind of issue, we should terminate OM here.
           if (omResponse.getStatus() == INTERNAL_ERROR) {
             terminate(omResponse, OMException.ResultCodes.INTERNAL_ERROR);
+            terminate(omResponse, OMException.ResultCodes.INTERNAL_ERROR);
           } else if (omResponse.getStatus() == METADATA_ERROR) {
             terminate(omResponse, OMException.ResultCodes.METADATA_ERROR);
           }
@@ -213,6 +214,8 @@ public class BucketStateMachine extends BaseStateMachine {
       return ratisFuture;
     } catch (Exception e) {
       return completeExceptionally(e);
+    } finally {
+      ozoneManager.getOmRaftGroupManager().incrRaftGroupUsageCounter(currentRaftGroupId);
     }
   }
 
@@ -228,7 +231,7 @@ public class BucketStateMachine extends BaseStateMachine {
     LOG.trace("Run command {} - {}", request.getCmdType(), trxLogIndex);
     try {
       final OMClientResponse omClientResponse = handler.handleWriteRequest(
-          request, trxLogIndex);
+          request, trxLogIndex, getGroupId());
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
       OzoneManagerProtocolProtos.OMResponse omResponse = omClientResponse.getOMResponse();
       if (omLockDetails != null) {

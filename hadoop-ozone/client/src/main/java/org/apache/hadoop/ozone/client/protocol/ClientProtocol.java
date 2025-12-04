@@ -66,6 +66,8 @@ import org.apache.hadoop.ozone.om.protocol.OzoneManagerProtocol;
 import org.apache.hadoop.ozone.om.protocol.S3Auth;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateRateLimiterResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteRateLimiterResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketRaftGroupAssignRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketRaftGroupAssignResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterResponse;
@@ -1220,4 +1222,11 @@ public interface ClientProtocol {
 
   ListRateLimiterResponse listRateLimiter(String volumeName, String bucketName)
       throws IOException;
+
+  BucketRaftGroupAssignResponse assignBucketRaftGroup(BucketRaftGroupAssignRequest request) throws IOException;
+
+  void acquireBucketRaftGroupAssignmentWriteLock() throws IOException;
+
+  void releaseBucketRaftGroupAssignmentWriteLock() throws IOException;
+
 }
