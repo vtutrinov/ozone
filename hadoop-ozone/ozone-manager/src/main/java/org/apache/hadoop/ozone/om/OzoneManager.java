@@ -869,10 +869,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return new InitBucketResult(true, bucketRaftGroup);
   }
 
-  public void createRaftGroupForBucket(String volumeName, String bucketName) {
-    createRaftGroupForBucket(raftGroupName(volumeName, bucketName));
-  }
-
   /** SDP (multi-raft): creates the bucket raft group on this OM. */
   @SuppressWarnings("checkstyle:EmptyBlock")
   public void createRaftGroupForBucket(RaftGroupId raftGroupId) {
@@ -1236,7 +1232,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     volumeManager = new VolumeManagerImpl(metadataManager);
 
     bucketManager = new BucketManagerImpl(this, metadataManager);
-    omRaftGroupManager = new OmRaftGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
+    omRaftGroupManager = new OmRaftGroupManager(this, configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
 
     Class<? extends S3SecretStoreProvider> storeProviderClass =
         configuration.getClass(
@@ -2749,14 +2745,12 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return omRaftGroupManager;
   }
 
-  /** @return the raft group of the bucket, or the OM raft group if multi-raft is off or no bucket is given. */
+  /**
+   * @return the raft group of the bucket (assigned through the main raft group on first use), or the OM raft group
+   *     if multi-raft is off or no bucket is given.
+   */
   public RaftGroupId raftGroupName(String volumeName, String bucketName) {
-    return omRaftGroupManager.raftGroupName(volumeName, bucketName);
-  }
-
-  /** SDP (multi-raft): the raft group given by the client (retry after OMNotLeaderException) for the bucket. */
-  public RaftGroupId raftGroupName(String volumeName, String bucketName, HddsProtos.UUID raftGroupId) {
-    return omRaftGroupManager.raftGroupName(volumeName, bucketName, raftGroupId);
+    return omRaftGroupManager.getRaftGroupToHandleBucketWriteRequest(volumeName, bucketName);
   }
 
   /** SDP (multi-raft): applied TransactionInfo of a bucket raft group. */
@@ -2855,6 +2849,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       }
       if (omRateLimiterMetrics != null) {
         OmRateLimiterMetrics.unRegister();
+      }
+      if (omRaftGroupManager != null) {
+        omRaftGroupManager.close();
       }
       // SDP (multi-raft): the ratis server has closed the state machines of all raft groups
       getStateMachines().clear();

@@ -21,20 +21,46 @@ package org.apache.hadoop.ozone.om;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.io.IOException;
+import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.apache.hadoop.hdds.HddsUtils;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
-import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.utils.db.cache.CacheKey;
 import org.apache.hadoop.hdds.utils.db.cache.CacheValue;
+import org.apache.hadoop.ozone.OmUtils;
+import org.apache.hadoop.ozone.om.helpers.OMNodeDetails;
 import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
+import org.apache.hadoop.ozone.om.protocolPB.GrpcOmTransport;
+import org.apache.hadoop.ozone.om.protocolPB.OmTransport;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketRaftGroupAssignRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type;
+import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.Time;
+import org.apache.ratis.protocol.ClientId;
 import org.apache.ratis.protocol.RaftGroupId;
+import org.apache.ratis.protocol.RaftPeerId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,15 +70,28 @@ import org.slf4j.LoggerFactory;
 public class OmRaftGroupManager {
   public static final Logger LOG = LoggerFactory.getLogger(OmRaftGroupManager.class);
 
+  private static final long ASSIGNMENT_TIMEOUT_MS = 30_000;
+
   private final int omRaftGroupCount;
   private final boolean multiRaftEnabled;
   private final String omServiceId;
   private final OMMetadataManager metadataManager;
+  private final OzoneManager ozoneManager;
 
   private final Map<String, UUID> bucketRaftGroups = new ConcurrentHashMap<>();
   private final Map<UUID, Integer> bucketsPerRaftGroupCounter = new ConcurrentHashMap<>();
 
+  // buckets whose raft group assignment is in progress on this OM; guarded by itself
+  private final Set<String> bucketToRaftGroupAssignmentAwaited = new HashSet<>();
+  // the cluster wide assignment lock, set and reset through the main raft group on every OM
+  private final AtomicBoolean bucketRaftGroupAssignmentInProgress = new AtomicBoolean(false);
+
+  // transports to the main raft group leader, by OM node id
+  private final Map<String, OmTransport> omTransportCache = new ConcurrentHashMap<>();
+  private final ExecutorService transportCreationExecutor;
+
   public OmRaftGroupManager(
+      OzoneManager ozoneManager,
       OzoneConfiguration configuration,
       boolean multiRaftEnabled,
       String omServiceId,
@@ -65,6 +104,24 @@ public class OmRaftGroupManager {
     this.multiRaftEnabled = multiRaftEnabled;
     this.omServiceId = omServiceId;
     this.metadataManager = metadataManager;
+    this.ozoneManager = ozoneManager;
+    // transports are created outside of the IPC handler threads
+    this.transportCreationExecutor = Executors.newCachedThreadPool(new ThreadFactoryBuilder()
+        .setNameFormat("OmTransport-Creator-%d")
+        .setDaemon(true)
+        .build());
+  }
+
+  public void close() {
+    for (OmTransport transport : omTransportCache.values()) {
+      try {
+        transport.close();
+      } catch (IOException e) {
+        LOG.warn("Failed to close OM transport", e);
+      }
+    }
+    omTransportCache.clear();
+    transportCreationExecutor.shutdownNow();
   }
 
   public void reset() {
@@ -89,42 +146,211 @@ public class OmRaftGroupManager {
     }
   }
 
-  public synchronized RaftGroupId raftGroupName(String volumeName, String bucketName, HddsProtos.UUID raftGroupId) {
-    UUID raftGroupUUID = new UUID(raftGroupId.getMostSigBits(), raftGroupId.getLeastSigBits());
-    RaftGroupId raftGroupIdToHandleRequest = RaftGroupId.valueOf(raftGroupUUID);
-    storeTable(volumeName, bucketName, raftGroupUUID);
-    return raftGroupIdToHandleRequest;
+  /**
+   * Applies a bucket to raft group assignment (BucketRaftGroupAssign, replicated through the main raft group).
+   * The first assignment of a bucket wins.
+   * @return the raft group of the bucket
+   */
+  public UUID defineRaftGroupForBucket(String bucketPath, UUID raftGroupUUID) {
+    UUID existing = bucketRaftGroups.putIfAbsent(bucketPath, raftGroupUUID);
+    if (existing != null) {
+      return existing;
+    }
+    incrRaftGroupUsageCounter(RaftGroupId.valueOf(raftGroupUUID));
+    return raftGroupUUID;
   }
 
-  public synchronized RaftGroupId raftGroupName(String volumeName, String bucketName) {
+  /**
+   * Counts the transactions applied by a bucket raft group: the least used group gets the next bucket.
+   */
+  public void incrRaftGroupUsageCounter(RaftGroupId raftGroupId) {
+    bucketsPerRaftGroupCounter.computeIfPresent(raftGroupId.getUuid(), (k, v) -> v + 1);
+  }
+
+  /**
+   * Returns the raft group handling the write requests of the bucket. A bucket without a group is assigned the least
+   * used one through the main raft group, so that all OMs agree on the assignment.
+   */
+  public RaftGroupId getRaftGroupToHandleBucketWriteRequest(String volumeName, String bucketName) {
     if (bucketName == null || !multiRaftEnabled) {
       return RaftGroupId.valueOf(toUuid(omServiceId));
     }
+    String bucketPath = metadataManager.getBucketKey(volumeName, bucketName);
+    UUID raftGroup = bucketRaftGroups.get(bucketPath);
+    return raftGroup != null ? RaftGroupId.valueOf(raftGroup) : assignRaftGroup(bucketPath);
+  }
 
-    String key = metadataManager.getBucketKey(volumeName, bucketName);
-    UUID storedUuid = bucketRaftGroups.get(key);
-    if (storedUuid != null && bucketsPerRaftGroupCounter.containsKey(storedUuid)) {
-      LOG.trace("Return stored uuid {}", storedUuid);
-      return RaftGroupId.valueOf(storedUuid);
+  private RaftGroupId assignRaftGroup(String bucketPath) {
+    synchronized (bucketToRaftGroupAssignmentAwaited) {
+      long deadline = Time.monotonicNow() + ASSIGNMENT_TIMEOUT_MS;
+      while (bucketToRaftGroupAssignmentAwaited.contains(bucketPath)) {
+        // another handler thread is assigning this bucket
+        long remaining = deadline - Time.monotonicNow();
+        if (remaining <= 0) {
+          throw new IllegalStateException("Timeout waiting for raft group assignment for bucket " + bucketPath);
+        }
+        try {
+          bucketToRaftGroupAssignmentAwaited.wait(remaining);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new IllegalStateException(e);
+        }
+      }
+      UUID raftGroup = bucketRaftGroups.get(bucketPath);
+      if (raftGroup != null) {
+        return RaftGroupId.valueOf(raftGroup);
+      }
+      bucketToRaftGroupAssignmentAwaited.add(bucketPath);
     }
 
-    while (bucketsPerRaftGroupCounter.size() < omRaftGroupCount) {
+    try {
+      awaitBucketRaftGroupsInitialization();
+      acquireBucketRaftGroupAssignmentWriteLockByRaft();
       try {
-        LOG.info("Waiting for group initiating {}-{}. {}", bucketsPerRaftGroupCounter.size(), omRaftGroupCount,
-            bucketsPerRaftGroupCounter);
-        wait(1000);
-      } catch (InterruptedException e) {
-        throw new RuntimeException(e);
+        // the bucket may have been assigned by another OM while waiting for the lock
+        if (!bucketRaftGroups.containsKey(bucketPath)) {
+          UUID lessLoadedRaftGroup = selectLessLoadedRaftGroup();
+          LOG.info("Raft group {} selected to handle write requests to {}", lessLoadedRaftGroup, bucketPath);
+          assignRaftGroupToBucket(bucketPath, lessLoadedRaftGroup);
+        }
+      } finally {
+        releaseBucketRaftGroupAssignmentWriteLockByRaft();
+      }
+      UUID raftGroup = bucketRaftGroups.get(bucketPath);
+      if (raftGroup == null) {
+        throw new IllegalStateException("Raft group assignment for bucket " + bucketPath + " is not applied yet");
+      }
+      return RaftGroupId.valueOf(raftGroup);
+    } catch (IOException e) {
+      throw new IllegalStateException("Failed to assign a raft group to bucket " + bucketPath, e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException(e);
+    } finally {
+      synchronized (bucketToRaftGroupAssignmentAwaited) {
+        bucketToRaftGroupAssignmentAwaited.remove(bucketPath);
+        bucketToRaftGroupAssignmentAwaited.notifyAll();
       }
     }
-    UUID groupUuid = bucketsPerRaftGroupCounter.entrySet().stream()
-            .min(Comparator.comparingInt(Map.Entry::getValue))
-            .map(Map.Entry::getKey)
-            .get();
+  }
 
-    storeTable(volumeName, bucketName, groupUuid);
+  private void acquireBucketRaftGroupAssignmentWriteLockByRaft() throws IOException, InterruptedException {
+    long deadline = Time.monotonicNow() + ASSIGNMENT_TIMEOUT_MS;
+    while (!submitToMainGroupLeader(OMRequest.newBuilder()
+        .setCmdType(Type.AcquireBucketRaftGroupAssignmentWriteLock)
+        .setClientId(ClientId.randomId().toString())
+        .build()).getSuccess()) {
+      if (Time.monotonicNow() > deadline) {
+        throw new IOException("Timeout waiting for the bucket raft group assignment lock");
+      }
+      LOG.debug("Waiting for bucket raft group assignment write lock to be released");
+      Thread.sleep(100);
+    }
+  }
 
-    return RaftGroupId.valueOf(groupUuid);
+  private void releaseBucketRaftGroupAssignmentWriteLockByRaft() throws IOException {
+    submitToMainGroupLeader(OMRequest.newBuilder()
+        .setCmdType(Type.ReleaseBucketRaftGroupAssignmentWriteLock)
+        .setClientId(ClientId.randomId().toString())
+        .build());
+  }
+
+  /**
+   * Assigns the raft group to the bucket through the main raft group, so that all OMs agree on the mapping.
+   */
+  private void assignRaftGroupToBucket(String bucketPath, UUID raftGroupUUID) throws IOException {
+    submitToMainGroupLeader(OMRequest.newBuilder()
+        .setCmdType(Type.BucketRaftGroupAssign)
+        .setBucketRaftGroupAssignRequest(BucketRaftGroupAssignRequest.newBuilder()
+            .setBucketPath(bucketPath)
+            .setRaftGroupId(HddsUtils.toProtobuf(raftGroupUUID)))
+        .setClientId(ozoneManager.getOmRatisServer().getCurrentClientId().toString())
+        .build());
+  }
+
+  private OMResponse submitToMainGroupLeader(OMRequest request) throws IOException {
+    OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
+    RaftPeerId leaderPeerId = omRatisServer.getServer()
+        .getDivision(omRatisServer.getRaftGroupId()).getInfo().getLeaderId();
+    if (leaderPeerId == null) {
+      throw new IOException("The main OM raft group has no leader");
+    }
+    String omServiceIdOfCluster = OmUtils.getOzoneManagerServiceId(ozoneManager.getConfiguration());
+    OMNodeDetails leader = OmUtils.getAllOMHAAddresses(ozoneManager.getConfiguration(), omServiceIdOfCluster, true)
+        .stream()
+        .filter(omNodeDetails -> omNodeDetails.getNodeId().equals(leaderPeerId.toString()))
+        .findFirst()
+        .orElseThrow(() -> new IOException("Unknown main OM raft group leader " + leaderPeerId));
+    OMResponse response = getOrCreateOmTransport(leader.getNodeId()).submitRequest(request, leader.getNodeId());
+    if (response.getStatus() != OzoneManagerProtocolProtos.Status.OK) {
+      throw new IOException(request.getCmdType() + " failed with " + response.getStatus() + ": "
+          + response.getMessage());
+    }
+    return response;
+  }
+
+  private OmTransport getOrCreateOmTransport(String omNodeId) throws IOException {
+    OmTransport transport = omTransportCache.get(omNodeId);
+    if (transport != null) {
+      return transport;
+    }
+    synchronized (omTransportCache) {
+      transport = omTransportCache.get(omNodeId);
+      if (transport != null) {
+        return transport;
+      }
+      CompletableFuture<OmTransport> futureTransport = CompletableFuture.supplyAsync(() -> {
+        try {
+          return UserGroupInformation.getLoginUser().doAs((PrivilegedExceptionAction<OmTransport>) () -> {
+            if (ozoneManager.getCertificateClient() != null) {
+              GrpcOmTransport.setCaCerts(ozoneManager.getCertificateClient().getTrustChain());
+            }
+            return new GrpcOmTransport(ozoneManager.getConfiguration(), UserGroupInformation.getLoginUser(),
+                omServiceId);
+          });
+        } catch (IOException | InterruptedException e) {
+          throw new CompletionException(e);
+        }
+      }, transportCreationExecutor);
+      try {
+        transport = futureTransport.get(ASSIGNMENT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new IOException("Interrupted while creating OmTransport for " + omNodeId, e);
+      } catch (TimeoutException e) {
+        throw new IOException("Timeout while creating OmTransport for " + omNodeId, e);
+      } catch (ExecutionException e) {
+        throw new IOException("Failed to create OmTransport for " + omNodeId, e.getCause());
+      }
+      omTransportCache.put(omNodeId, transport);
+      return transport;
+    }
+  }
+
+  private void awaitBucketRaftGroupsInitialization() throws InterruptedException {
+    while (bucketsPerRaftGroupCounter.size() < omRaftGroupCount) {
+      LOG.info("Waiting for group initiating {}-{}. {}", bucketsPerRaftGroupCounter.size(), omRaftGroupCount,
+          bucketsPerRaftGroupCounter);
+      Thread.sleep(1000);
+    }
+  }
+
+  private UUID selectLessLoadedRaftGroup() {
+    return bucketsPerRaftGroupCounter.entrySet().stream()
+        .min(Comparator.comparingInt(Map.Entry::getValue))
+        .map(Map.Entry::getKey)
+        .get();
+  }
+
+  /** Applied through the main raft group (AcquireBucketRaftGroupAssignmentWriteLock). */
+  public boolean acquireBucketRaftGroupAssignmentWriteLock() {
+    return bucketRaftGroupAssignmentInProgress.compareAndSet(false, true);
+  }
+
+  /** Applied through the main raft group (ReleaseBucketRaftGroupAssignmentWriteLock). */
+  public void releaseBucketRaftGroupAssignmentWriteLock() {
+    LOG.info("Bucket raft group assignment write lock released");
+    bucketRaftGroupAssignmentInProgress.set(false);
   }
 
   public Map<String, UUID> getBucketRaftGroups() {
@@ -144,29 +370,6 @@ public class OmRaftGroupManager {
       result.add(groupId);
     }
     return result;
-  }
-
-  private void storeTable(String volumeName, String bucketName, UUID groupId) {
-    String key = metadataManager.getBucketKey(volumeName, bucketName);
-    try {
-      // OmBucketInfo is immutable and the bucket table is fully cached: update both the cache and the DB,
-      // otherwise reads (served from the cache) and later double-buffer flushes would not see the group.
-      OmBucketInfo omBucketInfo = metadataManager.getBucketTable().get(key);
-      if (omBucketInfo == null) {
-        // the request fails later with BUCKET_NOT_FOUND
-        LOG.debug("Bucket {} not found, raft group {} is not persisted", key, groupId);
-        return;
-      }
-      bucketRaftGroups.put(key, groupId);
-      bucketsPerRaftGroupCounter.compute(groupId, (k, v) -> v == null ? 1 : v + 1);
-      OmBucketInfo updated = omBucketInfo.toBuilder().setRaftGroup(groupId).build();
-      metadataManager.getBucketTable().addCacheEntry(new CacheKey<>(key),
-          CacheValue.get(updated.getUpdateID(), updated));
-      metadataManager.getBucketTable().put(key, updated);
-    } catch (IOException e) {
-      LOG.error("Couldn't find bucket v={}, b={}", volumeName, bucketName, e);
-      throw new RuntimeException(e);
-    }
   }
 
   public static UUID toUuid(String groupId) {

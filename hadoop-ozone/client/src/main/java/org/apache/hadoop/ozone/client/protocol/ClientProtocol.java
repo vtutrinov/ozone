@@ -65,6 +65,8 @@ import org.apache.hadoop.ozone.om.helpers.TenantUserInfoValue;
 import org.apache.hadoop.ozone.om.helpers.TenantUserList;
 import org.apache.hadoop.ozone.om.protocol.OzoneManagerProtocol;
 import org.apache.hadoop.ozone.om.protocol.S3Auth;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketRaftGroupAssignRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketRaftGroupAssignResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateRateLimiterResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteRateLimiterResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
@@ -260,7 +262,6 @@ public interface ClientProtocol {
   void createBucket(String volumeName, String bucketName,
                     BucketArgs bucketArgs)
       throws IOException;
-
 
   /**
    * Enables or disables Bucket Versioning.
@@ -1039,7 +1040,6 @@ public interface ClientProtocol {
       String keyName, long size, ReplicationType type, ReplicationFactor factor,
       boolean overWrite, boolean recursive) throws IOException;
 
-
   /**
    * Creates an output stream for writing to a file.
    *
@@ -1068,7 +1068,6 @@ public interface ClientProtocol {
   OzoneDataStreamOutput createStreamFile(String volumeName, String bucketName,
       String keyName, long size, ReplicationConfig replicationConfig,
       boolean overWrite, boolean recursive) throws IOException;
-
 
   /**
    * List the status for a file or a directory and its contents.
@@ -1489,7 +1488,6 @@ public interface ClientProtocol {
   void putObjectTagging(String volumeName, String bucketName, String keyName,
                         Map<String, String> tags) throws IOException;
 
-
   /**
    * Removes all the tags from the specified key.
    * @param volumeName Volume name.
@@ -1517,4 +1515,11 @@ public interface ClientProtocol {
 
   ListRateLimiterResponse listRateLimiter(String volumeName, String bucketName)
       throws IOException;
+
+  BucketRaftGroupAssignResponse assignBucketRaftGroup(BucketRaftGroupAssignRequest request) throws IOException;
+
+  void acquireBucketRaftGroupAssignmentWriteLock() throws IOException;
+
+  void releaseBucketRaftGroupAssignmentWriteLock() throws IOException;
+
 }

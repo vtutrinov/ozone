@@ -169,6 +169,11 @@ enum Type {
     CreateRateLimiter = 1006;
     DeleteRateLimiter = 1007;
     ListRateLimiter = 1008;
+    // SDP (SDPOZN-1979): bucket to raft group assignment through the main OM raft group
+    BucketRaftGroupAssign = 1009;
+    // 1010 is OMRequest.raftGroupId, kept free here so that Type N matches OMRequest/OMResponse field N
+    AcquireBucketRaftGroupAssignmentWriteLock = 1011;
+    ReleaseBucketRaftGroupAssignmentWriteLock = 1012;
 }
 
 // SDP rate limiters (SDPOZN-1965)
@@ -341,6 +346,7 @@ message OMRequest {
     optional CreateRateLimiterRequest createRateLimiterRequest = 1006;
     optional DeleteRateLimiterRequest deleteRateLimiterRequest = 1007;
     optional ListRateLimiterRequest listRateLimiterRequest = 1008;
+    optional BucketRaftGroupAssignRequest bucketRaftGroupAssignRequest = 1009;
 }
 
 message OMResponse {
@@ -487,6 +493,7 @@ message OMResponse {
     optional CreateRateLimiterResponse createRateLimiterResponse = 1006;
     optional DeleteRateLimiterResponse deleteRateLimiterResponse = 1007;
     optional ListRateLimiterResponse listRateLimiterResponse = 1008;
+    optional BucketRaftGroupAssignResponse bucketRaftGroupAssignResponse = 1009;
 }
 
 enum Status {
@@ -2617,4 +2624,15 @@ message ListRateLimiterRequest {
 
 message ListRateLimiterResponse {
   repeated RateLimiter rateLimiters = 1;
+}
+
+// SDP (SDPOZN-1979)
+message BucketRaftGroupAssignRequest {
+  required string bucketPath = 2;
+  required hadoop.hdds.UUID raftGroupId = 3;
+}
+
+message BucketRaftGroupAssignResponse {
+  required string bucketPath = 1;
+  required hadoop.hdds.UUID raftGroupId = 3;
 }

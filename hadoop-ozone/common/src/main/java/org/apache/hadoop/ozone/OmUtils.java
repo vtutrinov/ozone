@@ -333,6 +333,9 @@ public final class OmUtils {
     case CreateRateLimiter:
     case DeleteRateLimiter:
     case UnknownCommand:
+    case BucketRaftGroupAssign:
+    case AcquireBucketRaftGroupAssignmentWriteLock:
+    case ReleaseBucketRaftGroupAssignmentWriteLock:
       return false;
     case EchoRPC:
       return omRequest.getEchoRPCRequest().getReadOnly();
@@ -454,6 +457,9 @@ public final class OmUtils {
     case BucketRaftGroupsStateChanged:
     case MoveOmToSafeMode:
     case GetRaftGroupHealthState: // answered by the leader of the raft group
+    case BucketRaftGroupAssign: // SDPOZN-1979
+    case AcquireBucketRaftGroupAssignmentWriteLock:
+    case ReleaseBucketRaftGroupAssignmentWriteLock:
     // SDP (SDPOZN-1965)
     case CreateRateLimiter:
     case DeleteRateLimiter:

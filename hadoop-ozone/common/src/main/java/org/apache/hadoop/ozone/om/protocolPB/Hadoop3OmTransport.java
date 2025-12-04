@@ -150,7 +150,6 @@ public class Hadoop3OmTransport implements OmTransport {
     }
   }
 
-
   /**
    * SDP (multi-raft): creates a retry proxy with the given invocation handler.
    */

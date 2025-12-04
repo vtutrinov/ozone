@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.hadoop.ozone.om.ratis;
 
 import static org.apache.hadoop.ozone.OzoneConsts.TRANSACTION_INFO_KEY;
@@ -23,10 +22,12 @@ import static org.apache.hadoop.ozone.OzoneConsts.TRANSACTION_INFO_KEY;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Collection;
+import java.util.concurrent.CompletableFuture;
 import org.apache.hadoop.hdds.tracing.TracingUtil;
 import org.apache.hadoop.hdds.utils.TransactionInfo;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.ratis.proto.RaftProtos;
+import org.apache.ratis.protocol.Message;
 import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.protocol.RaftGroupMemberId;
 import org.apache.ratis.protocol.RaftPeerId;
@@ -110,6 +111,16 @@ public class BucketStateMachine extends OzoneManagerStateMachine {
   }
 
   /** Unlike the OM raft group, closing a bucket raft group does not shut down the OM. */
+  @Override
+  public CompletableFuture<Message> applyTransaction(TransactionContext trx) {
+    try {
+      return super.applyTransaction(trx);
+    } finally {
+      // SDPOZN-1979: the least used bucket raft group is assigned to the next bucket
+      getOzoneManager().getOmRaftGroupManager().incrRaftGroupUsageCounter(getGroupId());
+    }
+  }
+
   @Override
   public void close() {
     LOG.info("BucketStateMachine {} has shutdown.", getRaftGroupId());

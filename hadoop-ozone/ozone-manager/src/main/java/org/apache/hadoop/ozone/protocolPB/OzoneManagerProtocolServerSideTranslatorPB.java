@@ -55,6 +55,7 @@ import org.apache.hadoop.ozone.security.S3SecurityUtil;
 import org.apache.ratis.proto.RaftProtos.CommitInfoProto;
 import org.apache.ratis.proto.RaftProtos.FollowerInfoProto;
 import org.apache.ratis.proto.RaftProtos.ServerRpcProto;
+import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.protocol.RaftPeerId;
 import org.apache.ratis.server.DivisionInfo;
 import org.apache.ratis.server.RaftServer.Division;
@@ -175,6 +176,14 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
     }
   }
 
+  private RaftGroupId resolveMultiRaftGroup(OMRequest request) throws ServiceException {
+    try {
+      return ozoneManager.getOmExecutionFlow().resolveMultiRaftGroup(request);
+    } catch (IllegalStateException e) {
+      throw new ServiceException(e.getMessage(), e);
+    }
+  }
+
   private OMResponse internalProcessRequest(OMRequest request) throws ServiceException {
     boolean s3Auth = false;
 
@@ -185,7 +194,11 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
           s3Auth = true;
           // If request has S3Authentication, validate S3 credentials.
           // If current OM is leader and then proceed with the request.
-          S3SecurityUtil.validateS3Credential(request, ozoneManager);
+          // SDP (multi-raft, SDPOZN-1979): with multi-raft a bucket write is checked against the leader of the
+          // raft group of the bucket instead of the main OM raft group.
+          final RaftGroupId leaderGroupId = ozoneManager.isMultiRaftEnabled() && !OmUtils.isReadOnly(request)
+              ? resolveMultiRaftGroup(request) : null;
+          S3SecurityUtil.validateS3Credential(request, ozoneManager, leaderGroupId);
         } catch (IOException ex) {
           return createErrorResponse(request, ex);
         }

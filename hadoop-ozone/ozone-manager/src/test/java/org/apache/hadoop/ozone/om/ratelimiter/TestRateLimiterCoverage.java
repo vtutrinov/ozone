@@ -34,7 +34,7 @@ public class TestRateLimiterCoverage {
   @Test
   public void testOmRequestTypeCountGuard() {
     final int currentSupportedCount = RATE_LIMITED_READ_CMDS.size() + RATE_LIMITED_WRITE_CMDS.size();
-    final int notSupportedCount = 62;
+    final int notSupportedCount = 65;
     final int expectedTypeCount = OzoneManagerProtocolProtos.Type.values().length - notSupportedCount;
 
     assertEquals(expectedTypeCount,

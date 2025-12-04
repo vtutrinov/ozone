@@ -33,6 +33,14 @@ public interface OmTransport {
   OMResponse submitRequest(OMRequest payload) throws IOException;
 
   /**
+   * SDP (multi-raft): submits the request to the given OM node; transports that cannot address a node submit it as
+   * {@link #submitRequest(OMRequest)} does.
+   */
+  default OMResponse submitRequest(OMRequest payload, String omNodeId) throws IOException {
+    return submitRequest(payload);
+  }
+
+  /**
    * Return the addresses of the Ozone Managers, used for delegation token.
    */
   Text getDelegationTokenService();

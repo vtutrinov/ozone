@@ -364,7 +364,12 @@ public class OzoneDelegationTokenSecretManager
     // following check does not allow ANY token auth. In optimistic, it should
     // allow known tokens in.
     try {
-      ozoneManager.checkLeaderStatus();
+      // SDP (multi-raft): the leader of the raft group serving the request
+      if (identifier.getRaftGroupId() != null) {
+        ozoneManager.checkLeaderStatus(identifier.getRaftGroupId());
+      } else {
+        ozoneManager.checkLeaderStatus();
+      }
     } catch (OMNotLeaderException | OMLeaderNotReadyException e) {
       InvalidToken wrappedStandby = new InvalidToken("IOException");
       wrappedStandby.initCause(e);

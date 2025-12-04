@@ -67,6 +67,28 @@ public class OMExecutionFlow {
     return submitExecutionToRatis(omRequest, isWrite);
   }
 
+  private static String getMultiRaftBucketName(OMRequest request) {
+    final String bucketName = OzoneMultiRaftUtils.getBucketName(request);
+    return bucketName == null || bucketName.isEmpty() ? null : bucketName;
+  }
+
+  /**
+   * SDP (multi-raft): the raft group a write request is submitted to: the group given by the client (retry after
+   * OMNotLeaderException), the raft group of the bucket (assigned on first use, SDPOZN-1979), or the main OM group
+   * for requests without a bucket. The group is derived from the raw request, so that the leader status can be
+   * checked before the request is created: creating it reads the bucket from the local DB, which may lag on a follower.
+   */
+  public RaftGroupId resolveMultiRaftGroup(OMRequest request) {
+    if (request.hasRaftGroupId()) {
+      final HddsProtos.UUID uuid = request.getRaftGroupId();
+      return RaftGroupId.valueOf(new UUID(uuid.getMostSigBits(), uuid.getLeastSigBits()));
+    }
+    final String bucketName = getMultiRaftBucketName(request);
+    return bucketName != null
+        ? ozoneManager.raftGroupName(OzoneMultiRaftUtils.getVolumeName(request), bucketName)
+        : ozoneManager.getOmRatisServer().getRaftGroupId();
+  }
+
   /**
    * SDP (multi-raft): write request handling when bucket raft groups are enabled.
    * Bucket write requests go to the raft group of the bucket, others to the OM raft group;
@@ -78,17 +100,13 @@ public class OMExecutionFlow {
     final OzoneManagerRatisServer ratisServer = ozoneManager.getOmRatisServer();
     // The target raft group is derived from the raw request, so that the leader status is checked before the
     // request is created: creating it reads the bucket from the local DB, which may lag on a follower.
-    final String rawBucketName = OzoneMultiRaftUtils.getBucketName(request);
-    final String bucketName = rawBucketName == null || rawBucketName.isEmpty() ? null : rawBucketName;
-    final String volumeName = bucketName == null ? null : OzoneMultiRaftUtils.getVolumeName(request);
+    final String bucketName = getMultiRaftBucketName(request);
     final RaftGroupId raftGroupId;
-    if (request.hasRaftGroupId()) {
-      // the client retries in the raft group reported by OMNotLeaderException
-      final HddsProtos.UUID uuid = request.getRaftGroupId();
-      raftGroupId = RaftGroupId.valueOf(new UUID(uuid.getMostSigBits(), uuid.getLeastSigBits()));
-    } else {
-      raftGroupId = bucketName != null
-          ? ozoneManager.raftGroupName(volumeName, bucketName) : ratisServer.getRaftGroupId();
+    try {
+      raftGroupId = resolveMultiRaftGroup(request);
+    } catch (IllegalStateException e) {
+      // the raft group assignment of the bucket failed (SDPOZN-1979)
+      throw new ServiceException(e.getMessage(), e);
     }
     LOG.trace("Continue internal processing request {}, bucket {}, group {}",
         request.getCmdType(), bucketName, raftGroupId);
@@ -135,7 +153,7 @@ public class OMExecutionFlow {
       }
     }
     final OMResponse response = bucketName != null
-        ? ratisServer.submitBucketWriteRequest(requestToSubmit, volumeName, bucketName)
+        ? ratisServer.submitBucketWriteRequest(requestToSubmit, raftGroupId)
         : ratisServer.submitRequest(requestToSubmit, true);
     if (!response.getSuccess()) {
       omClientRequest.handleRequestFailure(ozoneManager);
