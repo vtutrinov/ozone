@@ -43,6 +43,7 @@ import org.apache.hadoop.ozone.om.helpers.OmVolumeArgs;
 import org.apache.hadoop.ozone.om.helpers.RepeatedOmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
+import org.apache.hadoop.ozone.om.helpers.RateLimiterInfo;
 import org.apache.hadoop.ozone.om.lock.IOzoneManagerLock;
 import org.apache.hadoop.hdds.utils.TransactionInfo;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ExpiredMultipartUploadsBucket;
@@ -458,6 +459,11 @@ public interface OMMetadataManager extends DBStoreHAManager {
    */
   Table<String, Long> getMultiRaftInfoTable();
 
+  /**
+   * Get table for rate limiters info.
+   * @return Table.
+   */
+  Table<String, RateLimiterInfo> getRateLimiterInfoTable();
 
   /**
    * Return table mapped to the specified table name.

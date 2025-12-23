@@ -135,9 +135,13 @@ import org.apache.hadoop.ozone.om.protocolPB.OmTransport;
 import org.apache.hadoop.ozone.om.protocolPB.OmTransportFactory;
 import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerClientProtocol;
 import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerProtocolClientSideTranslatorPB;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateRateLimiterResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteRateLimiterResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRoleInfo;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RateLimiterType;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RefreshBucketUsedBytesResponse;
 import org.apache.hadoop.ozone.security.GDPRSymmetricKey;
 import org.apache.hadoop.ozone.security.OzoneTokenIdentifier;
@@ -2623,6 +2627,25 @@ public class RpcClient implements ClientProtocol {
   public RefreshBucketUsedBytesResponse refreshBucketUsedBytes(String volumeName, String bucketName)
       throws IOException {
     return ozoneManagerClient.refreshBucketUsedBytes(volumeName, bucketName);
+  }
+
+  @Override
+  public CreateRateLimiterResponse createRateLimiter(String volumeName,
+                                                     String bucketName, int rps,
+                                                     RateLimiterType type) throws IOException {
+    return ozoneManagerClient.createRateLimiter(volumeName, bucketName, rps, type);
+  }
+
+  @Override
+  public DeleteRateLimiterResponse deleteRateLimiter(String volumeName, String bucketName, RateLimiterType type)
+      throws IOException {
+    return ozoneManagerClient.deleteRateLimiter(volumeName, bucketName, type);
+  }
+
+  @Override
+  public ListRateLimiterResponse listRateLimiter(String volumeName, String bucketName)
+       throws IOException {
+    return ozoneManagerClient.listRateLimiter(volumeName, bucketName);
   }
 
   private static ExecutorService createThreadPoolExecutor(

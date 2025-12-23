@@ -275,6 +275,7 @@ public final class OmUtils {
     case GetSnapshotInfo:
     case GetContentSummary:
     case GetRaftGroupHealthState:
+    case ListRateLimiter:
       return true;
     case CreateVolume:
     case SetVolumeProperty:
@@ -329,6 +330,8 @@ public final class OmUtils {
     case AbortExpiredMultiPartUploads:
     case SetSnapshotProperty:
     case RefreshBucketUsedBytes:
+    case CreateRateLimiter:
+    case DeleteRateLimiter:
     case UnknownCommand:
       return false;
     case EchoRPC:

@@ -143,6 +143,7 @@ import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
 import org.apache.hadoop.ozone.om.helpers.TenantStateList;
 import org.apache.hadoop.ozone.om.helpers.TenantUserInfoValue;
 import org.apache.hadoop.ozone.om.helpers.TenantUserList;
+import org.apache.hadoop.ozone.om.helpers.RateLimiterInfo;
 import org.apache.hadoop.ozone.om.lock.OMLockDetails;
 import org.apache.hadoop.ozone.om.lock.OzoneLockProvider;
 import org.apache.hadoop.ozone.om.multiraft.SafeModeManager;
@@ -354,6 +355,9 @@ import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.S3Authentication;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ServicePort;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.TenantState;
+import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterRequest;
+import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterResponse;
+import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RateLimiter;
 import static org.apache.hadoop.security.UserGroupInformation.getCurrentUser;
 import static org.apache.hadoop.util.ExitUtil.terminate;
 import static org.apache.ozone.graph.PrintableGraph.GraphType.FILE_NAME;
@@ -401,6 +405,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private BucketManager bucketManager;
   private KeyManager keyManager;
   private PrefixManagerImpl prefixManager;
+  private RateLimiterManager rateLimiterManager;
   private final UpgradeFinalizer<OzoneManager> upgradeFinalizer;
 
   /**
@@ -787,6 +792,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     omSafeModeManager = new SafeModeManager(configuration);
     bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
 
+    rateLimiterManager = new RateLimiterManager(metadataManager);
+
     if (this.getOmRatisServer() != null) {
       this.getOmRatisServer().startSchedulingLeaderReconfiguration();
     }
@@ -1084,6 +1091,44 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
           .build());
     }
     return responseBuilder.build();
+  }
+
+  public ListRateLimiterResponse listRateLimiter(ListRateLimiterRequest req) throws IOException {
+    final String filterVolume = req.getVolumeName();
+    final String filterBucket = req.getBucketName();
+
+    Table<String, RateLimiterInfo> table =
+            metadataManager.getRateLimiterInfoTable();
+
+    ListRateLimiterResponse.Builder respBuilder =
+            ListRateLimiterResponse.newBuilder();
+
+    if (table == null) {
+      return respBuilder.build();
+    }
+
+    try (TableIterator<String,
+            ? extends Table.KeyValue<String, RateLimiterInfo>> iter =
+                 table.iterator()) {
+
+      while (iter.hasNext()) {
+        Table.KeyValue<String, RateLimiterInfo> kv = iter.next();
+        RateLimiterInfo info = kv.getValue();
+
+        if (!filterVolume.isEmpty() && !filterVolume.equals(info.getVolumeName())) {
+          continue;
+        }
+
+        if (!filterBucket.isEmpty() && !filterBucket.equals(info.getBucketName())) {
+          continue;
+        }
+
+        RateLimiter rlProto = info.toProtobuf();
+        respBuilder.addRateLimiters(rlProto);
+      }
+    }
+
+    return respBuilder.build();
   }
 
 
@@ -1738,6 +1783,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   @VisibleForTesting
   public KeyManager getKeyManager() {
     return keyManager;
+  }
+
+  @VisibleForTesting
+  public RateLimiterManager getRateLimiterManager() {
+    return rateLimiterManager;
   }
 
   @VisibleForTesting

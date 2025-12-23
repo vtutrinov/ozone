@@ -44,6 +44,8 @@ public enum OMAction implements AuditAction {
   UPDATE_KEY,
   PURGE_KEYS,
   DELETE_KEYS,
+  CREATE_RATELIMITER,
+  DELETE_RATELIMITER,
 
   // READ Actions
   CHECK_VOLUME_ACCESS,

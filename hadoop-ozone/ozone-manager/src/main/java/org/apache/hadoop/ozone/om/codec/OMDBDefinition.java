@@ -38,6 +38,7 @@ import org.apache.hadoop.ozone.om.helpers.OmPrefixInfo;
 import org.apache.hadoop.ozone.om.helpers.S3SecretValue;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
 import org.apache.hadoop.ozone.om.helpers.OmDirectoryInfo;
+import org.apache.hadoop.ozone.om.helpers.RateLimiterInfo;
 
 import org.apache.hadoop.hdds.utils.TransactionInfo;
 import org.apache.hadoop.ozone.om.service.SnapshotDeletingService;
@@ -200,6 +201,15 @@ public class OMDBDefinition extends DBDefinition.WithMap {
                   Long.class,
                   LongCodec.get());
 
+  public static final DBColumnFamilyDefinition<String, RateLimiterInfo>
+          RATE_LIMITER_INFO_TABLE =
+          new DBColumnFamilyDefinition<>(
+                  OmMetadataManagerImpl.RATE_LIMITER_INFO_TABLE,
+                  String.class,
+                  StringCodec.get(),
+                  RateLimiterInfo.class,
+                  RateLimiterInfo.getCodec());
+
   // Tables for multi-tenancy
 
   public static final DBColumnFamilyDefinition<String, OmDBAccessIdInfo>
@@ -292,7 +302,9 @@ public class OMDBDefinition extends DBDefinition.WithMap {
           TRANSACTION_INFO_TABLE,
           USER_TABLE,
           VOLUME_TABLE,
-          MULTI_RAFT_INFO_TABLE);
+          MULTI_RAFT_INFO_TABLE,
+          RATE_LIMITER_INFO_TABLE
+          );
 
   public OMDBDefinition() {
     super(COLUMN_FAMILIES);

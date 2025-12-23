@@ -81,6 +81,7 @@ import org.apache.hadoop.ozone.om.helpers.S3SecretValue;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
 import org.apache.hadoop.ozone.om.helpers.WithMetadata;
+import org.apache.hadoop.ozone.om.helpers.RateLimiterInfo;
 import org.apache.hadoop.ozone.om.lock.IOzoneManagerLock;
 import org.apache.hadoop.ozone.om.lock.OmReadOnlyLock;
 import org.apache.hadoop.ozone.om.lock.OzoneManagerLock;
@@ -238,6 +239,8 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
       "compactionLogTable";
   public static final String MULTI_RAFT_INFO_TABLE =
       "multiRaftInfoTable";
+  public static final String RATE_LIMITER_INFO_TABLE =
+      "rateLimiterInfoTable";
   static final String[] ALL_TABLES = new String[] {
       USER_TABLE,
       VOLUME_TABLE,
@@ -261,7 +264,8 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
       SNAPSHOT_INFO_TABLE,
       SNAPSHOT_RENAMED_TABLE,
       COMPACTION_LOG_TABLE,
-      MULTI_RAFT_INFO_TABLE
+      MULTI_RAFT_INFO_TABLE,
+      RATE_LIMITER_INFO_TABLE
   };
 
   private DBStore store;
@@ -297,6 +301,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   private boolean ignorePipelineinKey;
   private Table deletedDirTable;
   private Table<String, Long> multiRaftInfoTable;
+  private Table<String, RateLimiterInfo> rateLimiterInfoTable;
 
   // Table-level locks that protects table read/write access. Note:
   // Don't use this lock for tables other than deletedTable and deletedDirTable.
@@ -634,6 +639,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
         .addTable(SNAPSHOT_RENAMED_TABLE)
         .addTable(COMPACTION_LOG_TABLE)
         .addTable(MULTI_RAFT_INFO_TABLE)
+        .addTable(RATE_LIMITER_INFO_TABLE)
         .addCodec(OzoneTokenIdentifier.class, TokenIdentifierCodec.get())
         .addCodec(OmKeyInfo.class, OmKeyInfo.getCodec(true))
         .addCodec(RepeatedOmKeyInfo.class, RepeatedOmKeyInfo.getCodec(true))
@@ -649,7 +655,8 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
         .addCodec(OmDBAccessIdInfo.class, OmDBAccessIdInfo.getCodec())
         .addCodec(OmDBUserPrincipalInfo.class, OmDBUserPrincipalInfo.getCodec())
         .addCodec(SnapshotInfo.class, SnapshotInfo.getCodec())
-        .addCodec(CompactionLogEntry.class, CompactionLogEntry.getCodec());
+        .addCodec(CompactionLogEntry.class, CompactionLogEntry.getCodec())
+        .addCodec(RateLimiterInfo.class, RateLimiterInfo.getCodec());
   }
 
   /**
@@ -771,6 +778,11 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
         String.class, Long.class);
     checkTableStatus(multiRaftInfoTable, MULTI_RAFT_INFO_TABLE,
         addCacheMetrics);
+
+    rateLimiterInfoTable = this.store.getTable(RATE_LIMITER_INFO_TABLE,
+         String.class, RateLimiterInfo.class);
+    checkTableStatus(rateLimiterInfoTable, RATE_LIMITER_INFO_TABLE,
+            addCacheMetrics);
   }
 
   /**
@@ -1957,6 +1969,11 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   @Override
   public Table<String, Long> getMultiRaftInfoTable() {
     return multiRaftInfoTable;
+  }
+
+  @Override
+  public Table<String, RateLimiterInfo> getRateLimiterInfoTable() {
+    return rateLimiterInfoTable;
   }
 
   /**

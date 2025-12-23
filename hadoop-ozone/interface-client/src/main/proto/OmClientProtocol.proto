@@ -153,6 +153,9 @@ enum Type {
   BucketRaftGroupsStateChanged = 146;
   MoveOmToSafeMode = 147;
   RefreshBucketUsedBytes = 148;
+  CreateRateLimiter = 149;
+  DeleteRateLimiter = 150;
+  ListRateLimiter = 151;
 }
 
 enum SafeMode {
@@ -160,6 +163,11 @@ enum SafeMode {
     LEAVE = 2;
     FORCE_EXIT = 3;
     GET = 4;
+}
+
+enum RateLimiterType {
+   READ = 1;
+   WRITE = 2;
 }
 
 message OMRequest {
@@ -297,6 +305,9 @@ message OMRequest {
   optional hadoop.hdds.UUID                 raftGroupId                    = 146; // Used for raft group that the request should be executed in
   optional BucketRaftGroupsStateChangedRequest bucketRaftGroupsStateChangedRequest = 147; // Used to notify OM about bucket raft groups state changes
   optional RefreshBucketUsedBytesRequest    refreshBucketUsedBytesRequest = 148;
+  optional CreateRateLimiterRequest         createRateLimiterRequest = 149;
+  optional DeleteRateLimiterRequest         deleteRateLimiterRequest = 150;
+  optional ListRateLimiterRequest           listRateLimiterRequest = 151;
 }
 
 message OMResponse {
@@ -425,6 +436,9 @@ message OMResponse {
   optional GetRaftGroupHealthStateResponse   getRaftGroupHealthStateResponse     = 145;
   optional BucketRaftGroupsStateChangedResponse bucketRaftGroupsStateChangedResponse = 146;
   optional RefreshBucketUsedBytesResponse    refreshBucketUsedBytesResponse = 147;
+  optional CreateRateLimiterResponse         createRateLimiterResponse = 148;
+  optional DeleteRateLimiterResponse         deleteRateLimiterResponse = 149;
+  optional ListRateLimiterResponse           listRateLimiterResponse = 150;
 }
 
 enum Status {
@@ -548,6 +562,9 @@ enum Status {
     INVALID_PATH = 93;
 
     TOO_MANY_BUCKETS = 94;
+    RATE_LIMITER_ALREADY_EXISTS = 95;
+    RATELIMITER_NOT_FOUND = 96;
+    RATE_LIMIT_EXCEEDED = 97;
 }
 
 /**
@@ -2204,6 +2221,42 @@ message RefreshBucketUsedBytesRequest {
 
 message RefreshBucketUsedBytesResponse {
   required uint64 usedBytes = 1;
+}
+
+message CreateRateLimiterRequest {
+  required string volumeName = 1;
+  required string bucketName = 2;
+  required int32 rps = 3;
+  required RateLimiterType type = 4;
+}
+
+message CreateRateLimiterResponse {
+  required RateLimiter rateLimiter = 1;
+}
+
+message RateLimiter {
+  required string volumeName = 1;
+  required string bucketName = 2;
+  required int32 rps = 3;
+  required RateLimiterType type = 4;
+}
+
+message DeleteRateLimiterRequest {
+  optional string volumeName = 1;
+  optional string bucketName = 2;
+  optional RateLimiterType type = 3;
+}
+
+message DeleteRateLimiterResponse {
+}
+
+message ListRateLimiterRequest {
+  required string volumeName = 1;
+  required string bucketName = 2;
+}
+
+message ListRateLimiterResponse {
+  repeated RateLimiter rateLimiters = 1;
 }
 
 /**

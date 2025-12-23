@@ -63,6 +63,8 @@ import org.apache.hadoop.ozone.om.request.key.acl.OMKeySetAclRequestWithFSO;
 import org.apache.hadoop.ozone.om.request.key.acl.prefix.OMPrefixAddAclRequest;
 import org.apache.hadoop.ozone.om.request.key.acl.prefix.OMPrefixRemoveAclRequest;
 import org.apache.hadoop.ozone.om.request.key.acl.prefix.OMPrefixSetAclRequest;
+import org.apache.hadoop.ozone.om.request.ratelimiter.CreateRateLimiterRequest;
+import org.apache.hadoop.ozone.om.request.ratelimiter.DeleteRateLimiterRequest;
 import org.apache.hadoop.ozone.om.request.s3.multipart.S3ExpiredMultipartUploadsAbortRequest;
 import org.apache.hadoop.ozone.om.request.s3.security.OMSetSecretRequest;
 import org.apache.hadoop.ozone.om.request.s3.security.S3GetSecretRequest;
@@ -350,6 +352,10 @@ public final class OzoneManagerRatisUtils {
       return new OMBucketRaftGroupsStateUpdateRequest(omRequest);
     case MoveOmToSafeMode:
       return new OMMoveToSafeModeRequest(omRequest);
+    case CreateRateLimiter:
+      return new CreateRateLimiterRequest(omRequest);
+    case DeleteRateLimiter:
+      return new DeleteRateLimiterRequest(omRequest);
     default:
       throw new OMException("Unrecognized write command type request "
           + cmdType, OMException.ResultCodes.INVALID_REQUEST);
