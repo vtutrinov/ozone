@@ -284,5 +284,8 @@ public class OMException extends IOException {
 
     // SDP extensions: the order must match OzoneManagerProtocolProtos.Status
     COMPRESSION_NOT_SUPPORTED,
+    RATELIMITER_ALREADY_EXISTS,
+    RATELIMITER_NOT_FOUND,
+    RATE_LIMIT_EXCEEDED,
   }
 }

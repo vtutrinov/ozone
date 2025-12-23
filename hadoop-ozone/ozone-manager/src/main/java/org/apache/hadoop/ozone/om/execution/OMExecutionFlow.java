@@ -26,10 +26,13 @@ import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.ozone.om.OMPerformanceMetrics;
 import org.apache.hadoop.ozone.om.OzoneManager;
+import org.apache.hadoop.ozone.om.RateLimiterManager;
 import org.apache.hadoop.ozone.om.helpers.OMAuditLogger;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
+import org.apache.hadoop.ozone.om.request.util.OmResponseUtil;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMResponse;
 import org.apache.hadoop.ozone.util.OzoneMultiRaftUtils;
@@ -100,6 +103,10 @@ public class OMExecutionFlow {
     if (cached != null) {
       return cached;
     }
+    final OMResponse rateLimited = checkWriteRateLimit(request);
+    if (rateLimited != null) {
+      return rateLimited;
+    }
 
     OMClientRequest omClientRequest = null;
     final OMRequest requestToSubmit;
@@ -141,6 +148,10 @@ public class OMExecutionFlow {
     OMClientRequest omClientRequest = null;
     final OMRequest requestToSubmit;
     if (isWrite) {
+      final OMResponse rateLimited = checkWriteRateLimit(request);
+      if (rateLimited != null) {
+        return rateLimited;
+      }
       try {
         omClientRequest = OzoneManagerRatisUtils.createClientRequest(request, ozoneManager);
         assert (omClientRequest != null);
@@ -164,5 +175,23 @@ public class OMExecutionFlow {
       omClientRequest.handleRequestFailure(ozoneManager);
     }
     return response;
+  }
+
+  /**
+   * SDP (SDPOZN-1965): write rate limit of the bucket. Checked on the leader before the request is submitted to
+   * Ratis: a rate limiter is local state, so checking it while applying the transaction would let the replicas
+   * decide differently.
+   * @return the error response if the request is rate limited, otherwise null
+   */
+  private OMResponse checkWriteRateLimit(OMRequest request) {
+    final RateLimiterManager rateLimiterManager = ozoneManager.getRateLimiterManager();
+    if (rateLimiterManager == null || rateLimiterManager.tryAcquire(request, true)) {
+      return null;
+    }
+    return OmResponseUtil.getOMResponseBuilder(request)
+        .setSuccess(false)
+        .setStatus(OzoneManagerProtocolProtos.Status.RATE_LIMIT_EXCEEDED)
+        .setMessage("Rate limit exceeded")
+        .build();
   }
 }

@@ -17,15 +17,18 @@
 
 package org.apache.hadoop.ozone.om.protocolPB;
 
+import java.io.IOException;
+import java.util.List;
+import java.util.UUID;
 import org.apache.hadoop.ozone.om.protocol.OzoneManagerProtocol;
 import org.apache.hadoop.ozone.om.protocol.S3Auth;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateBucketRaftGroupsResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateRateLimiterResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteRateLimiterResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.UUID;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RateLimiterType;
 
 /**
  * OzoneManagerClientProtocol defines interfaces needed on the client side
@@ -54,5 +57,14 @@ public interface OzoneManagerClientProtocol extends OzoneManagerProtocol {
       throws IOException;
 
   void moveOmToSafeMode() throws IOException;
+
+  CreateRateLimiterResponse createRateLimiter(String volumeName, String bucketName, int rps, RateLimiterType type)
+      throws IOException;
+
+  DeleteRateLimiterResponse deleteRateLimiter(String volumeName, String bucketName, RateLimiterType type)
+      throws IOException;
+
+  ListRateLimiterResponse listRateLimiter(String volumeName, String bucketName)
+      throws IOException;
 
 }

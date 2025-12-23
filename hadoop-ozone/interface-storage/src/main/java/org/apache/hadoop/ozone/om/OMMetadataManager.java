@@ -53,6 +53,7 @@ import org.apache.hadoop.ozone.om.helpers.OmMultipartPartKey;
 import org.apache.hadoop.ozone.om.helpers.OmMultipartUpload;
 import org.apache.hadoop.ozone.om.helpers.OmPrefixInfo;
 import org.apache.hadoop.ozone.om.helpers.OmVolumeArgs;
+import org.apache.hadoop.ozone.om.helpers.RateLimiterInfo;
 import org.apache.hadoop.ozone.om.helpers.RepeatedOmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
 import org.apache.hadoop.ozone.om.lock.HierarchicalResourceLockManager;
@@ -545,6 +546,11 @@ public interface OMMetadataManager extends DBStoreHAManager, AutoCloseable {
    */
   Table<String, Long> getMultiRaftInfoTable();
 
+  /**
+   * Get table for rate limiters info.
+   * @return Table.
+   */
+  Table<String, RateLimiterInfo> getRateLimiterInfoTable();
 
   /**
    * Return table mapped to the specified table name.

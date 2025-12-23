@@ -263,6 +263,7 @@ public final class OmUtils {
     case StartQuotaRepair:
     case GetContentSummary:
     case GetRaftGroupHealthState:
+    case ListRateLimiter:
       return true;
     case CreateVolume:
     case SetVolumeProperty:
@@ -328,6 +329,9 @@ public final class OmUtils {
     case CreateBucketRaftGroups:
     case BucketRaftGroupsStateChanged:
     case MoveOmToSafeMode:
+    // SDP (SDPOZN-1965)
+    case CreateRateLimiter:
+    case DeleteRateLimiter:
     case UnknownCommand:
       return false;
     case EchoRPC:
@@ -383,6 +387,7 @@ public final class OmUtils {
     case GetSnapshotInfo:
     case GetObjectTagging:
     case GetContentSummary: // SDP (SDPOZN-1455)
+    case ListRateLimiter: // SDP (SDPOZN-1965)
       return true;
     case CreateVolume:
     case SetVolumeProperty:
@@ -449,6 +454,9 @@ public final class OmUtils {
     case BucketRaftGroupsStateChanged:
     case MoveOmToSafeMode:
     case GetRaftGroupHealthState: // answered by the leader of the raft group
+    // SDP (SDPOZN-1965)
+    case CreateRateLimiter:
+    case DeleteRateLimiter:
     case ServiceList: // OM leader should have the most up-to-date OM service list info
     case RangerBGSync: // Ranger Background Sync task is only run on leader
     case SnapshotDiff:

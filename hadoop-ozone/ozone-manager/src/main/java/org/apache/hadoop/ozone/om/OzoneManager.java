@@ -112,6 +112,8 @@ import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SE
 import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SECRET_ENCRYPTION_KEY;
 import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SECRET_STORAGE_TYPE;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerInterServiceProtocolProtos.OzoneManagerInterService;
+import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterRequest;
+import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterResponse;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OzoneManagerService;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.PrepareStatusResponse.PrepareStatus;
 import static org.apache.hadoop.security.UserGroupInformation.getCurrentUser;
@@ -283,6 +285,7 @@ import org.apache.hadoop.ozone.om.helpers.OmMultipartUploadListParts;
 import org.apache.hadoop.ozone.om.helpers.OmVolumeArgs;
 import org.apache.hadoop.ozone.om.helpers.OzoneFileStatus;
 import org.apache.hadoop.ozone.om.helpers.OzoneFileStatusLight;
+import org.apache.hadoop.ozone.om.helpers.RateLimiterInfo;
 import org.apache.hadoop.ozone.om.helpers.S3VolumeContext;
 import org.apache.hadoop.ozone.om.helpers.ServiceInfo;
 import org.apache.hadoop.ozone.om.helpers.ServiceInfoEx;
@@ -328,6 +331,8 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Extende
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.KeyArgs;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRoleInfo;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.PeerHealthInfo;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.S3Authentication;
@@ -440,6 +445,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private BucketManager bucketManager;
   private KeyManager keyManager;
   private PrefixManagerImpl prefixManager;
+  private RateLimiterManager rateLimiterManager;
   private final UpgradeFinalizer<OzoneManager> upgradeFinalizer;
   private ExecutorService edekCacheLoader = null;
 
@@ -822,6 +828,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     multiRaftTerm.set(Optional.ofNullable(metadataManager.getMultiRaftInfoTable().get(MULTI_RAFT_TERM_KEY)).orElse(0L));
     omSafeModeManager = new SafeModeManager(configuration);
     bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
+
+    // SDP (SDPOZN-1965): bucket rate limiters
+    rateLimiterManager = new RateLimiterManager(metadataManager);
 
     // SDP (multi-raft): balance the leadership of the bucket raft groups between the OMs
     if (isMultiRaftEnabled && this.getOmRatisServer() != null) {
@@ -2007,6 +2016,35 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   @VisibleForTesting
   public KeyManager getKeyManager() {
     return keyManager;
+  }
+
+  /** SDP (SDPOZN-1965): rate limiters of the given volume/bucket (empty filter matches all). */
+  public ListRateLimiterResponse listRateLimiter(ListRateLimiterRequest req) throws IOException {
+    final String filterVolume = req.getVolumeName();
+    final String filterBucket = req.getBucketName();
+    ListRateLimiterResponse.Builder respBuilder = ListRateLimiterResponse.newBuilder();
+    Table<String, RateLimiterInfo> table = metadataManager.getRateLimiterInfoTable();
+    if (table == null) {
+      return respBuilder.build();
+    }
+    try (TableIterator<String, ? extends Table.KeyValue<String, RateLimiterInfo>> iter = table.iterator()) {
+      while (iter.hasNext()) {
+        RateLimiterInfo info = iter.next().getValue();
+        if (!filterVolume.isEmpty() && !filterVolume.equals(info.getVolumeName())) {
+          continue;
+        }
+        if (!filterBucket.isEmpty() && !filterBucket.equals(info.getBucketName())) {
+          continue;
+        }
+        respBuilder.addRateLimiters(info.toProtobuf());
+      }
+    }
+    return respBuilder.build();
+  }
+
+  @VisibleForTesting
+  public RateLimiterManager getRateLimiterManager() {
+    return rateLimiterManager;
   }
 
   @VisibleForTesting

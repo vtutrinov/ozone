@@ -64,6 +64,7 @@ import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.OzoneManagerPrepareState;
+import org.apache.hadoop.ozone.om.RateLimiterManager;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.execution.flowcontrol.ExecutionContext;
 import org.apache.hadoop.ozone.om.helpers.BasicOmKeyInfo;
@@ -133,6 +134,8 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListKey
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListKeysResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListOpenFilesRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListOpenFilesResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListSnapshotDiffJobRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListSnapshotDiffJobResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListTenantRequest;
@@ -197,6 +200,17 @@ public class OzoneManagerRequestHandler implements RequestHandler {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Received OMRequest: {}, ", request);
     }
+
+    // SDP (SDPOZN-1965): read rate limit of the bucket (writes are limited before they are submitted to Ratis)
+    final RateLimiterManager rateLimiterManager = getOzoneManager().getRateLimiterManager();
+    if (rateLimiterManager != null && !rateLimiterManager.tryAcquire(request, false)) {
+      return OmResponseUtil.getOMResponseBuilder(request)
+          .setSuccess(false)
+          .setStatus(OzoneManagerProtocolProtos.Status.RATE_LIMIT_EXCEEDED)
+          .setMessage("Rate limit exceeded")
+          .build();
+    }
+
     Type cmdType = request.getCmdType();
     OMResponse.Builder responseBuilder = OmResponseUtil.getOMResponseBuilder(
         request);
@@ -411,6 +425,11 @@ public class OzoneManagerRequestHandler implements RequestHandler {
         GetRaftGroupHealthStateResponse getRaftGroupHealthStateResponse = getRaftGroupHealthState(
             request.getGetRaftGroupHealthStateRequest());
         responseBuilder.setGetRaftGroupHealthStateResponse(getRaftGroupHealthStateResponse);
+        break;
+      case ListRateLimiter:
+        ListRateLimiterResponse listRateLimiterResponse = listRateLimiter(
+                request.getListRateLimiterRequest());
+        responseBuilder.setListRateLimiterResponse(listRateLimiterResponse);
         break;
       default:
         responseBuilder.setSuccess(false);
@@ -1314,6 +1333,11 @@ public class OzoneManagerRequestHandler implements RequestHandler {
         .setLength(contentSummary.getLength())
         .setSpaceConsumed(contentSummary.getSpaceConsumed())
         .build();
+  }
+
+  public ListRateLimiterResponse listRateLimiter(ListRateLimiterRequest listRateLimitersRequest)
+      throws IOException {
+    return impl.listRateLimiter(listRateLimitersRequest);
   }
 
   @RequestFeatureValidator(

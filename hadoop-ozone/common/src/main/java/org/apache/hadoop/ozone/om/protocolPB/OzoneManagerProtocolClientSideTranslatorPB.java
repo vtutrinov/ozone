@@ -127,6 +127,8 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateF
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateFileResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateKeyRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateKeyResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateRateLimiterRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateRateLimiterResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateSnapshotRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateTenantRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateVolumeRequest;
@@ -137,6 +139,8 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteK
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteKeyRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteKeysRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteObjectTaggingRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteRateLimiterRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteRateLimiterResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteSnapshotRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteTenantRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteTenantResponse;
@@ -176,6 +180,8 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListMul
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListMultipartUploadsResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListOpenFilesRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListOpenFilesResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListSnapshotRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListStatusLightResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListStatusRequest;
@@ -210,6 +216,7 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Prepare
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.PutObjectTaggingRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RangerBGSyncRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RangerBGSyncResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RateLimiterType;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RecoverLeaseRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RecoverLeaseResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RefetchSecretKeyRequest;
@@ -2856,6 +2863,48 @@ public final class OzoneManagerProtocolClientSideTranslatorPB
   public void moveOmToSafeMode() throws IOException {
     OMRequest omRequest = createOMRequest(Type.MoveOmToSafeMode).build();
     handleError(submitRequest(omRequest));
+  }
+
+  @Override
+  public CreateRateLimiterResponse createRateLimiter(String volumeName, String bucketName,
+                                                     int rps, RateLimiterType type) throws IOException {
+    CreateRateLimiterRequest createRateLimiterRequest = CreateRateLimiterRequest.newBuilder()
+            .setVolumeName(volumeName)
+            .setBucketName(bucketName)
+            .setRps(rps)
+            .setType(type)
+            .build();
+    OMRequest omRequest = createOMRequest(Type.CreateRateLimiter)
+            .setCreateRateLimiterRequest(createRateLimiterRequest)
+            .build();
+    return handleError(submitRequest(omRequest)).getCreateRateLimiterResponse();
+  }
+
+  @Override
+  public DeleteRateLimiterResponse deleteRateLimiter(String volumeName, String bucketName, RateLimiterType type)
+      throws IOException {
+    DeleteRateLimiterRequest deleteRateLimiterRequest = DeleteRateLimiterRequest.newBuilder()
+            .setVolumeName(volumeName)
+            .setBucketName(bucketName)
+            .setType(type)
+            .build();
+    OMRequest omRequest = createOMRequest(Type.DeleteRateLimiter)
+            .setDeleteRateLimiterRequest(deleteRateLimiterRequest)
+            .build();
+    return handleError(submitRequest(omRequest)).getDeleteRateLimiterResponse();
+  }
+
+  @Override
+  public ListRateLimiterResponse listRateLimiter(String volumeName, String bucketName)
+      throws IOException {
+    ListRateLimiterRequest listRateLimiterRequest = ListRateLimiterRequest.newBuilder()
+            .setVolumeName(volumeName)
+            .setBucketName(bucketName)
+            .build();
+    OMRequest omRequest = createOMRequest(Type.ListRateLimiter)
+            .setListRateLimiterRequest(listRateLimiterRequest)
+            .build();
+    return handleError(submitRequest(omRequest)).getListRateLimiterResponse();
   }
 
   private SafeMode toProtoBuf(SafeModeAction action) {

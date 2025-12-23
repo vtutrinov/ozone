@@ -116,6 +116,7 @@ import org.apache.hadoop.ozone.om.helpers.OmVolumeArgs;
 import org.apache.hadoop.ozone.om.helpers.OpenKeySession;
 import org.apache.hadoop.ozone.om.helpers.OzoneFSUtils;
 import org.apache.hadoop.ozone.om.helpers.QuotaUtil;
+import org.apache.hadoop.ozone.om.helpers.RateLimiterInfo;
 import org.apache.hadoop.ozone.om.helpers.RepeatedOmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.S3SecretValue;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
@@ -186,6 +187,8 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   private Table<String, CompactionLogEntry> compactionLogTable;
   // SDP (multi-raft)
   private Table<String, Long> multiRaftInfoTable;
+  // SDP (rate limiters)
+  private Table<String, RateLimiterInfo> rateLimiterInfoTable;
 
   private OzoneManager ozoneManager;
 
@@ -535,6 +538,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
 
     compactionLogTable = initializer.get(OMDBDefinition.COMPACTION_LOG_TABLE_DEF);
     multiRaftInfoTable = initializer.get(OMDBDefinition.MULTI_RAFT_INFO_TABLE_DEF);
+    rateLimiterInfoTable = initializer.get(OMDBDefinition.RATE_LIMITER_INFO_TABLE_DEF);
   }
 
   /**
@@ -1735,6 +1739,11 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   @Override
   public Table<String, Long> getMultiRaftInfoTable() {
     return multiRaftInfoTable;
+  }
+
+  @Override
+  public Table<String, RateLimiterInfo> getRateLimiterInfoTable() {
+    return rateLimiterInfoTable;
   }
 
   @Override

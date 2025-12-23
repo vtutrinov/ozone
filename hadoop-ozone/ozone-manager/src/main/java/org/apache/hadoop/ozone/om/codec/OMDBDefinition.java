@@ -39,6 +39,7 @@ import org.apache.hadoop.ozone.om.helpers.OmMultipartPartInfo;
 import org.apache.hadoop.ozone.om.helpers.OmMultipartPartKey;
 import org.apache.hadoop.ozone.om.helpers.OmPrefixInfo;
 import org.apache.hadoop.ozone.om.helpers.OmVolumeArgs;
+import org.apache.hadoop.ozone.om.helpers.RateLimiterInfo;
 import org.apache.hadoop.ozone.om.helpers.RepeatedOmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.S3SecretValue;
 import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
@@ -333,6 +334,14 @@ public final class OMDBDefinition extends DBDefinition.WithMap {
           StringCodec.get(),
           LongCodec.get());
 
+  // SDP (rate limiters, SDPOZN-1965)
+  public static final String RATE_LIMITER_INFO_TABLE = "rateLimiterInfoTable";
+  /** rateLimiterInfoTable: /volume/bucket/type :- RateLimiterInfo. */
+  public static final DBColumnFamilyDefinition<String, RateLimiterInfo> RATE_LIMITER_INFO_TABLE_DEF
+      = new DBColumnFamilyDefinition<>(RATE_LIMITER_INFO_TABLE,
+          StringCodec.get(),
+          RateLimiterInfo.getCodec());
+
   //---------------------------------------------------------------------------
   private static final Map<String, DBColumnFamilyDefinition<?, ?>> COLUMN_FAMILIES
       = DBColumnFamilyDefinition.newUnmodifiableMap(
@@ -359,7 +368,8 @@ public final class OMDBDefinition extends DBDefinition.WithMap {
           TRANSACTION_INFO_TABLE_DEF,
           USER_TABLE_DEF,
           VOLUME_TABLE_DEF,
-          MULTI_RAFT_INFO_TABLE_DEF);
+          MULTI_RAFT_INFO_TABLE_DEF,
+          RATE_LIMITER_INFO_TABLE_DEF);
 
   private static final OMDBDefinition INSTANCE = new OMDBDefinition();
 

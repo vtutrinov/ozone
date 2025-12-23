@@ -165,6 +165,16 @@ enum Type {
     GetRaftGroupHealthState = 1003;
     BucketRaftGroupsStateChanged = 1004;
     MoveOmToSafeMode = 1005;
+    // SDP rate limiters (SDPOZN-1965; 149-151 on SDP 1.4)
+    CreateRateLimiter = 1006;
+    DeleteRateLimiter = 1007;
+    ListRateLimiter = 1008;
+}
+
+// SDP rate limiters (SDPOZN-1965)
+enum RateLimiterType {
+   READ = 1;
+   WRITE = 2;
 }
 
 enum SafeMode {
@@ -327,6 +337,10 @@ message OMRequest {
     optional BucketRaftGroupsStateChangedRequest bucketRaftGroupsStateChangedRequest = 1004;
     // Raft group that the request should be executed in
     optional hadoop.hdds.UUID raftGroupId = 1010;
+    // SDP rate limiters (SDPOZN-1965; 149-151 on SDP 1.4)
+    optional CreateRateLimiterRequest createRateLimiterRequest = 1006;
+    optional DeleteRateLimiterRequest deleteRateLimiterRequest = 1007;
+    optional ListRateLimiterRequest listRateLimiterRequest = 1008;
 }
 
 message OMResponse {
@@ -469,6 +483,10 @@ message OMResponse {
     optional CreateBucketRaftGroupsResponse CreateBucketRaftGroupsResponse = 1002;
     optional GetRaftGroupHealthStateResponse getRaftGroupHealthStateResponse = 1003;
     optional BucketRaftGroupsStateChangedResponse bucketRaftGroupsStateChangedResponse = 1004;
+    // SDP rate limiters (SDPOZN-1965; 148-150 on SDP 1.4)
+    optional CreateRateLimiterResponse createRateLimiterResponse = 1006;
+    optional DeleteRateLimiterResponse deleteRateLimiterResponse = 1007;
+    optional ListRateLimiterResponse listRateLimiterResponse = 1008;
 }
 
 enum Status {
@@ -607,6 +625,10 @@ enum Status {
 
     // SDP extensions (1000+). The order must match OMException.ResultCodes.
     COMPRESSION_NOT_SUPPORTED = 1001;
+    // SDP rate limiters (SDPOZN-1965; 95-97 on SDP 1.4)
+    RATELIMITER_ALREADY_EXISTS = 1002;
+    RATELIMITER_NOT_FOUND = 1003;
+    RATE_LIMIT_EXCEEDED = 1004;
 }
 
 /**
@@ -2558,4 +2580,41 @@ message BucketRaftGroupsStateChangedRequest {
 }
 
 message BucketRaftGroupsStateChangedResponse {
+}
+
+// SDP rate limiters (SDPOZN-1965)
+message CreateRateLimiterRequest {
+  required string volumeName = 1;
+  required string bucketName = 2;
+  required int32 rps = 3;
+  required RateLimiterType type = 4;
+}
+
+message CreateRateLimiterResponse {
+  optional RateLimiter rateLimiter = 1;
+}
+
+message RateLimiter {
+  required string volumeName = 1;
+  required string bucketName = 2;
+  required int32 rps = 3;
+  required RateLimiterType type = 4;
+}
+
+message DeleteRateLimiterRequest {
+  optional string volumeName = 1;
+  optional string bucketName = 2;
+  optional RateLimiterType type = 3;
+}
+
+message DeleteRateLimiterResponse {
+}
+
+message ListRateLimiterRequest {
+  required string volumeName = 1;
+  required string bucketName = 2;
+}
+
+message ListRateLimiterResponse {
+  repeated RateLimiter rateLimiters = 1;
 }
