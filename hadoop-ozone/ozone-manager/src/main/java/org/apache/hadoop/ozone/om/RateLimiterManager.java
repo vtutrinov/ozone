@@ -47,9 +47,12 @@ public class RateLimiterManager {
           new ConcurrentHashMap<>();
 
   private final OMMetadataManager metadataManager;
+  private final OmRateLimiterMetrics rateLimiterMetrics;
 
-  public RateLimiterManager(OMMetadataManager metadataManager) throws IOException {
+  public RateLimiterManager(OMMetadataManager metadataManager, OmRateLimiterMetrics rateLimiterMetrics)
+      throws IOException {
     this.metadataManager = metadataManager;
+    this.rateLimiterMetrics = rateLimiterMetrics;
     loadFromDb();
   }
 
@@ -149,7 +152,15 @@ public class RateLimiterManager {
       return true;
     }
 
-    return limiter.tryAcquire();
+    boolean allowed = limiter.tryAcquire();
+
+    if (allowed) {
+      rateLimiterMetrics.incAllowedRequests(volume, bucket, type.name());
+    } else {
+      rateLimiterMetrics.incRejectedRequests(volume, bucket, type.name());
+    }
+
+    return allowed;
   }
 
   private void register(RateLimiterInfo info) {

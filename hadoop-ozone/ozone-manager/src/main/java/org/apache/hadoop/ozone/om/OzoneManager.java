@@ -419,6 +419,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private final OMMetrics metrics;
   private OMHAMetrics omhaMetrics;
   private OMHAMultiRaftMetrics omMultiRaftMetrics;
+  private OmRateLimiterMetrics omRateLimiterMetrics;
   private final ProtocolMessageMetrics<ProtocolMessageEnum>
       omClientProtocolMetrics;
   private OzoneManagerHttpServer httpServer;
@@ -792,7 +793,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     omSafeModeManager = new SafeModeManager(configuration);
     bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
 
-    rateLimiterManager = new RateLimiterManager(metadataManager);
+    omRateLimiterMetrics = OmRateLimiterMetrics.create();
+    rateLimiterManager = new RateLimiterManager(metadataManager, omRateLimiterMetrics);
 
     if (this.getOmRatisServer() != null) {
       this.getOmRatisServer().startSchedulingLeaderReconfiguration();
@@ -2622,6 +2624,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       if (omMultiRaftMetrics != null) {
         OMHAMultiRaftMetrics.unRegister();
       }
+      if (omRateLimiterMetrics != null) {
+        OmRateLimiterMetrics.unRegister();
+      }
+
       for (StateMachine it : getStateMachines().values()) {
         it.close();
       }
