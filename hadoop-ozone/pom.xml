@@ -50,6 +50,7 @@
     <module>recon-codegen</module>
     <module>s3-secret-store</module>
     <module>s3gateway</module>
+    <module>security-auth-agent</module>
     <module>tools</module>
   </modules>
 
