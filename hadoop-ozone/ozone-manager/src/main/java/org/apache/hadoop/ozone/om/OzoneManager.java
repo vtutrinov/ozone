@@ -462,6 +462,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private final OMMetrics metrics;
   private final OmSnapshotInternalMetrics omSnapshotIntMetrics;
   private OMHAMetrics omhaMetrics;
+  private OmRateLimiterMetrics omRateLimiterMetrics;
   private final ProtocolMessageMetrics<OzoneManagerProtocolProtos.Type>
       omClientProtocolMetrics;
   private final DeletingServiceMetrics omDeletionMetrics;
@@ -829,8 +830,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     omSafeModeManager = new SafeModeManager(configuration);
     bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
 
-    // SDP (SDPOZN-1965): bucket rate limiters
-    rateLimiterManager = new RateLimiterManager(metadataManager);
+    // SDP (SDPOZN-1965, SDPOZN-2054): bucket rate limiters and their metrics
+    omRateLimiterMetrics = OmRateLimiterMetrics.create();
+    rateLimiterManager = new RateLimiterManager(metadataManager, omRateLimiterMetrics);
 
     // SDP (multi-raft): balance the leadership of the bucket raft groups between the OMs
     if (isMultiRaftEnabled && this.getOmRatisServer() != null) {
@@ -2850,6 +2852,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
       if (omMultiRaftMetrics != null) {
         OMHAMultiRaftMetrics.unRegister();
+      }
+      if (omRateLimiterMetrics != null) {
+        OmRateLimiterMetrics.unRegister();
       }
       // SDP (multi-raft): the ratis server has closed the state machines of all raft groups
       getStateMachines().clear();
