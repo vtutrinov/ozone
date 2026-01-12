@@ -26,11 +26,9 @@ import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -81,8 +79,8 @@ public class OmRaftGroupManager {
   private final Map<String, UUID> bucketRaftGroups = new ConcurrentHashMap<>();
   private final Map<UUID, Integer> bucketsPerRaftGroupCounter = new ConcurrentHashMap<>();
 
-  // buckets whose raft group assignment is in progress on this OM; guarded by itself
-  private final Set<String> bucketToRaftGroupAssignmentAwaited = new HashSet<>();
+  // raft group assignments in progress on this OM, by bucket: concurrent writers of a bucket wait for the first one
+  private final Map<String, CompletableFuture<RaftGroupId>> bucketAssignments = new ConcurrentHashMap<>();
   // the cluster wide assignment lock, set and reset through the main raft group on every OM
   private final AtomicBoolean bucketRaftGroupAssignmentInProgress = new AtomicBoolean(false);
 
@@ -181,56 +179,58 @@ public class OmRaftGroupManager {
   }
 
   private RaftGroupId assignRaftGroup(String bucketPath) {
-    synchronized (bucketToRaftGroupAssignmentAwaited) {
-      long deadline = Time.monotonicNow() + ASSIGNMENT_TIMEOUT_MS;
-      while (bucketToRaftGroupAssignmentAwaited.contains(bucketPath)) {
-        // another handler thread is assigning this bucket
-        long remaining = deadline - Time.monotonicNow();
-        if (remaining <= 0) {
-          throw new IllegalStateException("Timeout waiting for raft group assignment for bucket " + bucketPath);
-        }
-        try {
-          bucketToRaftGroupAssignmentAwaited.wait(remaining);
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          throw new IllegalStateException(e);
-        }
+    final CompletableFuture<RaftGroupId> myAssignment = new CompletableFuture<>();
+    final CompletableFuture<RaftGroupId> activeAssignment = bucketAssignments.putIfAbsent(bucketPath, myAssignment);
+    if (activeAssignment != null) {
+      // another handler thread is assigning this bucket
+      try {
+        return activeAssignment.get(ASSIGNMENT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new IllegalStateException(e);
+      } catch (ExecutionException | TimeoutException e) {
+        throw new IllegalStateException("Raft group assignment for bucket " + bucketPath + " failed", e);
       }
-      UUID raftGroup = bucketRaftGroups.get(bucketPath);
-      if (raftGroup != null) {
-        return RaftGroupId.valueOf(raftGroup);
-      }
-      bucketToRaftGroupAssignmentAwaited.add(bucketPath);
     }
 
     try {
-      awaitBucketRaftGroupsInitialization();
-      acquireBucketRaftGroupAssignmentWriteLockByRaft();
-      try {
-        // the bucket may have been assigned by another OM while waiting for the lock
-        if (!bucketRaftGroups.containsKey(bucketPath)) {
-          UUID lessLoadedRaftGroup = selectLessLoadedRaftGroup();
-          LOG.info("Raft group {} selected to handle write requests to {}", lessLoadedRaftGroup, bucketPath);
-          assignRaftGroupToBucket(bucketPath, lessLoadedRaftGroup);
-        }
-      } finally {
-        releaseBucketRaftGroupAssignmentWriteLockByRaft();
-      }
+      // the assignment may have completed between the caller's lookup and putIfAbsent
       UUID raftGroup = bucketRaftGroups.get(bucketPath);
       if (raftGroup == null) {
-        throw new IllegalStateException("Raft group assignment for bucket " + bucketPath + " is not applied yet");
+        awaitBucketRaftGroupsInitialization();
+        acquireBucketRaftGroupAssignmentWriteLockByRaft();
+        try {
+          // the bucket may have been assigned by another OM while waiting for the lock
+          if (!bucketRaftGroups.containsKey(bucketPath)) {
+            UUID lessLoadedRaftGroup = selectLessLoadedRaftGroup();
+            LOG.info("Raft group {} selected to handle write requests to {}", lessLoadedRaftGroup, bucketPath);
+            assignRaftGroupToBucket(bucketPath, lessLoadedRaftGroup);
+          }
+        } finally {
+          releaseBucketRaftGroupAssignmentWriteLockByRaft();
+        }
+        raftGroup = bucketRaftGroups.get(bucketPath);
+        if (raftGroup == null) {
+          throw new IllegalStateException("Raft group assignment for bucket " + bucketPath + " is not applied yet");
+        }
       }
-      return RaftGroupId.valueOf(raftGroup);
+      RaftGroupId raftGroupId = RaftGroupId.valueOf(raftGroup);
+      myAssignment.complete(raftGroupId);
+      return raftGroupId;
     } catch (IOException e) {
-      throw new IllegalStateException("Failed to assign a raft group to bucket " + bucketPath, e);
+      IllegalStateException ex = new IllegalStateException("Failed to assign a raft group to bucket " + bucketPath, e);
+      myAssignment.completeExceptionally(ex);
+      throw ex;
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new IllegalStateException(e);
+      IllegalStateException ex = new IllegalStateException(e);
+      myAssignment.completeExceptionally(ex);
+      throw ex;
+    } catch (RuntimeException e) {
+      myAssignment.completeExceptionally(e);
+      throw e;
     } finally {
-      synchronized (bucketToRaftGroupAssignmentAwaited) {
-        bucketToRaftGroupAssignmentAwaited.remove(bucketPath);
-        bucketToRaftGroupAssignmentAwaited.notifyAll();
-      }
+      bucketAssignments.remove(bucketPath, myAssignment);
     }
   }
 
