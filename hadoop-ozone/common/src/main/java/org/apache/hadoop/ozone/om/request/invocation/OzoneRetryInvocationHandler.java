@@ -168,7 +168,20 @@ public class OzoneRetryInvocationHandler<T> implements RpcInvocationHandler {
       if (!method.isAccessible()) {
         method.setAccessible(true);
       }
-      final Object r = method.invoke(proxyDescriptor.getProxy(), args);
+      T proxy = null;
+      if (args.length == 2 && args[1] instanceof OMRequest) {
+        String bucketPath = ((OMFailoverProxyProviderBase)proxyDescriptor.getProxyProvider())
+            .getWriteRequestBucketPath((OMRequest) args[1]);
+        if (bucketPath != null) {
+          proxy = (T) ((OMFailoverProxyProviderBase) proxyDescriptor.getProxyProvider()).selectProxyInfo(bucketPath);
+        }
+        if (proxy == null) {
+          proxy = proxyDescriptor.getProxy();
+        }
+      } else {
+        proxy = proxyDescriptor.getProxy();
+      }
+      final Object r = method.invoke(proxy, args);
       hasSuccessfulCall = true;
       return r;
     } catch (InvocationTargetException e) {

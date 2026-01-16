@@ -153,7 +153,9 @@ public class OmRaftGroupManager {
 
   private RaftGroupId trySetAndGetRaftGroupToHandleBucketWriteRequest(String bucketPath) {
     UUID existing = bucketRaftGroups.get(bucketPath);
-    if (existing != null) return RaftGroupId.valueOf(existing);
+    if (existing != null) {
+      return RaftGroupId.valueOf(existing);
+    }
 
     Object myLock = new Object();
     Object activeLock = bucketAssignmentLocks.putIfAbsent(bucketPath, myLock);

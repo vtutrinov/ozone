@@ -162,6 +162,15 @@ public class HadoopRpcOMFailoverProxyProvider<T> extends
     return currentProxyInfo;
   }
 
+  @Override
+  ProxyInfo<T> getProxy(String omNodeId) {
+    ProxyInfo proxyInfo = getOMProxyMap().get(omNodeId);
+    if (proxyInfo == null) {
+      proxyInfo = createOMProxy(omNodeId);
+    }
+    return proxyInfo;
+  }
+
   /**
    * Creates proxy object.
    */
