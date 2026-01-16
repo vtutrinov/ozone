@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.hadoop.ozone.om.request.invocation;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -185,12 +184,31 @@ public class OzoneRetryInvocationHandler<T> implements RpcInvocationHandler {
       if (!method.isAccessible()) {
         method.setAccessible(true);
       }
-      final Object r = method.invoke(proxyDescriptor.getProxy(), args);
+      final Object r = method.invoke(selectProxy(args), args);
       hasSuccessfulCall = true;
       return r;
     } catch (InvocationTargetException e) {
       throw e.getCause();
     }
+  }
+
+  /**
+   * SDP (multi-raft, SDPOZN-1979): a write request goes to the OM leading the raft group of its bucket, if known.
+   */
+  @SuppressWarnings("unchecked")
+  private T selectProxy(Object[] args) {
+    if (args != null && args.length == 2 && args[1] instanceof OMRequest
+        && proxyDescriptor.getProxyProvider() instanceof OMFailoverProxyProviderBase) {
+      final String bucketPath = OMFailoverProxyProviderBase.getWriteRequestBucketPath((OMRequest) args[1]);
+      if (bucketPath != null) {
+        final T proxy = ((OMFailoverProxyProviderBase<T>) proxyDescriptor.getProxyProvider())
+            .selectProxyInfo(bucketPath);
+        if (proxy != null) {
+          return proxy;
+        }
+      }
+    }
+    return proxyDescriptor.getProxy();
   }
 
   @VisibleForTesting

@@ -24,14 +24,17 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdds.HddsUtils;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.utils.LegacyHadoopConfigurationSource;
 import org.apache.hadoop.io.retry.FailoverProxyProvider;
+import org.apache.hadoop.io.retry.FailoverProxyProvider.ProxyInfo;
 import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.io.retry.RetryPolicy.RetryAction.RetryDecision;
 import org.apache.hadoop.io_.retry.RetryPolicies;
@@ -45,6 +48,7 @@ import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.exceptions.OMLeaderNotReadyException;
 import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
+import org.apache.hadoop.ozone.util.OzoneMultiRaftUtils;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.SecretManager;
@@ -91,6 +95,8 @@ public abstract class OMFailoverProxyProviderBase<T> implements
   private final ThreadLocal<OMRequest> omRequest = new ThreadLocal<>();
 
   private final UserGroupInformation ugi;
+  // SDP (multi-raft, SDPOZN-1979): the OM leading the raft group of a bucket, learned from OMNotLeaderException
+  private final Map<String, ProxyInfo<T>> bucketToProxyMap = new ConcurrentHashMap<>();
 
   public OMFailoverProxyProviderBase(ConfigurationSource configuration,
                                      UserGroupInformation ugi,
@@ -235,6 +241,11 @@ public abstract class OMFailoverProxyProviderBase<T> implements
             if (suggestedLeaderAddress != null &&
                 suggestedNodeId != null &&
                 omProxies.contains(suggestedNodeId, suggestedLeaderAddress)) {
+              // SDP (multi-raft): send the next write requests of the bucket directly to the suggested leader
+              final String bucketWriteRequestPath = getWriteRequestBucketPath(omRequest.get());
+              if (bucketWriteRequestPath != null) {
+                setOmNodeToHandleRequestThroughRaftGroup(bucketWriteRequestPath, suggestedNodeId);
+              }
               setNextOmProxy(suggestedNodeId);
               final OMRequest request = omRequest.get();
               if (request != null && notLeaderException.getRaftGroupId() != null) {
@@ -416,6 +427,36 @@ public abstract class OMFailoverProxyProviderBase<T> implements
 
   public List<OMProxyInfo<T>> getOMProxies() {
     return omProxies.getProxies();
+  }
+
+  /** SDP (multi-raft): the proxy of the given OM node. */
+  abstract ProxyInfo<T> getProxy(String omNodeId);
+
+  /** SDP (multi-raft): routes the next write requests of the bucket to the given OM node. */
+  public boolean setOmNodeToHandleRequestThroughRaftGroup(String bucket, String omNodeId) {
+    if (omProxies.get(omNodeId) == null) {
+      return false;
+    }
+    bucketToProxyMap.put(bucket, getProxy(omNodeId));
+    return true;
+  }
+
+  /** SDP (multi-raft): the proxy of the OM leading the raft group of the bucket, if known. */
+  public T selectProxyInfo(String bucket) {
+    final ProxyInfo<T> omProxyInfo = bucketToProxyMap.get(bucket);
+    return omProxyInfo != null ? omProxyInfo.proxy : null;
+  }
+
+  /** SDP (multi-raft): the volume/bucket a write request is routed by, null for reads and requests without one. */
+  public static String getWriteRequestBucketPath(OMRequest request) {
+    if (request == null || OmUtils.isReadOnly(request)) {
+      return null;
+    }
+    final String bucketName = OzoneMultiRaftUtils.getBucketName(request);
+    if (bucketName == null || bucketName.isEmpty()) {
+      return null;
+    }
+    return OzoneMultiRaftUtils.getVolumeName(request) + "/" + bucketName;
   }
 
   public OMProxyInfo.OrderedMap<T> getOMProxyMap() {

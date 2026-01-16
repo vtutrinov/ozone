@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.List;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.retry.FailoverProxyProvider.ProxyInfo;
 import org.apache.hadoop.ipc_.RPC;
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.ha.ConfUtils;
@@ -105,6 +106,11 @@ public class HadoopRpcOMFailoverProxyProvider<T> extends
   @Override
   public OMProxyInfo<T> getProxy() {
     return createOMProxyIfNeeded(getCurrentProxyOMNodeId());
+  }
+
+  @Override
+  ProxyInfo<T> getProxy(String omNodeId) {
+    return createOMProxyIfNeeded(omNodeId);
   }
 
   protected OMProxyInfo<T> createOMProxyIfNeeded(String nodeId) {
