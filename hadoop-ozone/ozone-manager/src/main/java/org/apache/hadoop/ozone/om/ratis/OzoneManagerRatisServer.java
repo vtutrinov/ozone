@@ -1092,7 +1092,7 @@ public final class OzoneManagerRatisServer {
   public void startSchedulingLeaderReconfiguration() {
     scheduler = Executors.newSingleThreadScheduledExecutor();
     scheduler.scheduleAtFixedRate(
-            new LeaderCheckExecutor(this, ozoneManager.getConfiguration()),
+            new LeaderCheckExecutor(this, ozoneManager.getConfiguration(), ozoneManager.getOmRaftGroupManager()),
             groupTransferLeadershipSchedulingInitialDelay, groupTransferLeadershipSchedulingPeriod, TimeUnit.SECONDS);
   }
 
