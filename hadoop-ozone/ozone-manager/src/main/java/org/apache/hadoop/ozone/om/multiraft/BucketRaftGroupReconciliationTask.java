@@ -56,124 +56,131 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
 
   @Override
   public BackgroundTaskResult call() throws Exception {
-    OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
-    RaftGroup mainRaftGroup = omRatisServer.getCurrentRaftGroup();
-    long currentMultiRaftTerm = ozoneManager.getBucketRaftGroupsReconfigurationIndex();
-    if (!omRatisServer.checkLeaderStatus(mainRaftGroup.getGroupId()).equals(NOT_LEADER)) {
-      LOG.trace("Start reconciling bucket group RaftGroup on leader {}", omRatisServer.getRaftPeerId());
-      List<RaftGroup> groupsToBeReconfigured = new ArrayList<>();
-      List<RaftGroup> existingRaftGroups = (List<RaftGroup>) omRatisServer.getServer().getGroups();
-      if (existingRaftGroups.size() == 1) { // consist of only main raft group, as like as an initial setup
-        LOG.trace("Create all raft groups");
-        List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm, expectedRaftGroupsCount);
-        ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()), true);
-      } else {
-        for (RaftGroup raftGroup : existingRaftGroups) {
-          if (raftGroup.getGroupId().equals(mainRaftGroup.getGroupId())) {
-            continue;
-          }
-          RaftGroupId groupId = raftGroup.getGroupId();
-          DivisionInfo divisionInfo = omRatisServer.getServer().getDivision(groupId).getInfo();
-          RaftPeerId leaderId = divisionInfo.getLeaderId();
-          if (leaderId == null || divisionInfo.getLifeCycleState().equals(LifeCycle.State.CLOSED)) {
-            LOG.warn("Raft group {} is closed, removing it.", groupId);
-            groupsToBeReconfigured.add(raftGroup);
-          } else {
-            RaftPeerId raftGroupLeaderId = omRatisServer.getServer().getDivision(groupId).getInfo().getLeaderId();
+    ozoneManager.getOmRaftGroupManager().acquireBucketRaftGroupsReconstructionLock();
+    try {
+      OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
+      RaftGroup mainRaftGroup = omRatisServer.getCurrentRaftGroup();
+      long currentMultiRaftTerm = ozoneManager.getBucketRaftGroupsReconfigurationIndex();
+      if (!omRatisServer.checkLeaderStatus(mainRaftGroup.getGroupId()).equals(NOT_LEADER)) {
+        LOG.trace("Start reconciling bucket group RaftGroup on leader {}", omRatisServer.getRaftPeerId());
+        List<RaftGroup> groupsToBeReconfigured = new ArrayList<>();
+        List<RaftGroup> existingRaftGroups = (List<RaftGroup>) omRatisServer.getServer().getGroups();
+        if (existingRaftGroups.size() == 1) { // consist of only main raft group, as like as an initial setup
+          LOG.trace("Create all raft groups");
+          List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm, expectedRaftGroupsCount);
+          ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()), true);
+        } else {
+          for (RaftGroup raftGroup : existingRaftGroups) {
+            if (raftGroup.getGroupId().equals(mainRaftGroup.getGroupId())) {
+              continue;
+            }
+            RaftGroupId groupId = raftGroup.getGroupId();
+            DivisionInfo divisionInfo = omRatisServer.getServer().getDivision(groupId).getInfo();
+            RaftPeerId leaderId = divisionInfo.getLeaderId();
+            if (leaderId == null || divisionInfo.getLifeCycleState().equals(LifeCycle.State.CLOSED)) {
+              LOG.warn("Raft group {} is closed, removing it.", groupId);
+              groupsToBeReconfigured.add(raftGroup);
+            } else {
+              RaftPeerId raftGroupLeaderId = omRatisServer.getServer().getDivision(groupId).getInfo().getLeaderId();
 
-            String omServiceId = OmUtils.getOzoneManagerServiceId(ozoneManager.getConfiguration());
-            String omHost = OmUtils.getAllOMHAAddresses(ozoneManager.getConfiguration(), omServiceId, true).stream()
-                .filter(omNodeDetails -> omNodeDetails.getNodeId().equals(raftGroupLeaderId.toString()))
-                .findFirst().get().getHostAddress();
+              String omServiceId = OmUtils.getOzoneManagerServiceId(ozoneManager.getConfiguration());
+              String omHost = OmUtils.getAllOMHAAddresses(ozoneManager.getConfiguration(), omServiceId, true).stream()
+                  .filter(omNodeDetails -> omNodeDetails.getNodeId().equals(raftGroupLeaderId.toString()))
+                  .findFirst().get().getHostAddress();
 
-            try (OzoneClient omClient = OzoneClientFactory.getRpcClient(omHost,
-                OmUtils.getOmRpcPort(ozoneManager.getConfiguration()), ozoneManager.getConfiguration())) {
-              UUID raftGroupUuid = groupId.getUuid();
-              OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse raftGroupHealthState;
-              if (omRatisServer.getServer().getId().equals(raftGroupLeaderId)) {
-                // the current OM is the leader of the raft group that we are checking, there is no need to call remote
-                // leader OM of the RAFT group
-                raftGroupHealthState = ozoneManager.getRaftGroupHealthState(
-                    OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest.newBuilder()
-                        .setGroupId(HddsProtos.UUID.newBuilder()
-                            .setLeastSigBits(raftGroupUuid.getLeastSignificantBits())
-                            .setMostSigBits(raftGroupUuid.getMostSignificantBits())
-                            .build())
-                        .build());
-              } else {
-                raftGroupHealthState =
-                    omClient.getProxy().getRaftGroupHealthState(
-                        OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest.newBuilder()
-                            .setGroupId(HddsProtos.UUID.newBuilder()
-                                .setLeastSigBits(raftGroupUuid.getLeastSignificantBits())
-                                .setMostSigBits(raftGroupUuid.getMostSignificantBits())
-                                .build())
-                            .build());
-              }
-              boolean isNotHealthy = raftGroupHealthState.getPeerHealthInfoList()
-                  .stream()
-                  .anyMatch(it -> !it.getIsHealthy());
-              if (isNotHealthy) {
+              try (OzoneClient omClient = OzoneClientFactory.getRpcClient(omHost,
+                  OmUtils.getOmRpcPort(ozoneManager.getConfiguration()), ozoneManager.getConfiguration())) {
+                UUID raftGroupUuid = groupId.getUuid();
+                OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse raftGroupHealthState;
+                if (omRatisServer.getServer().getId().equals(raftGroupLeaderId)) {
+                  // the current OM is the leader of the raft group that we are checking,
+                  // there is no need to call remote
+                  // leader OM of the RAFT group
+                  raftGroupHealthState = ozoneManager.getRaftGroupHealthState(
+                      OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest.newBuilder()
+                          .setGroupId(HddsProtos.UUID.newBuilder()
+                              .setLeastSigBits(raftGroupUuid.getLeastSignificantBits())
+                              .setMostSigBits(raftGroupUuid.getMostSignificantBits())
+                              .build())
+                          .build());
+                } else {
+                  raftGroupHealthState =
+                      omClient.getProxy().getRaftGroupHealthState(
+                          OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest.newBuilder()
+                              .setGroupId(HddsProtos.UUID.newBuilder()
+                                  .setLeastSigBits(raftGroupUuid.getLeastSignificantBits())
+                                  .setMostSigBits(raftGroupUuid.getMostSignificantBits())
+                                  .build())
+                              .build());
+                }
+                boolean isNotHealthy = raftGroupHealthState.getPeerHealthInfoList()
+                    .stream()
+                    .anyMatch(it -> !it.getIsHealthy());
+                if (isNotHealthy) {
+                  groupsToBeReconfigured.add(raftGroup);
+                }
+              } catch (Exception e) {
+                LOG.warn("Failed to get raft group health state for group {}: {}",
+                    groupId, e.getMessage());
                 groupsToBeReconfigured.add(raftGroup);
               }
-            } catch (Exception e) {
-              LOG.warn("Failed to get raft group health state for group {}: {}",
-                  groupId, e.getMessage());
-              groupsToBeReconfigured.add(raftGroup);
             }
           }
-        }
-        groupsToBeReconfigured.forEach(this::deleteRaftGroup);
+          groupsToBeReconfigured.forEach(this::deleteRaftGroup);
 
-        if (ozoneManager.isMultiRaftEnabled()) {
-          LOG.trace("Raft group to be reconfigured: {}", groupsToBeReconfigured);
-          if (!groupsToBeReconfigured.isEmpty()) {
-            if (ozoneManager.isMultiRaftEnabled()) {
-              ozoneManager.moveOmToSafeMode();
-              List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm + 1, expectedRaftGroupsCount);
-              LOG.trace("Raft group to be created: {}", raftGroupIds);
+          if (ozoneManager.isMultiRaftEnabled()) {
+            LOG.trace("Raft group to be reconfigured: {}", groupsToBeReconfigured);
+            if (!groupsToBeReconfigured.isEmpty()) {
+              if (ozoneManager.isMultiRaftEnabled()) {
+                ozoneManager.moveOmToSafeMode();
+                List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm + 1,
+                    expectedRaftGroupsCount);
+                LOG.trace("Raft group to be created: {}", raftGroupIds);
+                ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()),
+                    false);
+              }
+            }
+            if (existingRaftGroups.size() < expectedRaftGroupsCount + 1) {
+              List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm,
+                  expectedRaftGroupsCount - existingRaftGroups.size() + 1);
               ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()),
                   false);
             }
           }
-          if (existingRaftGroups.size() < expectedRaftGroupsCount + 1) {
-            List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm,
-                expectedRaftGroupsCount - existingRaftGroups.size() + 1);
-            ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()),
-                false);
+        }
+        boolean raftGroupsReconfigured = existingRaftGroups.size() == 1 || !groupsToBeReconfigured.isEmpty() ||
+            existingRaftGroups.size() < expectedRaftGroupsCount + 1;
+        if (raftGroupsReconfigured) {
+          try {
+            byte[] clientId = omRatisServer.getCurrentClientId().toByteString().toByteArray();
+            Server.Call fakeCall = new Server.Call(
+                (int) OzoneManagerRatisServer.nextCallId(),
+                0,
+                null,
+                null,
+                RPC.RpcKind.RPC_BUILTIN,
+                clientId
+            );
+            RPC.Server.getCurCall().set(fakeCall);
+            OzoneManagerProtocolProtos.BucketRaftGroupsStateChangedRequest bucketRaftGroupsStateChangedRequest =
+                OzoneManagerProtocolProtos.BucketRaftGroupsStateChangedRequest.newBuilder()
+                    .setStateChangedIndex(currentMultiRaftTerm + 1)
+                    .build();
+            OzoneManagerProtocolProtos.OMRequest omRequest = OzoneManagerProtocolProtos.OMRequest.newBuilder()
+                .setBucketRaftGroupsStateChangedRequest(bucketRaftGroupsStateChangedRequest)
+                .setCmdType(BucketRaftGroupsStateChanged)
+                .setClientId(omRatisServer.getCurrentClientId().toString())
+                .build();
+            omRatisServer.submitRequest(omRequest);
+          } finally {
+            RPC.Server.getCurCall().remove();
           }
         }
       }
-      boolean raftGroupsReconfigured = existingRaftGroups.size() == 1 || !groupsToBeReconfigured.isEmpty() ||
-          existingRaftGroups.size() < expectedRaftGroupsCount + 1;
-      if (raftGroupsReconfigured) {
-        try {
-          byte[] clientId = omRatisServer.getCurrentClientId().toByteString().toByteArray();
-          Server.Call fakeCall = new Server.Call(
-              (int) OzoneManagerRatisServer.nextCallId(),
-              0,
-              null,
-              null,
-              RPC.RpcKind.RPC_BUILTIN,
-              clientId
-          );
-          RPC.Server.getCurCall().set(fakeCall);
-          OzoneManagerProtocolProtos.BucketRaftGroupsStateChangedRequest bucketRaftGroupsStateChangedRequest =
-              OzoneManagerProtocolProtos.BucketRaftGroupsStateChangedRequest.newBuilder()
-                  .setStateChangedIndex(currentMultiRaftTerm + 1)
-                  .build();
-          OzoneManagerProtocolProtos.OMRequest omRequest = OzoneManagerProtocolProtos.OMRequest.newBuilder()
-              .setBucketRaftGroupsStateChangedRequest(bucketRaftGroupsStateChangedRequest)
-              .setCmdType(BucketRaftGroupsStateChanged)
-              .setClientId(omRatisServer.getCurrentClientId().toString())
-              .build();
-          omRatisServer.submitRequest(omRequest);
-        } finally {
-          RPC.Server.getCurCall().remove();
-        }
-      }
+      return BackgroundTaskResult.EmptyTaskResult.newResult();
+    } finally {
+      ozoneManager.getOmRaftGroupManager().releaseBucketRaftGroupsReconstructionLock();
     }
-    return BackgroundTaskResult.EmptyTaskResult.newResult();
   }
 
   private void deleteRaftGroup(RaftGroup raftGroup) {

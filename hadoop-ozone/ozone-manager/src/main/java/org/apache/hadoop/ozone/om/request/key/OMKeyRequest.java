@@ -671,7 +671,7 @@ public abstract class OMKeyRequest extends OMClientRequest {
 
     OmBucketInfo omBucketInfo = value != null ? value.getCacheValue() : null;
 
-    if (omBucketInfo != null) {
+    if (omBucketInfo != null && getWriteRaftGroup() != null) {
       omBucketInfo.setRaftGroup(getWriteRaftGroup().getUuid());
     }
 

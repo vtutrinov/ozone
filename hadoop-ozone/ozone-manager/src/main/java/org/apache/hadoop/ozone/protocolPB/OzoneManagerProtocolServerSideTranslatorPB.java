@@ -16,23 +16,6 @@
  */
 package org.apache.hadoop.ozone.protocolPB;
 
-import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.LEADER_AND_READY;
-import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER;
-import static org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils.createClientRequest;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type.PrepareStatus;
-import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
-
-import org.apache.hadoop.ozone.om.OMConfigKeys;
-import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
-import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus;
-import org.apache.hadoop.ozone.om.request.util.OmResponseUtil;
-import org.apache.ratis.protocol.RaftGroupId;
-
-import java.io.IOException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ProtocolMessageEnum;
 import com.google.protobuf.RpcController;
@@ -56,6 +39,7 @@ import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
+import org.apache.hadoop.ozone.om.request.util.OmResponseUtil;
 import org.apache.hadoop.ozone.om.request.validation.RequestValidations;
 import org.apache.hadoop.ozone.om.request.validation.ValidationContext;
 import org.apache.hadoop.ozone.om.response.OMClientResponse;

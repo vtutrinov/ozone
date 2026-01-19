@@ -53,7 +53,6 @@ public class OmRaftGroupManager {
   private final OzoneManager ozoneManager;
 
   private final ConcurrentMap<String, UUID> bucketRaftGroups = new ConcurrentHashMap<>();
-  private final List<String> bucketToRaftGroupAssignmentAwaited = new ArrayList<>();
   private final Map<UUID, Integer> bucketsPerRaftGroupCounter = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Object> bucketAssignmentLocks = new ConcurrentHashMap<>();
 
@@ -68,6 +67,8 @@ public class OmRaftGroupManager {
 
   private final ConcurrentMap<String, OmTransport> omTransportCache = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Object> omTransportInitLocks = new ConcurrentHashMap<>();
+
+  private final ReentrantReadWriteLock raftGroupsReconstructionLock = new ReentrantReadWriteLock();
 
   private final ExecutorService transportCreationExecutor;
 
@@ -408,6 +409,14 @@ public class OmRaftGroupManager {
   public void releaseBucketRaftGroupAssignmentWriteLock() throws InterruptedException {
     LOG.info("Bucket raft group assignment write lock released");
     bucketRaftGroupAssignmentInProgress.set(false);
+  }
+
+  public void acquireBucketRaftGroupsReconstructionLock() {
+    raftGroupsReconstructionLock.writeLock().lock();
+  }
+
+  public void releaseBucketRaftGroupsReconstructionLock() {
+    raftGroupsReconstructionLock.writeLock().unlock();
   }
 
 }

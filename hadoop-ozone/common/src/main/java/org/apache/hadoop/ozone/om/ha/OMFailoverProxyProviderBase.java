@@ -425,7 +425,7 @@ public abstract class OMFailoverProxyProviderBase<T> implements
           deleteKeysArgs.getBucketName();
       break;
     default:
-      throw new IllegalArgumentException("Unsupported write operation");
+      bucketPath = null;
     }
     return bucketPath;
   }
