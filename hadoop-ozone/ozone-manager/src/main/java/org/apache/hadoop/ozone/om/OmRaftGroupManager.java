@@ -39,6 +39,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.hadoop.hdds.HddsUtils;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.utils.db.cache.CacheKey;
@@ -78,6 +79,9 @@ public class OmRaftGroupManager {
 
   private final Map<String, UUID> bucketRaftGroups = new ConcurrentHashMap<>();
   private final Map<UUID, Integer> bucketsPerRaftGroupCounter = new ConcurrentHashMap<>();
+
+  // SDPOZN-2164: held by the raft group reconciliation task, so that the leadership balancer does not run meanwhile
+  private final ReentrantReadWriteLock raftGroupsReconstructionLock = new ReentrantReadWriteLock();
 
   // raft group assignments in progress on this OM, by bucket: concurrent writers of a bucket wait for the first one
   private final Map<String, CompletableFuture<RaftGroupId>> bucketAssignments = new ConcurrentHashMap<>();
@@ -351,6 +355,14 @@ public class OmRaftGroupManager {
   public void releaseBucketRaftGroupAssignmentWriteLock() {
     LOG.info("Bucket raft group assignment write lock released");
     bucketRaftGroupAssignmentInProgress.set(false);
+  }
+
+  public void acquireBucketRaftGroupsReconstructionLock() {
+    raftGroupsReconstructionLock.writeLock().lock();
+  }
+
+  public void releaseBucketRaftGroupsReconstructionLock() {
+    raftGroupsReconstructionLock.writeLock().unlock();
   }
 
   public Map<String, UUID> getBucketRaftGroups() {

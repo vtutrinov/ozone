@@ -1240,7 +1240,7 @@ public final class OzoneManagerRatisServer {
     scheduler = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder().setDaemon(true)
         .setNameFormat(ozoneManager.getThreadNamePrefix() + "BucketGroupLeaderBalancer").build());
     scheduler.scheduleAtFixedRate(
-            new LeaderCheckExecutor(this, ozoneManager.getConfiguration()),
+            new LeaderCheckExecutor(this, ozoneManager.getConfiguration(), ozoneManager.getOmRaftGroupManager()),
             groupTransferLeadershipSchedulingInitialDelay, groupTransferLeadershipSchedulingPeriod, TimeUnit.SECONDS);
   }
 
