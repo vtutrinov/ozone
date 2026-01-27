@@ -24,9 +24,9 @@ def acceptanceTests = [
     // "EC",
     // "HA-secure",
     // "HA-unsecure",
-    //"MR",
+    "MR",
     // "balancer",
-    //"cert-rotation",
+    "cert-rotation",
     // "leadership",
     // "misc",
     // "s3a",
@@ -188,9 +188,9 @@ integrationTests.each { test ->
     integrationParallelStages.put(test, integrationParallelTests(test))
 }
 
-// acceptanceTests.each { test ->
-//     acceptanceParallelStages.put(test, acceptanceParallelTests("acceptance", test))
-// }
+acceptanceTests.each { test ->
+    acceptanceParallelStages.put(test, acceptanceParallelTests("acceptance", test))
+}
 
 properties([])
 
