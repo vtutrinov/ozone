@@ -79,13 +79,13 @@ public class OMAdmin implements AdminSubcommand {
     OzoneConfiguration conf = parent.getOzoneConf();
     if (OmUtils.isOmHAServiceId(conf, omServiceId)) {
       return OzoneClientFactory.getRpcClient(omServiceId, conf).getObjectStore()
-        .getClientProxy();
+          .getClientProxy();
     } else {
       throw new OzoneClientException("This command works only on OzoneManager" +
-            " HA cluster. Service ID specified does not match" +
-            " with " + OZONE_OM_SERVICE_IDS_KEY + " defined in the " +
-            "configuration. Configured " + OZONE_OM_SERVICE_IDS_KEY + " are " +
-            conf.getTrimmedStringCollection(OZONE_OM_SERVICE_IDS_KEY) + "\n");
+          " HA cluster. Service ID specified does not match" +
+          " with " + OZONE_OM_SERVICE_IDS_KEY + " defined in the " +
+          "configuration. Configured " + OZONE_OM_SERVICE_IDS_KEY + " are " +
+          conf.getTrimmedStringCollection(OZONE_OM_SERVICE_IDS_KEY) + "\n");
     }
   }
 
@@ -120,10 +120,10 @@ public class OMAdmin implements AdminSubcommand {
           clientId);
     } else {
       throw new OzoneClientException("This command works only on OzoneManager" +
-            " HA cluster. Service ID specified does not match" +
-            " with " + OZONE_OM_SERVICE_IDS_KEY + " defined in the " +
-            "configuration. Configured " + OZONE_OM_SERVICE_IDS_KEY + " are " +
-            conf.getTrimmedStringCollection(OZONE_OM_SERVICE_IDS_KEY) + "\n");
+          " HA cluster. Service ID specified does not match" +
+          " with " + OZONE_OM_SERVICE_IDS_KEY + " defined in the " +
+          "configuration. Configured " + OZONE_OM_SERVICE_IDS_KEY + " are " +
+          conf.getTrimmedStringCollection(OZONE_OM_SERVICE_IDS_KEY) + "\n");
     }
   }
 

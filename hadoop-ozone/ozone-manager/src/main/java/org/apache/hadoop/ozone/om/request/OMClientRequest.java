@@ -83,6 +83,7 @@ public abstract class OMClientRequest implements RequestAuditor {
     return auditBuilder;
   }
 
+  private String writeBucketName;
   /**
    * Stores the result of request execution in
    * OMClientRequest#validateAndUpdateCache.
@@ -607,5 +608,13 @@ public abstract class OMClientRequest implements RequestAuditor {
 
   public void mergeOmLockDetails(OMLockDetails details) {
     omLockDetails.merge(details);
+  }
+
+  public String getWriteReqBucketName() {
+    return writeBucketName;
+  }
+
+  public void setWriteReqBucketName(String bucketName) {
+    this.writeBucketName = bucketName;
   }
 }

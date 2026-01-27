@@ -440,8 +440,8 @@ class TestOzoneManagerHAWithAllRunning extends TestOzoneManagerHA {
         getCluster().getOzoneManager(0).getOmRatisServer();
     ObjectName oname = new ObjectName(RATIS_APPLICATION_NAME_METRICS, "name",
         RATIS_APPLICATION_NAME_METRICS + ".log_worker." +
-            ratisServer.getRaftPeerId().toString() +
-            "@" + ratisServer.getRaftGroup().getGroupId() + ".flushCount");
+        ratisServer.getRaftPeerId().toString() +
+        "@" + ratisServer.getCurrentRaftGroup().getGroupId() + ".flushCount");
     MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
     MBeanInfo mBeanInfo = mBeanServer.getMBeanInfo(oname);
     assertNotNull(mBeanInfo);
@@ -496,7 +496,7 @@ class TestOzoneManagerHAWithAllRunning extends TestOzoneManagerHA {
         raftServer.submitClientRequest(RaftClientRequest.newBuilder()
             .setClientId(clientId)
             .setServerId(raftServer.getId())
-            .setGroupId(ozoneManagerRatisServer.getRaftGroup().getGroupId())
+            .setGroupId(ozoneManagerRatisServer.getCurrentRaftGroup().getGroupId())
             .setCallId(callId)
             .setMessage(
                 Message.valueOf(
@@ -515,7 +515,7 @@ class TestOzoneManagerHAWithAllRunning extends TestOzoneManagerHA {
         raftServer.submitClientRequest(RaftClientRequest.newBuilder()
             .setClientId(clientId)
             .setServerId(raftServer.getId())
-            .setGroupId(ozoneManagerRatisServer.getRaftGroup().getGroupId())
+            .setGroupId(ozoneManagerRatisServer.getCurrentRaftGroup().getGroupId())
             .setCallId(callId)
             .setMessage(
                 Message.valueOf(
@@ -539,7 +539,7 @@ class TestOzoneManagerHAWithAllRunning extends TestOzoneManagerHA {
         raftServer.submitClientRequest(RaftClientRequest.newBuilder()
             .setClientId(clientId)
             .setServerId(raftServer.getId())
-            .setGroupId(ozoneManagerRatisServer.getRaftGroup().getGroupId())
+            .setGroupId(ozoneManagerRatisServer.getCurrentRaftGroup().getGroupId())
             .setCallId(callId)
             .setMessage(
                 Message.valueOf(

@@ -123,10 +123,13 @@ public class TestTransferLeadershipShell {
     assertSCMResetPriorities();
   }
 
-  private void assertOMResetPriorities() {
-    final Collection<RaftPeer> raftPeers = cluster.getOMLeader()
-        .getOmRatisServer()
-        .getServerDivision()
+  private void assertOMResetPriorities() throws IOException {
+    OzoneManagerRatisServer ratisServer = cluster.getOMLeader()
+        .getOmRatisServer();
+    RaftGroupId raftGroupId = ratisServer.getCurrentRaftGroupId();
+    Collection<RaftPeer> raftPeers = ratisServer
+        .getServer()
+        .getDivision(raftGroupId)
         .getGroup()
         .getPeers();
 

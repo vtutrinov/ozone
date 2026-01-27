@@ -81,6 +81,11 @@ import org.apache.ratis.util.LifeCycle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status.INTERNAL_ERROR;
+import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status.METADATA_ERROR;
+import static org.apache.hadoop.ozone.OzoneConsts.TRANSACTION_INFO_KEY;
+import static org.apache.hadoop.ozone.util.OzoneMultiRaftUtils.isMultiRaftEnabled;
+
 /**
  * The OM StateMachine is the state machine for OM Ratis server. It is
  * responsible for applying ratis committed transactions to
@@ -99,6 +104,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   private final OzoneManager ozoneManager;
   private RequestHandler handler;
   private volatile OzoneManagerDoubleBuffer ozoneManagerDoubleBuffer;
+  private RaftGroupId raftGroupId;
   private final ExecutorService executorService;
   private final ExecutorService installSnapshotExecutor;
   private final boolean isTracingEnabled;
@@ -113,7 +119,9 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   private final NettyMetrics nettyMetrics;
 
   public OzoneManagerStateMachine(OzoneManagerRatisServer ratisServer,
-      boolean isTracingEnabled) throws IOException {
+      RaftGroupId raftGroupId, boolean isTracingEnabled) throws IOException {
+    this.omRatisServer = ratisServer;
+    this.raftGroupId = raftGroupId;
     this.isTracingEnabled = isTracingEnabled;
     this.ozoneManager = ratisServer.getOzoneManager();
 
@@ -144,7 +152,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     getLifeCycle().startAndTransition(() -> {
       super.initialize(server, id, raftStorage);
       storage.init(raftStorage);
-      LOG.info("{}: initialize {} with {}", getId(), id, getLastAppliedTermIndex());
+      LOG.info("{}: initialize {} with {}", getId(), raftGroupId, getLastAppliedTermIndex());
     });
   }
 
@@ -160,7 +168,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
 
   @Override
   public SnapshotInfo getLatestSnapshot() {
-    final SnapshotInfo snapshotInfo = ozoneManager.getTransactionInfo().toSnapshotInfo();
+    final SnapshotInfo snapshotInfo = ozoneManager.getTransactionInfo(raftGroupId).toSnapshotInfo();
     LOG.debug("Latest Snapshot Info {}", snapshotInfo);
     return snapshotInfo;
   }
@@ -168,11 +176,15 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   @Override
   public void notifyLeaderReady() {
     ozoneManager.getOmSnapshotManager().resetInFlightSnapshotCount();
+    final SnapshotInfo currentSnapshotInfo = ozoneManager.getTransactionInfo(raftGroupId).toSnapshotInfo();
+    LOG.trace("Latest Snapshot Info {}", currentSnapshotInfo);
+    return currentSnapshotInfo;
   }
 
   @Override
   public void notifyLeaderChanged(RaftGroupMemberId groupMemberId,
                                   RaftPeerId newLeaderId) {
+    LOG.trace("Change leader in group {}. New leader {}", groupMemberId.getGroupId(), newLeaderId);
     RaftPeerId currentPeerId = groupMemberId.getPeerId();
     if (newLeaderId.equals(currentPeerId)) {
       // warmup cache
@@ -184,7 +196,12 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     // Update the previous leader for next time
     previousLeaderId = newLeaderId;
     // Initialize OMHAMetrics
-    ozoneManager.omHAMetricsInit(newLeaderId.toString());
+    if (ozoneManager.getOmhaMetrics() == null) {
+      ozoneManager.omHAMetricsInit(groupMemberId.getGroupId(), newLeaderId.toString());
+    } else {
+      ozoneManager.getOmhaMetrics().defineRaftGroupLeader(groupMemberId.getGroupId(), newLeaderId.toString(), true);
+    }
+    ozoneManager.getSafeModeManager().onLeaderElected();
 
     Map<String, String> auditParams = new LinkedHashMap<>();
     auditParams.put(AUDIT_PARAM_PREVIOUS_LEADER,
@@ -290,7 +307,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     case SUCCESS:
     case SNAPSHOT_UNAVAILABLE:
       // Currently, only trigger for the one who installed snapshot
-      if (ozoneManager.getOmRatisServer().getServerDivision().getPeer().equals(peer)) {
+      if (ozoneManager.getOmRatisServer().getServerDivision(raftGroupId).getPeer().equals(peer)) {
         ozoneManager.getOmSnapshotProvider().init();
       }
       break;
@@ -386,6 +403,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
    */
   @Override
   public CompletableFuture<Message> applyTransaction(TransactionContext trx) {
+    LOG.trace("Apply transaction {} {}", raftGroupId, trx.getLogEntry().getIndex());
     try {
       // For the Leader, the OMRequest is set in trx in startTransaction.
       // For Followers, the OMRequest hast to be converted from the log entry.
@@ -402,7 +420,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
       // chance that OM replica's can be out of sync.
       // TODO: In this way we are making all applyTransactions in
       // OM serial order. Revisit this in future to use multiple executors for
-      // volume/bucket.
+      // volume.
 
       // Reason for not immediately implementing executor per volume is, if
       // one executor operations are slow, we cannot update the
@@ -567,7 +585,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
             "term index: {}", leaderNodeId, firstTermIndexInLog);
 
     return CompletableFuture.supplyAsync(
-        () -> ozoneManager.installSnapshotFromLeader(leaderNodeId),
+        () -> ozoneManager.installSnapshotFromLeader(raftGroupId, leaderNodeId),
         installSnapshotExecutor);
   }
 
@@ -600,6 +618,11 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
           request, context, ozoneManagerDoubleBuffer);
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
       OMResponse omResponse = omClientResponse.getOMResponse();
+      if (request.hasCreateBucketRequest() && isMultiRaftEnabled()) {
+        String bucketName = request.getCreateBucketRequest().getBucketInfo().getBucketName();
+        LOG.trace("Creating raft group while runCommand {}", bucketName);
+        ozoneManager.createRaftGroupForBucket(bucketName);
+      }
       if (omLockDetails != null) {
         return omResponse.toBuilder()
             .setOmLockDetails(omLockDetails.toProtobufBuilder()).build();

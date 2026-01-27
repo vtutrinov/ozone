@@ -32,6 +32,7 @@ import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.utils.TransactionInfo;
 import org.apache.hadoop.ozone.audit.AuditLogger;
 import org.apache.hadoop.ozone.audit.AuditMessage;
+import org.apache.hadoop.ozone.common.ha.ratis.RatisSnapshotInfo;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OMMetadataManager;
 import org.apache.hadoop.ozone.om.OmConfig;
@@ -52,6 +53,7 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.UserInf
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.ratis.proto.RaftProtos;
 import org.apache.ratis.protocol.Message;
+import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.protocol.exceptions.StateMachineException;
 import org.apache.ratis.server.protocol.TermIndex;
 import org.apache.ratis.server.raftlog.LogProtoUtils;
@@ -61,7 +63,14 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.Mockito;
+
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Class to test OzoneManagerStateMachine.
@@ -99,12 +108,14 @@ public class TestOzoneManagerStateMachine {
     when(ozoneManager.getPrepareState()).thenReturn(prepareState);
 
     when(ozoneManagerRatisServer.getOzoneManager()).thenReturn(ozoneManager);
-    when(ozoneManager.getTransactionInfo()).thenReturn(mock(TransactionInfo.class));
+    when(ozoneManager.getTransactionInfo(any(RaftGroupId.class))).thenReturn(mock(TransactionInfo.class));
+    when(ozoneManager.getSnapshotInfo()).thenReturn(
+        mock(RatisSnapshotInfo.class));
     when(ozoneManager.getConfiguration()).thenReturn(conf);
     final OmConfig omConfig = conf.getObject(OmConfig.class);
     when(ozoneManager.getConfig()).thenReturn(omConfig);
-    ozoneManagerStateMachine =
-        new OzoneManagerStateMachine(ozoneManagerRatisServer, false);
+    ozoneManagerStateMachine = new OzoneManagerStateMachine(ozoneManagerRatisServer, mock(RaftGroupId.class), false);
+    ozoneManagerStateMachine.notifyTermIndexUpdated(0, 0);
   }
 
   static void assertTermIndex(long expectedTerm, long expectedIndex, TermIndex computed) {

@@ -613,7 +613,7 @@ final class TestSecureOzoneCluster {
     OzoneManagerProtocolClientSideTranslatorPB secureClient =
         new OzoneManagerProtocolClientSideTranslatorPB(
             OmTransportFactory.create(conf, ugi, null),
-            ClientId.randomId().toString());
+            ClientId.randomId().toString(), conf, ugi, null);
     secureClient.createVolume(
         new OmVolumeArgs.Builder().setVolume("vol1")
             .setOwnerName("owner1")
@@ -626,7 +626,7 @@ final class TestSecureOzoneCluster {
     OzoneManagerProtocolClientSideTranslatorPB unsecureClient =
         new OzoneManagerProtocolClientSideTranslatorPB(
             OmTransportFactory.create(conf, ugi, null),
-            ClientId.randomId().toString());
+            ClientId.randomId().toString(), conf, ugi, null);
     String exMessage = "org.apache.hadoop.security.AccessControlException: " +
         "Client cannot authenticate via:[TOKEN, KERBEROS]";
     logs = LogCapturer.captureLogs(Client.class);
@@ -674,7 +674,7 @@ final class TestSecureOzoneCluster {
       // Get first OM client which will authenticate via Kerberos
       omClient = new OzoneManagerProtocolClientSideTranslatorPB(
           OmTransportFactory.create(conf, ugi, null),
-          RandomStringUtils.secure().nextAscii(5));
+          RandomStringUtils.secure().nextAscii(5), conf, ugi, null);
 
       // Since client is already connected get a delegation token
       Token<OzoneTokenIdentifier> token = omClient.getDelegationToken(
@@ -762,7 +762,7 @@ final class TestSecureOzoneCluster {
       // Get first OM client which will authenticate via Kerberos
       omClient = new OzoneManagerProtocolClientSideTranslatorPB(
           OmTransportFactory.create(conf, ugi, null),
-          RandomStringUtils.secure().nextAscii(5));
+          RandomStringUtils.secure().nextAscii(5), conf, ugi, null);
 
       // Creates a secret since it does not exist
       S3SecretValue attempt1 = omClient.getS3Secret(username);
@@ -823,7 +823,7 @@ final class TestSecureOzoneCluster {
       final OzoneManagerProtocolClientSideTranslatorPB omClientNonAdmin =
           new OzoneManagerProtocolClientSideTranslatorPB(
           OmTransportFactory.create(conf, ugiNonAdmin, null),
-          RandomStringUtils.secure().nextAscii(5));
+          RandomStringUtils.secure().nextAscii(5), conf, ugi, null);
 
       OMException omException = assertThrows(OMException.class,
           () -> omClientNonAdmin.getS3Secret("HADOOP/JOHN"));
@@ -1211,7 +1211,7 @@ final class TestSecureOzoneCluster {
       // Get first OM client which will authenticate via Kerberos
       omClient = new OzoneManagerProtocolClientSideTranslatorPB(
           OmTransportFactory.create(newConf, ugi, null),
-          RandomStringUtils.secure().nextAscii(5));
+          RandomStringUtils.secure().nextAscii(5), conf, ugi, null);
 
       // Since client is already connected get a delegation token
       Token<OzoneTokenIdentifier> token1 = omClient.getDelegationToken(
