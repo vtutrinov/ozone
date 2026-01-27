@@ -326,7 +326,6 @@ import org.apache.hadoop.ozone.snapshot.SnapshotDiffResponse;
 import org.apache.hadoop.ozone.storage.proto.OzoneManagerStorageProtos.PersistedUserVolumeInfo;
 import org.apache.hadoop.ozone.upgrade.UpgradeFinalizer;
 import org.apache.hadoop.ozone.upgrade.UpgradeFinalizer.StatusAndMessages;
-import org.apache.hadoop.ozone.util.OmRatisGroupManager;
 import org.apache.hadoop.ozone.util.OzoneNetUtils;
 import org.apache.hadoop.ozone.util.OzoneVersionInfo;
 import org.apache.hadoop.ozone.util.ShutdownHookManager;
@@ -576,7 +575,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
   private final boolean isRatisEnabled;
   private final boolean isMultiRaftEnabled;
-  private final OmRatisGroupManager omRatisGroupManager;
+  private OmRatisGroupManager omRatisGroupManager;
   private OzoneManagerRatisServer omRatisServer;
   private OMExecutionFlow omExecutionFlow;
   private OmRatisSnapshotProvider omRatisSnapshotProvider;
@@ -735,7 +734,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
             OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT
     );
 
-    omRatisGroupManager = new OmRatisGroupManager(configuration, isMultiRaftEnabled, getOMServiceId());
+
 
     // Ratis server comes with JvmPauseMonitor, no need to start another
     jvmPauseMonitor = !isRatisEnabled ? newJvmPauseMonitor(omId) : null;
@@ -1027,9 +1026,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     executor.execute(new EDEKCacheLoader(edeks, getKmsProvider(), delay, interval, maxRetries));
   }
 
-  public InitBucketResult initBucketRaftGroupAndStateMachine(String bucketName) {
+  public InitBucketResult initBucketRaftGroupAndStateMachine(String volumeName, String bucketName) {
     RaftGroup bucketRaftGroup;
-    RaftGroupId raftGroupId = ratisGroupName(bucketName);
+    RaftGroupId raftGroupId = ratisGroupName(volumeName, bucketName);
     if (omRaftGroups.containsKey(raftGroupId)) {
       return new InitBucketResult(false, omRaftGroups.get(raftGroupId));
     }
@@ -1149,6 +1148,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     volumeManager = new VolumeManagerImpl(metadataManager);
 
     bucketManager = new BucketManagerImpl(this, metadataManager);
+
+    omRatisGroupManager = new OmRatisGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
 
     Class<? extends S3SecretStoreProvider> storeProviderClass =
         configuration.getClass(
@@ -1969,6 +1970,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    */
   public OMMetadataManager getMetadataManager() {
     return metadataManager;
+  }
+
+  public OmRatisGroupManager getOmRatisGroupManager() {
+    return omRatisGroupManager;
   }
 
   public S3SecretManager getS3SecretManager() {
@@ -4802,12 +4807,12 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return isMultiRaftEnabled;
   }
 
-  public RaftGroupId ratisGroupName() {
-    return ratisGroupName(null);
+  public RaftGroupId omRatisGroupName() {
+    return ratisGroupName(null, null);
   }
 
-  public RaftGroupId ratisGroupName(String bucketName) {
-    return omRatisGroupManager.ratisGroupName(bucketName);
+  public RaftGroupId ratisGroupName(String volumeName, String bucketName) {
+    return omRatisGroupManager.ratisGroupName(volumeName, bucketName);
   }
 
   /**

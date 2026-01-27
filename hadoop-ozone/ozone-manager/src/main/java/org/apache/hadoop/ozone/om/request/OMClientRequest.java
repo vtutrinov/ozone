@@ -84,6 +84,7 @@ public abstract class OMClientRequest implements RequestAuditor {
   }
 
   private String writeBucketName;
+  private String writeVolumeName;
   /**
    * Stores the result of request execution in
    * OMClientRequest#validateAndUpdateCache.
@@ -616,5 +617,13 @@ public abstract class OMClientRequest implements RequestAuditor {
 
   public void setWriteReqBucketName(String bucketName) {
     this.writeBucketName = bucketName;
+  }
+
+  public String getWriteReqVolumeName() {
+    return writeVolumeName;
+  }
+
+  public void setWriteReqVolumeName(String volumeName) {
+    this.writeVolumeName = volumeName;
   }
 }

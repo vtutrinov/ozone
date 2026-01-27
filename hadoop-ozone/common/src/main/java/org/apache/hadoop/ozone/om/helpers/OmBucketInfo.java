@@ -22,7 +22,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
+
+import org.apache.hadoop.hdds.HddsUtils;
 import org.apache.hadoop.hdds.client.DefaultReplicationConfig;
 import org.apache.hadoop.hdds.protocol.StorageType;
 import org.apache.hadoop.hdds.utils.db.Codec;
@@ -107,6 +110,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
 
   private final String owner;
 
+  private UUID raftGroup;
+
   private OmBucketInfo(Builder b) {
     super(b);
     this.volumeName = b.volumeName;
@@ -128,6 +133,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     this.bucketLayout = b.bucketLayout;
     this.owner = b.owner;
     this.defaultReplicationConfig = b.defaultReplicationConfig;
+    this.raftGroup = b.raftGroup;
   }
 
   public static Codec<OmBucketInfo> getCodec() {
@@ -303,6 +309,22 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     return owner;
   }
 
+  public void setModificationTime(long modificationTime) {
+    this.modificationTime = modificationTime;
+  }
+
+  public void setOwner(String ownerName) {
+    this.owner = ownerName;
+  }
+
+  public UUID getRaftGroup() {
+    return raftGroup;
+  }
+
+  public void setRaftGroup(UUID raftGroup) {
+    this.raftGroup = raftGroup;
+  }
+
   /**
    * Returns new builder class that builds a OmBucketInfo.
    *
@@ -378,7 +400,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
         .setSnapshotUsedNamespace(snapshotUsedNamespace)
         .setBucketLayout(bucketLayout)
         .setOwner(owner)
-        .setDefaultReplicationConfig(defaultReplicationConfig);
+        .setDefaultReplicationConfig(defaultReplicationConfig)
+        .setRaftGroup(raftGroup);
   }
 
   /**
@@ -404,6 +427,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     private DefaultReplicationConfig defaultReplicationConfig;
     private long snapshotUsedBytes;
     private long snapshotUsedNamespace;
+    private UUID raftGroup;
 
     public Builder() {
       acls = AclListBuilder.empty();
@@ -544,6 +568,11 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
       return this;
     }
 
+    public Builder setRaftGroup(UUID raftGroup) {
+      this.raftGroup = raftGroup;
+      return this;
+    }
+
     public Builder setDefaultReplicationConfig(
         DefaultReplicationConfig defaultReplConfig) {
       this.defaultReplicationConfig = defaultReplConfig;
@@ -603,6 +632,9 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     }
     if (owner != null) {
       bib.setOwner(owner);
+    }
+    if (raftGroup != null) {
+      bib.setRaftGroup(HddsUtils.toProtobuf(raftGroup));
     }
     return bib.build();
   }
@@ -673,6 +705,9 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     if (bucketInfo.hasOwner()) {
       obib.setOwner(bucketInfo.getOwner());
     }
+    if (bucketInfo.hasRaftGroup()) {
+      obib.setRaftGroup(HddsUtils.fromProtobuf(bucketInfo.getRaftGroup()));
+    }
     return obib;
   }
 
@@ -714,6 +749,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
         ", quotaInNamespace='" + quotaInNamespace + "'" +
         ", bucketLayout='" + bucketLayout + '\'' +
         ", defaultReplicationConfig='" + defaultReplicationConfig + '\'' +
+        ", raftGroup='" + raftGroup + '\'' +
         sourceInfo +
         '}';
   }
@@ -745,7 +781,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
         Objects.equals(getMetadata(), that.getMetadata()) &&
         Objects.equals(bekInfo, that.bekInfo) &&
         Objects.equals(owner, that.owner) &&
-        Objects.equals(defaultReplicationConfig, that.defaultReplicationConfig);
+        Objects.equals(defaultReplicationConfig, that.defaultReplicationConfig) &&
+        Objects.equals(raftGroup, that.raftGroup);
   }
 
   @Override
@@ -777,6 +814,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
         ", bucketLayout=" + bucketLayout +
         ", owner=" + owner +
         ", defaultReplicationConfig=" + defaultReplicationConfig +
+        ", raftGroup=" + raftGroup +
         '}';
   }
 }

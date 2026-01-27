@@ -774,6 +774,14 @@ message BucketInfo {
     optional hadoop.hdds.DefaultReplicationConfig defaultReplicationConfig = 20;
     optional uint64 snapshotUsedBytes = 21;
     optional uint64 snapshotUsedNamespace = 22;
+    optional hadoop.hdds.UUID raftGroup = 23;
+}
+
+enum StorageTypeProto {
+    DISK = 1;
+    SSD = 2;
+    ARCHIVE = 3;
+    RAM_DISK = 4;
 }
 
 enum BucketLayoutProto {
