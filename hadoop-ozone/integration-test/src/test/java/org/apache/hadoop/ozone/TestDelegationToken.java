@@ -17,6 +17,54 @@
 
 package org.apache.hadoop.ozone;
 
+<<<<<<< HEAD
+=======
+import java.io.File;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.KeyPair;
+import java.security.PrivilegedExceptionAction;
+import java.util.Properties;
+import java.util.stream.Stream;
+import java.util.UUID;
+
+import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.hdds.scm.HddsTestUtils;
+import org.apache.hadoop.hdds.scm.ScmConfig;
+import org.apache.hadoop.hdds.scm.client.ScmTopologyClient;
+import org.apache.hadoop.hdds.scm.ha.HASecurityUtils;
+import org.apache.hadoop.hdds.scm.server.SCMHTTPServerConfig;
+import org.apache.hadoop.hdds.scm.server.SCMStorageConfig;
+import org.apache.hadoop.hdds.scm.server.StorageContainerManager;
+import org.apache.hadoop.hdds.security.SecurityConfig;
+import org.apache.hadoop.hdds.security.x509.certificate.authority.DefaultCAServer;
+import org.apache.hadoop.hdds.security.x509.certificate.client.CertificateClientTestImpl;
+import org.apache.hadoop.hdds.security.x509.keys.HDDSKeyGenerator;
+import org.apache.hadoop.hdds.security.x509.keys.KeyCodec;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.ipc.Server;
+import org.apache.hadoop.minikdc.MiniKdc;
+import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
+import org.apache.hadoop.ozone.om.OMStorage;
+import org.apache.hadoop.ozone.om.OzoneManager;
+import org.apache.hadoop.ozone.om.ScmBlockLocationTestingClient;
+import org.apache.hadoop.ozone.om.exceptions.OMException;
+import org.apache.hadoop.ozone.om.protocolPB.OmTransport;
+import org.apache.hadoop.ozone.om.protocolPB.OmTransportFactory;
+import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerProtocolClientSideTranslatorPB;
+import org.apache.hadoop.ozone.security.OzoneTokenIdentifier;
+import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
+import org.apache.hadoop.security.SecurityUtil;
+import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.token.Token;
+import org.apache.ozone.test.GenericTestUtils;
+import org.apache.ozone.test.GenericTestUtils.LogCapturer;
+
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.RandomStringUtils;
+>>>>>>> b2f53a4846 (Pull request #252: [SDPOZN-1710] Encapsulate multiraft logic inside OM)
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION;
 import static org.apache.hadoop.hdds.HddsConfigKeys.OZONE_METADATA_DIRS;
 import static org.apache.hadoop.hdds.scm.ScmConfig.ConfigStrings.HDDS_SCM_KERBEROS_KEYTAB_FILE_KEY;
@@ -315,7 +363,11 @@ public final class TestDelegationToken {
       // Get first OM client which will authenticate via Kerberos
       omClient = new OzoneManagerProtocolClientSideTranslatorPB(
           OmTransportFactory.create(conf, ugi, null),
+<<<<<<< HEAD
           RandomStringUtils.secure().nextAscii(5), conf, ugi, null);
+=======
+          RandomStringUtils.randomAscii(5), conf, () -> createOmTransport(ugi));
+>>>>>>> b2f53a4846 (Pull request #252: [SDPOZN-1710] Encapsulate multiraft logic inside OM)
 
       // Assert if auth was successful via Kerberos
       assertThat(logs.getOutput()).doesNotContain(
@@ -348,7 +400,11 @@ public final class TestDelegationToken {
       testUser.doAs((PrivilegedExceptionAction<Void>) () -> {
         omClient = new OzoneManagerProtocolClientSideTranslatorPB(
             OmTransportFactory.create(conf, testUser, null),
+<<<<<<< HEAD
             RandomStringUtils.secure().nextAscii(5), conf, ugi, null);
+=======
+            RandomStringUtils.randomAscii(5), conf, () -> createOmTransport(testUser));
+>>>>>>> b2f53a4846 (Pull request #252: [SDPOZN-1710] Encapsulate multiraft logic inside OM)
         return null;
       });
 
@@ -376,7 +432,11 @@ public final class TestDelegationToken {
       UserGroupInformation.setLoginUser(ugi);
       omClient = new OzoneManagerProtocolClientSideTranslatorPB(
           OmTransportFactory.create(conf, ugi, null),
+<<<<<<< HEAD
           RandomStringUtils.secure().nextAscii(5), conf, ugi, null);
+=======
+          RandomStringUtils.randomAscii(5), conf, () -> createOmTransport(ugi));
+>>>>>>> b2f53a4846 (Pull request #252: [SDPOZN-1710] Encapsulate multiraft logic inside OM)
 
       // Case 5: Test success of token cancellation.
       omClient.cancelDelegationToken(token);
@@ -392,7 +452,11 @@ public final class TestDelegationToken {
       // token is not in cache anymore.
       omClient = new OzoneManagerProtocolClientSideTranslatorPB(
           OmTransportFactory.create(conf, testUser, null),
+<<<<<<< HEAD
           RandomStringUtils.secure().nextAscii(5), conf, ugi, null);
+=======
+          RandomStringUtils.randomAscii(5), conf, () -> createOmTransport(testUser));
+>>>>>>> b2f53a4846 (Pull request #252: [SDPOZN-1710] Encapsulate multiraft logic inside OM)
       ex = assertThrows(OMException.class,
           () -> omClient.cancelDelegationToken(token));
       assertEquals(TOKEN_ERROR_OTHER, ex.getResult());
@@ -401,6 +465,14 @@ public final class TestDelegationToken {
     } finally {
       om.stop();
       om.join();
+    }
+  }
+
+  private OmTransport createOmTransport(UserGroupInformation ugi) {
+    try {
+      return OmTransportFactory.create(conf, ugi, null);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
     }
   }
 

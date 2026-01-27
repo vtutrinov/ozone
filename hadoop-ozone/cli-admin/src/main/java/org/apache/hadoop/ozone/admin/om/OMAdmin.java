@@ -20,8 +20,6 @@ package org.apache.hadoop.ozone.admin.om;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_ADDRESS_KEY;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SERVICE_IDS_KEY;
 
-import java.io.IOException;
-import java.util.Collection;
 import org.apache.hadoop.hdds.cli.AdminSubcommand;
 import org.apache.hadoop.hdds.cli.HddsVersionProvider;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
@@ -42,6 +40,11 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.ratis.protocol.ClientId;
 import org.kohsuke.MetaInfServices;
 import picocli.CommandLine;
+import picocli.CommandLine.Model.CommandSpec;
+import picocli.CommandLine.Spec;
+
+import java.io.IOException;
+import java.util.Collection;
 
 /**
  * Subcommand for admin operations related to OM.

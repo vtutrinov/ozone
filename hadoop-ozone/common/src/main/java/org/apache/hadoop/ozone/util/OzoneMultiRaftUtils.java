@@ -1,17 +1,11 @@
 package org.apache.hadoop.ozone.util;
 
-import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
-
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT;
 
 /**
  * Utility class used by OzoneManager HA.
  */
 public final class OzoneMultiRaftUtils {
-
-  private static final OzoneConfiguration CONF = new OzoneConfiguration();
 
   private OzoneMultiRaftUtils() {
   }
@@ -79,12 +73,5 @@ public final class OzoneMultiRaftUtils {
     default:
       return null;
     }
-  }
-
-  public static boolean isMultiRaftEnabled() {
-    return CONF.getBoolean(
-        OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
-        OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT
-    );
   }
 }

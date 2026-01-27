@@ -220,14 +220,11 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
       try {
         omClientRequest = createClientRequest(request, ozoneManager);
         // check retry cache
-        RaftGroupId raftGroupId;
         String bucketName = omClientRequest.getWriteReqBucketName();
+
         LOG.trace("Continue internal processing request {}, bucket {}", request.getCmdType(), bucketName);
-        if (bucketName != null && isMultiRaftEnabled()) {
-          raftGroupId = generateLimitedRaftGroupId(bucketName);
-        } else {
-          raftGroupId = generateRaftGroupId(ozoneManager.getOMServiceId());
-        }
+
+        RaftGroupId raftGroupId = ozoneManager.ratisGroupName(bucketName);
         // To validate credentials we have already verified leader status.
         // This will skip of checking leader status again if request has S3Auth.
         if (!s3Auth) {
@@ -247,7 +244,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
       }
 
       final OMResponse response;
-      if (omClientRequest.getWriteReqBucketName() != null && isMultiRaftEnabled()) {
+      if (omClientRequest.getWriteReqBucketName() != null && ozoneManager.isMultiRaftEnabled()) {
         response = omRatisServer.submitBucketWriteRequest(
                 requestToSubmit,
                 omClientRequest.getWriteReqBucketName()
