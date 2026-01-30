@@ -26,6 +26,8 @@ import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ADMINISTRATORS;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ADMINISTRATORS_GROUPS;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_CLIENT_HTTPS_NEED_AUTH_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_CLIENT_HTTPS_NEED_AUTH_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_SSL_ALLOWED_CN_LIST;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_SSL_ALLOWED_CN_LIST_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTP_SECURITY_ENABLED_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTP_SECURITY_ENABLED_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT;
@@ -40,6 +42,7 @@ import com.google.common.annotations.VisibleForTesting;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -143,6 +146,14 @@ public abstract class BaseHttpServer implements AutoCloseable {
       }
 
       httpServer = builder.build();
+
+      // SDP (SDPOZN-2180): validate the client certificate CN when mutual TLS is required
+      if (conf.getBoolean(OZONE_CLIENT_HTTPS_NEED_AUTH_KEY, OZONE_CLIENT_HTTPS_NEED_AUTH_DEFAULT)) {
+        Map<String, String> certVerifyAgentParams = new HashMap<>();
+        certVerifyAgentParams.put("cn", conf.get(OZONE_HTTPS_SSL_ALLOWED_CN_LIST,
+            OZONE_HTTPS_SSL_ALLOWED_CN_LIST_DEFAULT));
+        httpServer.addFilter("CertVerifyAgent", CertVerifyAgentFilter.class.getName(), certVerifyAgentParams);
+      }
 
       // TODO move these to HttpServer2.addDefaultApps
       if (addDefaultApps) {
