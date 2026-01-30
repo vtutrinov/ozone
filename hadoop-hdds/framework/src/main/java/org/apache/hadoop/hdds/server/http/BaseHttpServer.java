@@ -17,6 +17,7 @@
 
 package org.apache.hadoop.hdds.server.http;
 
+import java.util.HashMap;
 import java.util.Map;
 import javax.servlet.http.HttpServlet;
 import java.io.IOException;
@@ -51,6 +52,8 @@ import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ADMINISTRATORS;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ADMINISTRATORS_GROUPS;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_CLIENT_HTTPS_NEED_AUTH_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_CLIENT_HTTPS_NEED_AUTH_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_SSL_ALLOWED_CN_LIST;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_SSL_ALLOWED_CN_LIST_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTP_SECURITY_ENABLED_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTP_SECURITY_ENABLED_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT;
@@ -142,6 +145,15 @@ public abstract class BaseHttpServer {
       builder.configureXFrame(xFrameEnabled).setXFrameOption(xFrameOptionValue);
 
       httpServer = builder.build();
+
+      if (conf.getBoolean(
+          OZONE_CLIENT_HTTPS_NEED_AUTH_KEY, OZONE_CLIENT_HTTPS_NEED_AUTH_DEFAULT)) {
+        Map<String, String> certVerifyAgentParams = new HashMap<>();
+        certVerifyAgentParams.put("cn", conf.get(OZONE_HTTPS_SSL_ALLOWED_CN_LIST,
+             OZONE_HTTPS_SSL_ALLOWED_CN_LIST_DEFAULT));
+        httpServer.addFilter("CertVerifyAgent", CertVerifyAgentFilter.class.getName(), certVerifyAgentParams);
+      }
+
       httpServer.addServlet("conf", "/conf", HddsConfServlet.class);
 
       httpServer.addServlet("logstream", "/logstream", LogStreamServlet.class);
