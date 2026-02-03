@@ -17,6 +17,7 @@
 package org.apache.hadoop.ozone.om.balancing;
 
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.ozone.om.OmRaftGroupManager;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.ratis.protocol.ClientId;
 import org.apache.ratis.protocol.RaftGroup;
@@ -44,18 +45,22 @@ public class LeaderCheckExecutor implements Runnable {
   public static final Logger LOG = LoggerFactory.getLogger(LeaderCheckExecutor.class);
   private final OzoneManagerRatisServer server;
   private final long transferBucketGroupLeadershipTimeoutMs;
+  private final OmRaftGroupManager omRaftGroupManager;
 
-  public LeaderCheckExecutor(OzoneManagerRatisServer server, OzoneConfiguration configuration) {
+  public LeaderCheckExecutor(OzoneManagerRatisServer server, OzoneConfiguration configuration,
+                             OmRaftGroupManager omRaftGroupManager) {
     this.server = server;
     this.transferBucketGroupLeadershipTimeoutMs = configuration.getTimeDuration(
         OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_TIMEOUT,
         OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_TIMEOUT_DEFAULT,
         TimeUnit.MILLISECONDS
     );
+    this.omRaftGroupManager = omRaftGroupManager;
   }
 
   @Override
   public void run() {
+    omRaftGroupManager.acquireBucketRaftGroupsReconstructionLock();
     try {
       LOG.trace("Starting leader balancing in {}", server.getRaftPeerId());
       Map<RaftGroupId, RaftPeerId> groupsWithLeaderInfo =
@@ -82,6 +87,8 @@ public class LeaderCheckExecutor implements Runnable {
       LOG.trace("Finish leader balancing");
     } catch (Exception e) {
       LOG.error("Error while balancing leadership", e);
+    } finally {
+      omRaftGroupManager.releaseBucketRaftGroupsReconstructionLock();
     }
   }
 

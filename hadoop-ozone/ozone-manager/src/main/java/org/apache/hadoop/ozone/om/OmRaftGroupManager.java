@@ -53,8 +53,8 @@ public class OmRaftGroupManager {
   private final OzoneManager ozoneManager;
 
   private final ConcurrentMap<String, UUID> bucketRaftGroups = new ConcurrentHashMap<>();
-  private final List<String> bucketToRaftGroupAssignmentAwaited = new ArrayList<>();
   private final Map<UUID, Integer> bucketsPerRaftGroupCounter = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, Object> bucketAssignmentLocks = new ConcurrentHashMap<>();
 
   private final ReentrantReadWriteLock bucketRaftGroupLock = new ReentrantReadWriteLock();
   private final ReentrantReadWriteLock.ReadLock bucketRaftGroupReadLock = bucketRaftGroupLock.readLock();
@@ -67,6 +67,8 @@ public class OmRaftGroupManager {
 
   private final ConcurrentMap<String, OmTransport> omTransportCache = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Object> omTransportInitLocks = new ConcurrentHashMap<>();
+
+  private final ReentrantReadWriteLock raftGroupsReconstructionLock = new ReentrantReadWriteLock();
 
   private final ExecutorService transportCreationExecutor;
 
@@ -151,45 +153,46 @@ public class OmRaftGroupManager {
   }
 
   private RaftGroupId trySetAndGetRaftGroupToHandleBucketWriteRequest(String bucketPath) {
-    synchronized (bucketToRaftGroupAssignmentAwaited) {
-      if (bucketRaftGroups.containsKey(bucketPath)) {
-        UUID desiredRaftgroupUUID = bucketRaftGroups.get(bucketPath);
-        return RaftGroupId.valueOf(desiredRaftgroupUUID);
-      } else {
-        if (bucketToRaftGroupAssignmentAwaited.contains(bucketPath)) {
-          try {
-            bucketToRaftGroupAssignmentAwaited.wait(30000);
-            if (bucketRaftGroups.containsKey(bucketPath)) {
-              UUID desiredRaftgroupUUID = bucketRaftGroups.get(bucketPath);
-              return RaftGroupId.valueOf(desiredRaftgroupUUID);
-            } else {
-              throw new RuntimeException("Timeout waiting for raft group assignment for bucket " + bucketPath);
-            }
-          } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+    UUID existing = bucketRaftGroups.get(bucketPath);
+    if (existing != null) return RaftGroupId.valueOf(existing);
+
+    Object myLock = new Object();
+    Object activeLock = bucketAssignmentLocks.putIfAbsent(bucketPath, myLock);
+
+    if (activeLock != null) {
+      synchronized (activeLock) {
+        try {
+          activeLock.wait(30000);
+          UUID assigned = bucketRaftGroups.get(bucketPath);
+          if (assigned != null) {
+            return RaftGroupId.valueOf(assigned);
           }
+          throw new RuntimeException("Timeout waiting for raft group assignment for " + bucketPath);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new RuntimeException(e);
         }
-        bucketToRaftGroupAssignmentAwaited.add(bucketPath);
       }
     }
 
-    awaitBucketRaftGroupsInitialization();
     try {
+      awaitBucketRaftGroupsInitialization();
       while (!acquireBucketRaftGroupAssignmentWriteLockByRaft()) {
-        LOG.debug("Waiting for bucket raft group assignment write lock to be released");
         Thread.sleep(100);
       }
-      UUID lessLoadedRaftGroup = selectLessLoadedRaftGroup();
-      LOG.info("Raft group {} selected to handle write request to {}", lessLoadedRaftGroup, bucketPath);
-      assignRaftGroupToBucket(bucketPath, lessLoadedRaftGroup);
+
+      UUID selected = selectLessLoadedRaftGroup();
+      assignRaftGroupToBucket(bucketPath, selected);
       releaseBucketRaftGroupAssignmentWriteLockByRaft();
-      synchronized (bucketToRaftGroupAssignmentAwaited) {
-        bucketToRaftGroupAssignmentAwaited.remove(bucketPath);
-        bucketToRaftGroupAssignmentAwaited.notifyAll();
-      }
-      return getRaftGroupToHandleBucketWriteRequest(bucketPath);
-    } catch (IOException | ServiceException | InterruptedException e) {
+
+      return RaftGroupId.valueOf(selected);
+    } catch (Exception e) {
       throw new RuntimeException(e);
+    } finally {
+      synchronized (myLock) {
+        bucketAssignmentLocks.remove(bucketPath);
+        myLock.notifyAll();
+      }
     }
   }
 
@@ -400,6 +403,14 @@ public class OmRaftGroupManager {
   public void releaseBucketRaftGroupAssignmentWriteLock() throws InterruptedException {
     LOG.info("Bucket raft group assignment write lock released");
     bucketRaftGroupAssignmentInProgress.set(false);
+  }
+
+  public void acquireBucketRaftGroupsReconstructionLock() {
+    raftGroupsReconstructionLock.writeLock().lock();
+  }
+
+  public void releaseBucketRaftGroupsReconstructionLock() {
+    raftGroupsReconstructionLock.writeLock().unlock();
   }
 
 }
