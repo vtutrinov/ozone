@@ -584,7 +584,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
   private final boolean isRatisEnabled;
   private boolean isMultiRaftEnabled;
-  private OmRatisGroupManager omRatisGroupManager;
+  private OmRaftGroupManager omRaftGroupManager;
   private OzoneManagerRatisServer omRatisServer;
   private OMExecutionFlow omExecutionFlow;
   private OmRatisSnapshotProvider omRatisSnapshotProvider;
@@ -742,12 +742,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     isRatisEnabled = configuration.getBoolean(
         OMConfigKeys.OZONE_OM_RATIS_ENABLE_KEY,
         OMConfigKeys.OZONE_OM_RATIS_ENABLE_DEFAULT);
-
-    isMultiRaftEnabled = configuration.getBoolean(
-            OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
-            OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT
-    );
-
 
     isMultiRaftEnabled = configuration.getBoolean(
             OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
@@ -1188,7 +1182,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
     bucketManager = new BucketManagerImpl(this, metadataManager);
 
-    omRatisGroupManager = new OmRatisGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
+    omRaftGroupManager = new OmRaftGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
 
     Class<? extends S3SecretStoreProvider> storeProviderClass =
         configuration.getClass(
@@ -2012,8 +2006,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return metadataManager;
   }
 
-  public OmRatisGroupManager getOmRatisGroupManager() {
-    return omRatisGroupManager;
+  public OmRaftGroupManager getOmRaftGroupManager() {
+    return omRaftGroupManager;
   }
 
   public S3SecretManager getS3SecretManager() {
@@ -2168,8 +2162,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
   private void initBucketRaftGroups() throws IOException {
 
-    if ((!isMultiRaftEnabled() && getStateMachines().size() != 1)
-            || (isMultiRaftEnabled() && omRatisGroupManager.getOmRatisGroupCount() != getStateMachines().size() - 1)) {
+    boolean isNeedRemoveStaleRaftGroups = !isMultiRaftEnabled() && getStateMachines().size() != 1;
+    boolean isNeedRecreateRaftGroupsWhileChangedGroupsAmount = isMultiRaftEnabled() &&
+            omRaftGroupManager.getOmRaftGroupCount() != getStateMachines().size() - 1;
+    if (isNeedRemoveStaleRaftGroups || isNeedRecreateRaftGroupsWhileChangedGroupsAmount) {
 
       multiRaftTerm += 1;
       metadataManager.getMultiRaftInfoTable().put("term", multiRaftTerm);
@@ -2182,8 +2178,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         if (!Objects.equals(minNodeId, currentRaftPeerId.toString())) {
           LOG.info("Skipping group initialization: {} - {}", minNodeId, currentRaftPeerId);
           return;
-        } else {
-          LOG.info("Not skipping group initialization: {} - {}", minNodeId, currentRaftPeerId);
         }
         Iterable<RaftGroupId> groupIds = omRatisServer.getServer().getGroupIds();
         List<RaftGroupId> bucketGroupIds = getOmRaftGroups().values().stream()
@@ -2226,12 +2220,12 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
           try {
             minGroupIndex = Optional.fromNullable(metadataManager.getMultiRaftInfoTable().get("minGroupIndex"))
                 .or(0L);
-            maxGroupIndex = minGroupIndex + omRatisGroupManager.getOmRatisGroupCount();
+            maxGroupIndex = minGroupIndex + omRaftGroupManager.getOmRaftGroupCount();
           } catch (IOException e) {
             throw new RuntimeException(e);
           }
           for (long i = minGroupIndex; i < maxGroupIndex; i++) {
-            raftGroupIdsToCreate.add(OmRatisGroupManager.toUuid(String.valueOf(i)));
+            raftGroupIdsToCreate.add(OmRaftGroupManager.toUuid(String.valueOf(i)));
           }
           if (!raftGroupIdsToCreate.isEmpty()) {
             try {
@@ -2248,10 +2242,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       }, ConcurrentUtils.newSingleThreadExecutor("raft-group-initializator-" + getStateMachine().getId()));
     } else {
       LOG.trace(
-              "Try to seed Ratis group counter {} - {}", getStateMachines(), omRatisGroupManager.getBucketRatisGroups()
+              "Try to seed Ratis group counter {} - {}", getStateMachines(), omRaftGroupManager.getBucketRaftGroups()
       );
-      if (omRatisGroupManager.getBucketRatisGroups().size() != getStateMachines().size()) {
-        omRatisGroupManager.reIncrementRatisGroupCounter(getStateMachines().keySet()
+      if (omRaftGroupManager.getBucketRaftGroups().size() != getStateMachines().size()) {
+        omRaftGroupManager.addGroupIdListToRaftGroupCounter(getStateMachines().keySet()
                 .stream()
                 .map(RaftId::getUuid).collect(Collectors.toList())
         );
@@ -2338,8 +2332,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
               OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
               OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT
       );
-      omRatisGroupManager =
-              new OmRatisGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
+      omRaftGroupManager =
+              new OmRaftGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
       if (isMultiRaftEnabled) {
         initBucketRaftGroups();
       }
@@ -4975,7 +4969,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   }
 
   public RaftGroupId ratisGroupName(String volumeName, String bucketName) {
-    return omRatisGroupManager.ratisGroupName(volumeName, bucketName);
+    return omRaftGroupManager.raftGroupName(volumeName, bucketName);
   }
 
   /**

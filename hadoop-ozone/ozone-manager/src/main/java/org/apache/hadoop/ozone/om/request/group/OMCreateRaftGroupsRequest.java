@@ -6,9 +6,10 @@ import org.apache.hadoop.ozone.om.request.OMClientRequest;
 import org.apache.hadoop.ozone.om.request.util.OmResponseUtil;
 import org.apache.hadoop.ozone.om.response.OMClientResponse;
 import org.apache.hadoop.ozone.om.response.group.OMCreateRaftGroupsResponse;
-import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateBucketRaftGroupsRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateBucketRaftGroupsResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMResponse;
 import org.apache.ratis.protocol.RaftGroupId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,12 +32,12 @@ public class OMCreateRaftGroupsRequest extends OMClientRequest {
     CreateBucketRaftGroupsRequest createBucketRaftGroupsRequest = omRequest.getCreateBucketRaftGroupsRequest();
     createBucketRaftGroupsRequest.getGroupIdsList().forEach(groupId -> {
       ozoneManager.createRaftGroupForBucket(RaftGroupId.valueOf(HddsUtils.fromProtobuf(groupId)));
-      ozoneManager.getOmRatisGroupManager().incrementRatisGroupCounter(HddsUtils.fromProtobuf(groupId));
+      ozoneManager.getOmRaftGroupManager().addGroupIdToRaftGroupCounter(HddsUtils.fromProtobuf(groupId));
     });
-    final OzoneManagerProtocolProtos.OMResponse.Builder omResponse =
+    final OMResponse.Builder omResponse =
             OmResponseUtil.getOMResponseBuilder(omRequest);
-    OzoneManagerProtocolProtos.CreateBucketRaftGroupsResponse createBucketRaftGroupsResponse =
-            OzoneManagerProtocolProtos.CreateBucketRaftGroupsResponse.newBuilder().build();
+    CreateBucketRaftGroupsResponse createBucketRaftGroupsResponse =
+            CreateBucketRaftGroupsResponse.newBuilder().build();
     omResponse.setCreateBucketRaftGroupsResponse(createBucketRaftGroupsResponse);
     return new OMCreateRaftGroupsResponse(omResponse.build());
   }

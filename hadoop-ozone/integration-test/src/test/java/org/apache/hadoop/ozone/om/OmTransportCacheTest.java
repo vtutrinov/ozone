@@ -204,8 +204,8 @@ public class OmTransportCacheTest {
       }
     }
 
-    OmRatisGroupManager groupManager = cluster.getOMLeader().getOmRatisGroupManager();
-    Map<String, UUID> bucketRatisGroups = groupManager.getBucketRatisGroups();
+    OmRaftGroupManager groupManager = cluster.getOMLeader().getOmRaftGroupManager();
+    Map<String, UUID> bucketRatisGroups = groupManager.getBucketRaftGroups();
     Map<UUID, Set<String>> buUUID =
         bucketRatisGroups.entrySet().stream()
             .collect(groupingBy(Map.Entry::getValue, mapping(Map.Entry::getKey, toSet())));
