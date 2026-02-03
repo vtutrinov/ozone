@@ -935,6 +935,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       this.getOmRatisServer().startSchedulingLeaderReconfiguration();
     }
     bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
+
+    if (this.getOmRatisServer() != null) {
+      this.getOmRatisServer().startSchedulingLeaderReconfiguration();
+    }
   }
 
   public boolean areAllOMsOnline(RaftGroupId raftGroupId) {
