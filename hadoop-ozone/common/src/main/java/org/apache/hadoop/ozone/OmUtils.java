@@ -540,11 +540,11 @@ public final class OmUtils {
    * @return {@link RepeatedOmKeyInfo}
    */
   public static RepeatedOmKeyInfo prepareKeyForDelete(long bucketId, OmKeyInfo keyInfo,
-      long trxnLogIndex) {
-    OmKeyInfo.Builder builder = keyInfo.toBuilder();
+      long trxnLogIndex, boolean multiRaftEnabled, long currentMultiRaftTerm) {
     // If this key is in a GDPR enforced bucket, then before moving
     // KeyInfo to deletedTable, remove the GDPR related metadata and
     // FileEncryptionInfo from KeyInfo.
+    OmKeyInfo.Builder builder = keyInfo.toBuilder();
     if (Boolean.parseBoolean(
             keyInfo.getMetadata().get(OzoneConsts.GDPR_FLAG))
     ) {
@@ -556,7 +556,9 @@ public final class OmUtils {
     }
 
     // Set the updateID
-    builder.setUpdateID(trxnLogIndex);
+    builder.setUpdateID(trxnLogIndex)
+        .setMultiRaftTerm(currentMultiRaftTerm)
+        .setIsMultiRaftEnabled(multiRaftEnabled);
 
     //The key doesn't exist in deletedTable, so create a new instance.
     return new RepeatedOmKeyInfo(builder.build(), bucketId);

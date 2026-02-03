@@ -168,7 +168,11 @@ public class TestOMOpenKeysDeleteResponse extends TestOMKeyResponse {
         .build();
 
     OMOpenKeysDeleteResponse response = new OMOpenKeysDeleteResponse(omResponse,
+<<<<<<< HEAD
         keysToDelete, getBucketLayout());
+=======
+        keysToDelete, true, getBucketLayout(), ozoneManager.isMultiRaftEnabled(), 0);
+>>>>>>> ecfa089a32 ([SDPOZN-1708] Changing multiraft configuration)
 
     // Operations are only added to the batch by this method when status is OK.
     response.checkAndUpdateDB(omMetadataManager, batchOperation);

@@ -162,6 +162,8 @@ public class OMAllocateBlockRequestWithFSO extends OMAllocateBlockRequest {
       // Set the UpdateID to current transactionLogIndex
       openKeyInfo = openKeyInfo.toBuilder()
           .setUpdateID(trxnLogIndex)
+          .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
+          .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
           .build();
 
       // Add to cache.

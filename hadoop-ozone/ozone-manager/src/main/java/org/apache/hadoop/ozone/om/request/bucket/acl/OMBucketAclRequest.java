@@ -124,6 +124,8 @@ public abstract class OMBucketAclRequest extends OMClientRequest {
         omBucketInfo = builder
             .setUpdateID(transactionLogIndex)
             .setModificationTime(modificationTime)
+            .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
+            .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
             .build();
 
         // update cache.

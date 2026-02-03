@@ -107,8 +107,8 @@ public class OMOpenKeysDeleteRequest extends OMKeyRequest {
             openKeyBucket, deletedOpenKeys);
       }
 
-      omClientResponse = new OMOpenKeysDeleteResponse(omResponse.build(),
-          deletedOpenKeys, getBucketLayout());
+      omClientResponse = new OMOpenKeysDeleteResponse(omResponse.build(), deletedOpenKeys, getBucketLayout(),
+          ozoneManager.isMultiRaftEnabled(), ozoneManager.getCurrentMultiRaftTerm());
 
       result = Result.SUCCESS;
 
@@ -198,6 +198,8 @@ public class OMOpenKeysDeleteRequest extends OMKeyRequest {
           // Set the UpdateID to current transactionLogIndex
           omKeyInfo = omKeyInfo.toBuilder()
               .setUpdateID(trxnLogIndex)
+              .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
+              .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
               .build();
           deletedOpenKeys.put(fullKeyName, Pair.of(bucketId, omKeyInfo));
 

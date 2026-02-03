@@ -935,12 +935,13 @@ public abstract class OMKeyRequest extends OMClientRequest {
           @Nullable OmBucketInfo omBucketInfo,
           OMFileRequest.OMPathInfo omPathInfo,
           long transactionLogIndex, long objectID,
-          ReplicationConfig replicationConfig, OmConfig config)
+          ReplicationConfig replicationConfig, OmConfig config, boolean multiRaftEnabled,
+          long currentMultiRaftTerm)
           throws IOException {
 
     return prepareFileInfo(omMetadataManager, keyArgs, dbKeyInfo, size,
             locations, encInfo, prefixManager, omBucketInfo, omPathInfo,
-            transactionLogIndex, objectID, replicationConfig, config);
+            transactionLogIndex, objectID, replicationConfig, config, multiRaftEnabled, currentMultiRaftTerm);
   }
 
   /**
@@ -958,8 +959,10 @@ public abstract class OMKeyRequest extends OMClientRequest {
           @Nullable OmBucketInfo omBucketInfo,
           OMFileRequest.OMPathInfo omPathInfo,
           long transactionLogIndex, long objectID,
-          ReplicationConfig replicationConfig,
-          OmConfig config) throws IOException {
+          ReplicationConfig replicationConfig, OmConfig config,
+          boolean multiRaftEnabled,
+          long currentMultiRaftTerm)
+          throws IOException {
     if (keyArgs.getIsMultipartKey()) {
       return prepareMultipartFileInfo(omMetadataManager, keyArgs,
               size, locations, encInfo, prefixManager, omBucketInfo,
@@ -1137,8 +1140,10 @@ public abstract class OMKeyRequest extends OMClientRequest {
    * @throws IOException
    */
   protected RepeatedOmKeyInfo getOldVersionsToCleanUp(
-      @Nonnull OmKeyInfo keyToDelete, long bucketId, long trxnLogIndex) throws IOException {
-    return OmUtils.prepareKeyForDelete(bucketId, keyToDelete, trxnLogIndex);
+      @Nonnull OmKeyInfo keyToDelete, long bucketId, long trxnLogIndex, boolean multiRaftEnabled,
+      long currentMultiRaftTerm) throws IOException {
+    return OmUtils.prepareKeyForDelete(bucketId, keyToDelete,
+          trxnLogIndex, multiRaftEnabled, currentMultiRaftTerm);
   }
 
   protected OzoneLockStrategy getOzoneLockStrategy(OzoneManager ozoneManager) {

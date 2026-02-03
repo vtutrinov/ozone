@@ -248,7 +248,8 @@ public class OMFileCreateRequest extends OMKeyRequest {
           keyArgs.getDataSize(), locations, getFileEncryptionInfo(keyArgs),
           ozoneManager.getPrefixManager(), omBucketInfo, pathInfo, trxnLogIndex,
           ozoneManager.getObjectIdFromTxId(trxnLogIndex),
-          repConfig, ozoneManager.getConfig());
+          repConfig, ozoneManager.getConfig(), ozoneManager.isMultiRaftEnabled(),
+          ozoneManager.getCurrentMultiRaftTerm());
       validateEncryptionKeyInfo(omBucketInfo, keyArgs);
 
       long openVersion = omKeyInfo.getLatestVersionLocations().getVersion();

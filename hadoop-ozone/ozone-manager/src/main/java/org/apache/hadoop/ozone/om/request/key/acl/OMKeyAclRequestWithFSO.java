@@ -125,6 +125,8 @@ public abstract class OMKeyAclRequestWithFSO extends OMKeyAclRequest {
 
       omKeyInfo = builder
           .setModificationTime(modificationTime)
+          .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
+          .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
           .setUpdateID(trxnLogIndex)
           .build();
 

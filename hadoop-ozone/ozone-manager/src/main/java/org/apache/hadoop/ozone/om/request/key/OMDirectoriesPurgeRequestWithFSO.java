@@ -264,7 +264,9 @@ public class OMDirectoriesPurgeRequestWithFSO extends OMKeyRequest {
 
     return new OMDirectoriesPurgeResponseWithFSO(
         omResponse.build(), purgeRequests,
-        getBucketLayout(), volBucketInfoMap, fromSnapshotInfo, openKeyInfoMap);
+        getBucketLayout(), volBucketInfoMap, fromSnapshotInfo, openKeyInfoMap, ozoneManager.isMultiRaftEnabled(),
+        ozoneManager.getCurrentMultiRaftTerm()
+    );
   }
 
   /**

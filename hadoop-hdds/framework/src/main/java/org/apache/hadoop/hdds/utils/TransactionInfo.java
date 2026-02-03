@@ -174,6 +174,11 @@ public final class TransactionInfo implements Comparable<TransactionInfo> {
     return byteString == null ? null : getCodec().fromPersistedFormat(byteString.toByteArray());
   }
 
+  public static void deleteTransactionInfo(
+          DBStoreHAManager metadataManager, String raftGroupId) throws IOException {
+    metadataManager.getTransactionInfoTable().delete(TRANSACTION_INFO_KEY + raftGroupId);
+  }
+
   public SnapshotInfo toSnapshotInfo() {
     return snapshotInfo;
   }

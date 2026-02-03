@@ -166,6 +166,8 @@ public class S3MultipartUploadCommitPartRequest extends OMKeyRequest {
       omKeyInfo = omKeyInfo.toBuilder()
           .addAllMetadata(KeyValueUtil.getFromProtobuf(
               keyArgs.getMetadataList()))
+          .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
+          .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
           .setUpdateID(trxnLogIndex)
           .build();
 
@@ -209,6 +211,8 @@ public class S3MultipartUploadCommitPartRequest extends OMKeyRequest {
       // Set the UpdateID to current transactionLogIndex
       multipartKeyInfo = multipartKeyInfo.toBuilder()
           .setUpdateID(trxnLogIndex)
+          .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
+          .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
           .build();
 
       // OldPartKeyInfo will be deleted. Its updateID will be set in
@@ -314,7 +318,8 @@ public class S3MultipartUploadCommitPartRequest extends OMKeyRequest {
 
     return new S3MultipartUploadCommitPartResponse(build, multipartKey, openKey,
         multipartKeyInfo, keyToDeleteMap, omKeyInfo,
-        omBucketInfo, bucketId, getBucketLayout());
+        omBucketInfo, bucketId, getBucketLayout(),ozoneManager.isMultiRaftEnabled(),
+            ozoneManager.getCurrentMultiRaftTerm());
   }
 
   protected OmKeyInfo getOmKeyInfo(OMMetadataManager omMetadataManager,

@@ -149,6 +149,8 @@ public class OMKeyDeleteRequest extends OMKeyRequest {
       // Set the UpdateID to current transactionLogIndex
       omKeyInfo = omKeyInfo.toBuilder()
           .setUpdateID(trxnLogIndex)
+          .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
+          .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
           .build();
 
       // Update table cache. Put a tombstone entry
@@ -187,7 +189,8 @@ public class OMKeyDeleteRequest extends OMKeyRequest {
       omClientResponse = new OMKeyDeleteResponse(
           omResponse.setDeleteKeyResponse(DeleteKeyResponse.newBuilder())
               .build(), omKeyInfo,
-          omBucketInfo.copyObject(), deletedOpenKeyInfo);
+          omBucketInfo.copyObject(), deletedOpenKeyInfo, ozoneManager.isMultiRaftEnabled(),
+          ozoneManager.getCurrentMultiRaftTerm());
       if (omKeyInfo.isFile()) {
         auditMap.put(OzoneConsts.DATA_SIZE, String.valueOf(omKeyInfo.getDataSize()));
         auditMap.put(OzoneConsts.REPLICATION_CONFIG, omKeyInfo.getReplicationConfig().toString());

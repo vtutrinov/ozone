@@ -162,6 +162,8 @@ public class S3MultipartUploadAbortRequest extends OMKeyRequest {
           .get(multipartKey);
       multipartKeyInfo = multipartKeyInfo.toBuilder()
           .setUpdateID(trxnLogIndex)
+          .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
+          .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
           .build();
 
       // When abort uploaded key, we need to subtract the PartKey length from
@@ -243,7 +245,8 @@ public class S3MultipartUploadAbortRequest extends OMKeyRequest {
         omResponse.setAbortMultiPartUploadResponse(
             MultipartUploadAbortResponse.newBuilder()).build(), multipartKey,
         multipartOpenKey, multipartKeyInfo,
-        omBucketInfo.copyObject(), getBucketLayout());
+        omBucketInfo.copyObject(), getBucketLayout(),
+        ozoneManager.isMultiRaftEnabled(), ozoneManager.getCurrentMultiRaftTerm());
     return omClientResponse;
   }
 

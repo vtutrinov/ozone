@@ -134,6 +134,8 @@ public class OMVolumeSetQuotaRequest extends OMVolumeRequest {
 
       OmVolumeArgs omVolumeArgs = builder
           .setModificationTime(setVolumePropertyRequest.getModificationTime())
+          .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
+          .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
           .setUpdateID(transactionLogIndex)
           .build();
 

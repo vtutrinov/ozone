@@ -428,6 +428,8 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     private long snapshotUsedBytes;
     private long snapshotUsedNamespace;
     private UUID raftGroup;
+    private boolean isMultiRaftEnabled;
+    private long multiRaftTerm;
 
     public Builder() {
       acls = AclListBuilder.empty();
@@ -579,6 +581,16 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
       return this;
     }
 
+    public void setMultiRaftEnabled(boolean multiRaftEnabled) {
+      isMultiRaftEnabled = multiRaftEnabled;
+      return this;
+    }
+
+    public void setMultiRaftTerm(long multiRaftTerm) {
+      this.multiRaftTerm = multiRaftTerm;
+      return this;
+    }
+
     @Override
     protected void validate() {
       super.validate();
@@ -632,6 +644,9 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     }
     if (owner != null) {
       bib.setOwner(owner);
+    }
+    if (raftGroup != null) {
+      bib.setRaftGroup(HddsUtils.toProtobuf(raftGroup));
     }
     if (raftGroup != null) {
       bib.setRaftGroup(HddsUtils.toProtobuf(raftGroup));

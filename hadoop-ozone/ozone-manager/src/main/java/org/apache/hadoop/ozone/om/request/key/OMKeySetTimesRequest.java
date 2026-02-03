@@ -230,7 +230,11 @@ public class OMKeySetTimesRequest extends OMKeyRequest {
 
       operationResult = true;
       apply(omKeyInfo);
-      omKeyInfo = omKeyInfo.toBuilder().setUpdateID(trxnLogIndex).build();
+      omKeyInfo = omKeyInfo.toBuilder()
+          .setUpdateID(trxnLogIndex)
+          .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
+          .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
+          .build();
 
       // update cache.
       omMetadataManager.getKeyTable(getBucketLayout())

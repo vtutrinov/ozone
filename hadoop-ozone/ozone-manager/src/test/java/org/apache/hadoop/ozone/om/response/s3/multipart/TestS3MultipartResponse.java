@@ -32,11 +32,15 @@ import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.utils.db.BatchOperation;
 import org.apache.hadoop.hdds.utils.db.cache.CacheKey;
 import org.apache.hadoop.hdds.utils.db.cache.CacheValue;
+<<<<<<< HEAD
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OMMetadataManager;
 import org.apache.hadoop.ozone.om.OmMetadataManagerImpl;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
 import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
+=======
+import org.apache.hadoop.ozone.om.OzoneManager;
+>>>>>>> ecfa089a32 ([SDPOZN-1708] Changing multiraft configuration)
 import org.apache.hadoop.ozone.om.helpers.OmDirectoryInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyLocationInfoGroup;
@@ -66,6 +70,7 @@ public class TestS3MultipartResponse {
 
   protected OMMetadataManager omMetadataManager;
   protected BatchOperation batchOperation;
+  protected OzoneManager ozoneManager;
 
   @BeforeEach
   public void setup() throws Exception {
@@ -74,6 +79,7 @@ public class TestS3MultipartResponse {
         folder.toAbsolutePath().toString());
     omMetadataManager = new OmMetadataManagerImpl(ozoneConfiguration, null);
     batchOperation = omMetadataManager.getStore().initBatchOperation();
+    ozoneManager = OzoneManager.createOm(ozoneConfiguration);
   }
 
   @AfterEach
@@ -290,9 +296,15 @@ public class TestS3MultipartResponse {
     }
 
     return new S3MultipartUploadCommitPartResponseWithFSO(omResponse,
+<<<<<<< HEAD
         multipartKey, openKey, multipartKeyInfo, keyToDeleteMap,
         openPartKeyInfoToBeDeleted, omBucketInfo, omBucketInfo.getObjectID(),
         getBucketLayout());
+=======
+        multipartKey, openKey, multipartKeyInfo, oldPartKeyInfo,
+        openPartKeyInfoToBeDeleted, isRatisEnabled, omBucketInfo,
+        getBucketLayout(), ozoneManager.isMultiRaftEnabled(), 0);
+>>>>>>> ecfa089a32 ([SDPOZN-1708] Changing multiraft configuration)
   }
 
   @SuppressWarnings("checkstyle:ParameterNumber")
@@ -342,8 +354,13 @@ public class TestS3MultipartResponse {
       OmMultipartKeyInfo omMultipartKeyInfo, OmBucketInfo omBucketInfo,
       OMResponse omResponse) {
     return new S3MultipartUploadAbortResponse(omResponse, multipartKey,
+<<<<<<< HEAD
         multipartOpenKey, omMultipartKeyInfo, omBucketInfo,
         getBucketLayout());
+=======
+        multipartOpenKey, omMultipartKeyInfo, true, omBucketInfo,
+        getBucketLayout(), ozoneManager.isMultiRaftEnabled(), 0);
+>>>>>>> ecfa089a32 ([SDPOZN-1708] Changing multiraft configuration)
   }
 
   public BucketLayout getBucketLayout() {

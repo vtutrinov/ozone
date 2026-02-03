@@ -110,8 +110,13 @@ public class TestOMKeysDeleteResponseWithFSO
   protected OMClientResponse getOmKeysDeleteResponse(OMResponse omResponse,
       OmBucketInfo omBucketInfo) {
     return new OMKeysDeleteResponseWithFSO(
+<<<<<<< HEAD
         omResponse, getOmKeyInfoList(), dirDeleteList, omBucketInfo,
         volId, Collections.emptyMap());
+=======
+        omResponse, getOmKeyInfoList(), dirDeleteList, true, omBucketInfo,
+        volId, ozoneManager.isMultiRaftEnabled(), 0);
+>>>>>>> ecfa089a32 ([SDPOZN-1708] Changing multiraft configuration)
   }
 
   @Test

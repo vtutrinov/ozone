@@ -200,7 +200,7 @@ public class TestOzoneDelegationTokenSecretManager {
     secretManager = createSecretManager(conf, TOKEN_MAX_LIFETIME,
         expiryTime, TOKEN_REMOVER_SCAN_INTERVAL);
     Mockito.doThrow(new OMNotLeaderException(RaftPeerId.valueOf("om")))
-        .when(om).checkLeaderStatus(any(RaftGroupId.class));
+        .when(om).checkOmLeaderStatus();
     OzoneTokenIdentifier identifier = new OzoneTokenIdentifier();
     try {
       secretManager.retrievePassword(identifier);
@@ -211,7 +211,7 @@ public class TestOzoneDelegationTokenSecretManager {
     }
 
     Mockito.doThrow(new OMLeaderNotReadyException("Leader not ready"))
-        .when(om).checkLeaderStatus(any(RaftGroupId.class));
+        .when(om).checkOmLeaderStatus();
     try {
       secretManager.retrievePassword(identifier);
     } catch (Exception e) {
@@ -220,7 +220,7 @@ public class TestOzoneDelegationTokenSecretManager {
           e.getCause().getClass());
     }
 
-    Mockito.doNothing().when(om).checkLeaderStatus(any(RaftGroupId.class));
+    Mockito.doNothing().when(om).checkOmLeaderStatus();
     try {
       secretManager.retrievePassword(identifier);
     } catch (Exception e) {

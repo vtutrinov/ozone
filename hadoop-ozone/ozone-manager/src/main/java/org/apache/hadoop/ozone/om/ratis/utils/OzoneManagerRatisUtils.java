@@ -51,6 +51,8 @@ import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketAddAclRequest;
 import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketRemoveAclRequest;
 import org.apache.hadoop.ozone.om.request.bucket.acl.OMBucketSetAclRequest;
 import org.apache.hadoop.ozone.om.request.file.OMRecoverLeaseRequest;
+import org.apache.hadoop.ozone.om.request.group.OMCreateRaftGroupsRequest;
+import org.apache.hadoop.ozone.om.request.group.OMRemoveRaftGroupsRequest;
 import org.apache.hadoop.ozone.om.request.key.OMDirectoriesPurgeRequestWithFSO;
 import org.apache.hadoop.ozone.om.request.key.OMKeyPurgeRequest;
 import org.apache.hadoop.ozone.om.request.key.OMKeyRequest;
@@ -248,6 +250,10 @@ public final class OzoneManagerRatisUtils {
       return new OMSnapshotPurgeRequest(omRequest);
     case SetSnapshotProperty:
       return new OMSnapshotSetPropertyRequest(omRequest);
+    case CreateBucketRaftGroups:
+      return new OMCreateRaftGroupsRequest(omRequest);
+    case RemoveBucketRaftGroups:
+      return new OMRemoveRaftGroupsRequest(omRequest);
     case DeleteOpenKeys:
       BucketLayout bktLayout = BucketLayout.DEFAULT;
       if (omRequest.getDeleteOpenKeysRequest().hasBucketLayout()) {

@@ -97,8 +97,13 @@ public class TestS3MultipartUploadAbortResponseWithFSO
       OmMultipartKeyInfo omMultipartKeyInfo, OmBucketInfo omBucketInfo,
       OzoneManagerProtocolProtos.OMResponse omResponse) {
     return new S3MultipartUploadAbortResponseWithFSO(omResponse, multipartKey,
+<<<<<<< HEAD
         multipartOpenKey, omMultipartKeyInfo, omBucketInfo,
         getBucketLayout());
+=======
+        multipartOpenKey, omMultipartKeyInfo, true, omBucketInfo,
+        getBucketLayout(), ozoneManager.isMultiRaftEnabled(), 0);
+>>>>>>> ecfa089a32 ([SDPOZN-1708] Changing multiraft configuration)
   }
 
   @Override

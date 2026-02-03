@@ -36,6 +36,7 @@ import org.apache.ratis.util.LifeCycle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -532,15 +533,25 @@ public class BucketStateMachine extends BaseStateMachine {
   }
 
   @Override
-  public void close() throws IOException {
-    // OM should be shutdown as the StateMachine has shutdown.
-    LOG.info("StateMachine has shutdown. Shutdown OzoneManager if not " +
-            "already shutdown.");
-    if (!ozoneManager.isStopped()) {
-      ozoneManager.shutDown("OM state machine is shutdown by Ratis server");
-    } else {
-      stop();
+  public void notifyGroupRemove() {
+    LOG.trace("Start removing group {}", currentRaftGroupId);
+    ozoneManager.getStateMachines().remove(currentRaftGroupId);
+    ozoneManager.getOmRaftGroups().remove(currentRaftGroupId);
+    try {
+      LOG.trace("Deleting transaction for group {}", currentRaftGroupId);
+      TransactionInfo.deleteTransactionInfo(
+              ozoneManager.getMetadataManager(), currentRaftGroupId.toString()
+      );
+    } catch (IOException e) {
+      LOG.error("Error deleting transaction for group {}", currentRaftGroupId);
+      throw new RuntimeException(e);
     }
+  }
+
+  @Override
+  public void close() throws IOException {
+    LOG.info("BucketStateMachine has shutdown.");
+    stop();
   }
 
   public void stop() {

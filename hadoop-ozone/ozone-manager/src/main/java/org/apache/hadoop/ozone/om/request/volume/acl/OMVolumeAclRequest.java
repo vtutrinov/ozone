@@ -99,6 +99,8 @@ public abstract class OMVolumeAclRequest extends OMVolumeRequest {
 
         omVolumeArgs = builder
             .setUpdateID(trxnLogIndex)
+            .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
+            .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
             .build();
 
         // update cache.

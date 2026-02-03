@@ -78,7 +78,11 @@ public class OMKeySetTimesRequestWithFSO extends OMKeySetTimesRequest {
     Result result = null;
     try {
       volume = getVolumeName();
-      bucket = getWriteReqBucketName();
+       if (getWriteReqBucketName() != null) {
+         bucket = getWriteReqBucketName();
+       } else {
+         bucket = getBucketName();
+       }
       key = getKeyName();
 
       mergeOmLockDetails(omMetadataManager.getLock()
@@ -100,7 +104,11 @@ public class OMKeySetTimesRequestWithFSO extends OMKeySetTimesRequest {
       boolean isDirectory = keyStatus.isDirectory();
       operationResult = true;
       apply(omKeyInfo);
-      omKeyInfo = omKeyInfo.toBuilder().setUpdateID(trxnLogIndex).build();
+      omKeyInfo = omKeyInfo.toBuilder()
+          .setUpdateID(trxnLogIndex)
+          .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
+          .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
+          .build();
 
       // update cache.
       if (isDirectory) {

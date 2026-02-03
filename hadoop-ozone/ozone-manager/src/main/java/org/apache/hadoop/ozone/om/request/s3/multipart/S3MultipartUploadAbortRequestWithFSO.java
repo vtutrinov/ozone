@@ -55,8 +55,14 @@ public class S3MultipartUploadAbortRequestWithFSO
     OMClientResponse omClientResp = new S3MultipartUploadAbortResponseWithFSO(
         omResponse.setAbortMultiPartUploadResponse(
             MultipartUploadAbortResponse.newBuilder()).build(), multipartKey,
+<<<<<<< HEAD
         multipartOpenKey, multipartKeyInfo,
         omBucketInfo.copyObject(), getBucketLayout());
+=======
+        multipartOpenKey, multipartKeyInfo, ozoneManager.isRatisEnabled(),
+        omBucketInfo.copyObject(), getBucketLayout(),
+        ozoneManager.isMultiRaftEnabled(), ozoneManager.getCurrentMultiRaftTerm());
+>>>>>>> ecfa089a32 ([SDPOZN-1708] Changing multiraft configuration)
     return omClientResp;
   }
 }

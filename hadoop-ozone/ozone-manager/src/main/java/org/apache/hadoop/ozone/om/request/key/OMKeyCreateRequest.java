@@ -296,7 +296,8 @@ public class OMKeyCreateRequest extends OMKeyRequest {
           keyArgs.getDataSize(), locations, getFileEncryptionInfo(keyArgs),
           ozoneManager.getPrefixManager(), bucketInfo, pathInfo, trxnLogIndex,
           ozoneManager.getObjectIdFromTxId(trxnLogIndex),
-          replicationConfig, ozoneManager.getConfig());
+          replicationConfig, ozoneManager.getConfig(), ozoneManager.isMultiRaftEnabled(),
+          ozoneManager.getCurrentMultiRaftTerm());
 
       validateEncryptionKeyInfo(bucketInfo, keyArgs);
 

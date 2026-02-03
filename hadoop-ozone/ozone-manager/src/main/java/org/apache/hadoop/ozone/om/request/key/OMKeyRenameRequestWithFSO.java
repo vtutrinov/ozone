@@ -289,6 +289,8 @@ public class OMKeyRenameRequestWithFSO extends OMKeyRenameRequest {
         fromKeyValue.getVolumeName(), fromKeyValue.getBucketName());
 
     OmKeyInfo.Builder fromKeyBuilder = fromKeyValue.toBuilder()
+        .setMultiraftTerm(ozoneManager.getCurrentTerm())
+        .setMultiraftEnabled(ozoneManager.isMultiRaftEnabled())
         .setUpdateID(trxnLogIndex);
     // Set toFileName
     fromKeyBuilder.setKeyName(toKeyFileName);

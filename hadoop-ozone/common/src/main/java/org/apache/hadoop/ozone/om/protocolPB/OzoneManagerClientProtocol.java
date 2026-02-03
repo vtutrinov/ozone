@@ -19,6 +19,11 @@ package org.apache.hadoop.ozone.om.protocolPB;
 
 import org.apache.hadoop.ozone.om.protocol.OzoneManagerProtocol;
 import org.apache.hadoop.ozone.om.protocol.S3Auth;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * OzoneManagerClientProtocol defines interfaces needed on the client side
@@ -38,4 +43,8 @@ public interface OzoneManagerClientProtocol extends OzoneManagerProtocol {
   void clearThreadLocalS3Auth();
 
   ThreadLocal<S3Auth> getS3CredentialsProvider();
+
+  OzoneManagerProtocolProtos.CreateBucketRaftGroupsResponse createRaftGroups(List<UUID> groupIds) throws IOException;
+
+  OzoneManagerProtocolProtos.RemoveBucketRaftGroupsResponse removeRaftGroups(List<UUID> groupIds) throws IOException;
 }

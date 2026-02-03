@@ -126,6 +126,8 @@ public abstract class OMKeyAclRequest extends OMClientRequest {
 
       omKeyInfo = builder
           .setModificationTime(modificationTime)
+          .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
+          .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
           .setUpdateID(trxnLogIndex)
           .build();
 

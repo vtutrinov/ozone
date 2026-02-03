@@ -207,6 +207,12 @@ public final class OMDBDefinition extends DBDefinition.WithMap {
           StringCodec.get(),
           OmKeyInfo.getCodec(true));
 
+  public static final String MULTI_RAFT_INFO_TABLE = "multiRaftInfoTable";
+  public static final DBColumnFamilyDefinition<String, Long> MULTI_RAFT_INFO_TABLE_DEF
+      = new DBColumnFamilyDefinition<>(MULTI_RAFT_INFO_TABLE,
+          StringCodec.get(),
+          LongCodec.get());
+
   public static final String DELETED_TABLE = "deletedTable";
   /** deletedTable: /volume/bucket/key :- RepeatedKeyInfo. */
   public static final DBColumnFamilyDefinition<String, RepeatedOmKeyInfo> DELETED_TABLE_DEF

@@ -151,11 +151,25 @@ public class OMVolumeSetOwnerRequest extends OMVolumeRequest {
           maxUserVolumeCount, transactionLogIndex);
 
       // Set owner with new owner name.
+<<<<<<< HEAD
       omVolumeArgs = omVolumeArgs.toBuilder()
           .setOwnerName(newOwner)
           .setModificationTime(setVolumePropertyRequest.getModificationTime())
           .setUpdateID(transactionLogIndex)
           .build();
+=======
+      omVolumeArgs.setOwnerName(newOwner);
+      omVolumeArgs.setUpdateID(
+          transactionLogIndex,
+          ozoneManager.isRatisEnabled(),
+          ozoneManager.isMultiRaftEnabled(),
+          ozoneManager.getCurrentMultiRaftTerm()
+      );
+
+      // Update modificationTime.
+      omVolumeArgs.setModificationTime(
+          setVolumePropertyRequest.getModificationTime());
+>>>>>>> ecfa089a32 ([SDPOZN-1708] Changing multiraft configuration)
 
       // Update cache.
       omMetadataManager.getUserTable().addCacheEntry(
