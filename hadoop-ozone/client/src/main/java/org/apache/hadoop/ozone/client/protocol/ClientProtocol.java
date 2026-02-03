@@ -22,6 +22,9 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+
+import javax.annotation.Nonnull;
 import org.apache.hadoop.crypto.key.KeyProvider;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationFactor;
@@ -1358,5 +1361,9 @@ public interface ClientProtocol {
    */
   void deleteObjectTagging(String volumeName, String bucketName, String keyName)
       throws IOException;
+
+  void removeRaftGroups(List<UUID> raftGroupIds) throws IOException;
+
+  void createRaftGroups(List<UUID> raftGroupIds) throws IOException;
 
 }
