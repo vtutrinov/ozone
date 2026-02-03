@@ -119,7 +119,7 @@ public class OmRaftGroupManager {
     return omRaftGroupCount;
   }
 
-  public List<RaftGroupId> generateRaftGroups(long currentTerm, int count) {
+  public static List<RaftGroupId> generateRaftGroups(long currentTerm, int count) {
     List<RaftGroupId> result = new ArrayList<>(count);
     long startFrom = currentTerm * 100;
     for (long i = startFrom; i < startFrom + count; i++) {

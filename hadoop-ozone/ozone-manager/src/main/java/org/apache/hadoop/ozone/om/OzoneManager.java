@@ -675,8 +675,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private int bucketNumbersFromConfig;
   private final SafeModeManager omSafeModeManager;
   private final Map<RaftGroupId, String> tmpLeadersMap = new HashMap<>();
-  private final BucketRaftGroupsReconciler bucketRaftGroupsReconciler;
-  private final List<String> listOfRaftGroupToReset;
+  private BucketRaftGroupsReconciler bucketRaftGroupsReconciler;
+  private List<String> listOfRaftGroupToReset;
 
   @SuppressWarnings("methodlength")
   private OzoneManager(OzoneConfiguration conf, StartupOption startupOption)
@@ -2398,6 +2398,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       omRaftGroupManager =
               new OmRaftGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
     }
+    bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
+    bucketRaftGroupsReconciler.start();
+    listOfRaftGroupToReset = cleanUpRaftGroups(OzoneManagerRatisUtils.getOMRatisDirectory(configuration), omRaftGroupName());
+    cleanUpRaftGroupsTransactions();
   }
 
   /**
@@ -2898,6 +2902,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       }
 
       omRatisServer = null;
+      bucketRaftGroupsReconciler.shutdown();
+      bucketRaftGroupsReconciler = null;
 
       if (bucketUtilizationMetrics != null) {
         bucketUtilizationMetrics.unRegister();
@@ -3713,7 +3719,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         });
     tmpLeadersMap.clear();
   }
-  
+
   public long getBucketRaftGroupsReconfigurationIndex() throws IOException {
     return getMetadataManager().getMultiRaftInfoTable().get("term");
   }
