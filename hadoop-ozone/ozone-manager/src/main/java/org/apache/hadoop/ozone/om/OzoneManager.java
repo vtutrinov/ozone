@@ -2327,7 +2327,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       );
       omRatisGroupManager =
               new OmRatisGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
-      initBucketRaftGroups();
+      if (isMultiRaftEnabled) {
+        initBucketRaftGroups();
+      }
     }
   }
 

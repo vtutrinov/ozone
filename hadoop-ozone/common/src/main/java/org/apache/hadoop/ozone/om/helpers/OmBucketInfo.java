@@ -648,9 +648,6 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
     if (raftGroup != null) {
       bib.setRaftGroup(HddsUtils.toProtobuf(raftGroup));
     }
-    if (raftGroup != null) {
-      bib.setRaftGroup(HddsUtils.toProtobuf(raftGroup));
-    }
     return bib.build();
   }
 
