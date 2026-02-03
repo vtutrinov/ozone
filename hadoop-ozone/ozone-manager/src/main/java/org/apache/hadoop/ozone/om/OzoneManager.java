@@ -3626,12 +3626,12 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   /**
    * Create OMHAMetrics instance.
    */
-  public void omHAMetricsInit(String leaderId) {
+  public void omHAMetricsInit(RaftGroupId raftGroupId, String leaderId) {
     // unregister, in case metrics already exist
     // so that the metrics will get updated.
     OMHAMetrics.unRegister();
     omhaMetrics = OMHAMetrics
-        .create(getOMNodeId(), leaderId);
+        .create(getOMNodeId(), leaderId, raftGroupId);
   }
 
   @VisibleForTesting
