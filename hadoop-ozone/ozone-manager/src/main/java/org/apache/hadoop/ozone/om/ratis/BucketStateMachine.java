@@ -598,4 +598,14 @@ public class BucketStateMachine extends BaseStateMachine {
   public String toStateMachineLogEntryString(RaftProtos.StateMachineLogEntryProto proto) {
     return OMRatisHelper.smProtoToString(proto);
   }
+
+
+  @Override
+  public void notifyLeaderReady() {
+    LOG.trace("Leader ready for {} - {}. OM leader: {}",
+            currentRaftGroupId,
+            ozoneManager.getOmRatisServer().getLeaderId(currentRaftGroupId),
+            ozoneManager.getOmRatisServer().getLeaderId(ozoneManager.omRatisGroupName())
+    );
+  }
 }

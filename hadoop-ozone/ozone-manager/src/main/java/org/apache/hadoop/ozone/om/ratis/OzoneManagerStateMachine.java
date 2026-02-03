@@ -595,6 +595,9 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   public void notifyNotLeader(Collection<TransactionContext> pendingEntries)
       throws IOException {
     ozoneManager.getSafeModeManager().onLeadershipLost(); // TODO is is necessary?
+    LOG.trace("Lost leadership for {} - {}.",
+        ozoneManager.omRatisGroupName(),
+        ozoneManager.getOMNodeId());
   }
 
   @Override
@@ -723,5 +726,13 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   @VisibleForTesting
   public OzoneManagerDoubleBuffer getOzoneManagerDoubleBuffer() {
     return ozoneManagerDoubleBuffer;
+  }
+
+  @Override
+  public void notifyLeaderReady() {
+    LOG.trace("Leader ready for OM group {} - {}.",
+            ozoneManager.omRatisGroupName(),
+            ozoneManager.getOmRatisServer().getLeaderId(ozoneManager.omRatisGroupName())
+    );
   }
 }

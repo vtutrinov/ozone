@@ -918,6 +918,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     multiRaftTerm = Optional.fromNullable(metadataManager.getMultiRaftInfoTable().get("term")).or(0L);
     omSafeModeManager = new SafeModeManager(configuration);
     bucketRaftGroupsreconciler = new BucketRaftGroupsReconciler(this);
+    if (this.getOmRatisServer() != null) {
+      this.getOmRatisServer().startSchedulingLeaderReconfiguration();
+    }
   }
 
   public boolean areAllOMsOnline(RaftGroupId raftGroupId) {
@@ -2885,6 +2888,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       }
       getStateMachines().clear();
       getOmRaftGroups().clear();
+
+      if (this.getOmRatisServer() != null) {
+        this.getOmRatisServer().stopSchedulingLeaderReconfiguration();
+      }
+
       omRatisServer = null;
 
       if (bucketUtilizationMetrics != null) {
