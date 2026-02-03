@@ -35,7 +35,7 @@ public class OMHAMultiRaftMetrics implements MetricsSource  {
   public void getMetrics(MetricsCollector metricsCollector, boolean b) {
     metricsCollector.addRecord(OMHAMultiRaftMetrics.class.getSimpleName())
         .setContext("ozone")
-        .addGauge(Interns.info("RaftGroupsCount", "OM Raft groups Count"), ozoneManager.getOmRaftGroups().size())
+        .addGauge(Interns.info("RaftGroupsCount", "OM Raft Groups Count"), ozoneManager.getOmRaftGroups().size())
         .endRecord();
     metricsCollector.addRecord(OMHAMultiRaftMetrics.class.getSimpleName())
         .setContext("ozone")

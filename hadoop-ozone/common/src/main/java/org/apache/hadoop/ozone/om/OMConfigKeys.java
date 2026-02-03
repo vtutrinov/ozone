@@ -685,7 +685,7 @@ public final class OMConfigKeys {
 
   public static final String OZONE_OM_MULTI_RAFT_BUCKET_GROUPS =
           "ozone.om.multi.raft.bucket.groups";
-  public static final int OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT = 4;
+  public static final int OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT = 6;
 
   public static final String OZONE_OM_MULTI_RAFT_BUCKET_ENABLED =
           "ozone.om.multi.raft.bucket.enabled";

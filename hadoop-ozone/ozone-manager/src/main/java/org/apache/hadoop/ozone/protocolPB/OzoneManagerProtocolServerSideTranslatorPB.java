@@ -29,11 +29,9 @@ import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
-import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.ratis.protocol.RaftGroupId;
 
 import java.io.IOException;
-import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;

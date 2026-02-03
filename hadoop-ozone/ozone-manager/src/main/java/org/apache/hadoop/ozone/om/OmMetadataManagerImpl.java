@@ -260,7 +260,6 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
       "compactionLogTable";
   public static final String MULTI_RAFT_INFO_TABLE =
       "multiRaftInfoTable";
-  public static final String RAFT_GROUP_CONFIG_TABLE = "raftGroupConfigTable";
   static final String[] ALL_TABLES = new String[] {
       USER_TABLE,
       VOLUME_TABLE,
@@ -284,8 +283,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
       SNAPSHOT_INFO_TABLE,
       SNAPSHOT_RENAMED_TABLE,
       COMPACTION_LOG_TABLE,
-      MULTI_RAFT_INFO_TABLE,
-      RAFT_GROUP_CONFIG_TABLE
+      MULTI_RAFT_INFO_TABLE
   };
 
   private DBStore store;
