@@ -546,6 +546,8 @@ public class BucketStateMachine extends BaseStateMachine {
     LOG.trace("Start removing group {}", currentRaftGroupId);
     ozoneManager.getStateMachines().remove(currentRaftGroupId);
     ozoneManager.getOmRaftGroups().remove(currentRaftGroupId);
+    ozoneManager.getOmhaMetrics().deleteRaftGroup(currentRaftGroupId);
+    ozoneManager.getOmRaftGroupManager().reset();
     try {
       LOG.trace("Deleting transaction for group {}", currentRaftGroupId);
       TransactionInfo.deleteTransactionInfo(

@@ -1174,6 +1174,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     try {
       RaftGroup raftGroup = initBucketResult.getRaftGroup();
       omRatisServer.addBucketRaftGroup(raftGroup);
+      metadataManager.getTransactionInfoTable().delete(TRANSACTION_INFO_KEY + raftGroup.getGroupId().toString());
       LOG.info("Bucket group {} created with peers {}", raftGroupId, raftGroup.getPeers());
       if (bucketRaftGroupsCreated()) {
         LOG.info("All bucket raft groups are created, " +
