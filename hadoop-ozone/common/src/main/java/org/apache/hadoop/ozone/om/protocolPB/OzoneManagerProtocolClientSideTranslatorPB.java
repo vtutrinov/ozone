@@ -217,8 +217,6 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Refetch
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RefetchSecretKeyResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RemoveAclRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RemoveAclResponse;
-import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RemoveBucketRaftGroupsRequest;
-import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RemoveBucketRaftGroupsResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RenameKeyRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RenameKeysArgs;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RenameKeysMap;
@@ -2762,17 +2760,6 @@ public final class OzoneManagerProtocolClientSideTranslatorPB
     OMRequest omRequest = createOMRequest(Type.CreateBucketRaftGroups)
             .setCreateBucketRaftGroupsRequest(createGroupsRequest).build();
     return handleError(submitRequest(omRequest)).getCreateBucketRaftGroupsResponse();
-  }
-
-  @Override
-  public RemoveBucketRaftGroupsResponse removeRaftGroups(List<UUID> groupIds) throws IOException {
-
-    RemoveBucketRaftGroupsRequest removeGroupsRequest = RemoveBucketRaftGroupsRequest.newBuilder()
-            .addAllGroupIds(groupIds.stream().map(ProtobufUtils::toProtobuf).collect(Collectors.toList()))
-            .build();
-    OMRequest omRequest = createOMRequest(Type.RemoveBucketRaftGroups)
-            .setRemoveBucketRaftGroupsRequest(removeGroupsRequest).build();
-    return handleError(submitRequest(omRequest)).getRemoveBucketRaftGroupsResponse();
   }
 
   @Override

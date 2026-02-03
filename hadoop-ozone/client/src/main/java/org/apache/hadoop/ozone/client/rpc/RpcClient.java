@@ -2737,7 +2737,6 @@ public class RpcClient implements ClientProtocol {
   }
 
   @Override
-<<<<<<< HEAD
   public LeaseKeyInfo recoverLease(String volumeName, String bucketName,
                                    String keyName, boolean force)
       throws IOException {

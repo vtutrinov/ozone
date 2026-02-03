@@ -274,7 +274,6 @@ import org.apache.hadoop.ozone.om.helpers.TenantUserInfoValue;
 import org.apache.hadoop.ozone.om.helpers.TenantUserList;
 import org.apache.hadoop.ozone.om.lock.OMLockDetails;
 import org.apache.hadoop.ozone.om.lock.OzoneLockProvider;
-import org.apache.hadoop.ozone.om.multiraft.OmStatusChecker;
 import org.apache.hadoop.ozone.om.multiraft.SafeModeManager;
 import org.apache.hadoop.ozone.om.protocol.OMConfiguration;
 import org.apache.hadoop.ozone.om.protocol.OMInterServiceProtocol;
@@ -346,7 +345,6 @@ import org.apache.hadoop.security.authentication.client.AuthenticationException;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.KMSUtil;
 import org.apache.hadoop.util.Time;
-import org.apache.logging.log4j.core.util.Integers;
 import org.apache.ozone.graph.PrintableGraph;
 import org.apache.ratis.client.RaftClient;
 import org.apache.ratis.grpc.GrpcTlsConfig;
@@ -671,7 +669,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private final Map<RaftGroupId, AtomicReference<TransactionInfo>> omTransactionInfos = new HashMap<>();
   private int bucketNumbersFromConfig;
   private final SafeModeManager omSafeModeManager;
-  private final OmStatusChecker omStatusChecker;
   private final Map<RaftGroupId, String> tmpLeadersMap = new HashMap<>();
   private final BucketRaftGroupsReconciler bucketRaftGroupsreconciler;
   private final List<String> listOfRaftGroupToReset;
@@ -889,7 +886,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     initializeRatisDirs(conf);
     listOfRaftGroupToReset = cleanUpRaftGroups(OzoneManagerRatisUtils.getOMRatisDirectory(configuration), omRaftGroupName());
     initializeRatisServer(isBootstrapping || isForcedBootstrapping);
-    checkOmBucketRaftGroupsPersistedState();
 
     omClientProtocolMetrics = ProtocolMessageMetrics
         .create("OmClientProtocol", "Ozone Manager RPC endpoint",
@@ -921,7 +917,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     omHostName = HddsUtils.getHostName(conf);
     multiRaftTerm = Optional.fromNullable(metadataManager.getMultiRaftInfoTable().get("term")).or(0L);
     omSafeModeManager = new SafeModeManager(configuration);
-    omStatusChecker = new OmStatusChecker(this);
     bucketRaftGroupsreconciler = new BucketRaftGroupsReconciler(this);
   }
 
@@ -1941,52 +1936,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
   }
 
-  private void checkOmBucketRaftGroupsPersistedState() throws IOException {
-    boolean bucketRaftGroupsInitialized = Boolean.getBoolean(metadataManager.getMetaTable().get("bucketRaftGroupsInitialized"));
-    int bucketRaftGroupsCount = Integers.parseInt(metadataManager.getMetaTable().get("bucketRaftGroupsCount"));
-    if (bucketRaftGroupsInitialized && bucketRaftGroupsCount == getBucketRaftGroupsCount()) {
-      LOG.info("Bucket raft groups already initialized, skipping initialization.");
-      return;
-    }
-    List<UUID> expectedRaftGroupIds = getBucketRaftGroupIds();
-    Map<RaftGroupId, RaftProtos.RaftConfigurationProto> raftGroups = new HashMap<>(expectedRaftGroupIds.size());
-    List<UUID> groupsNeedToBeCreated = new ArrayList<>();
-    List<UUID> groupsNeedToBeDeleted = new ArrayList<>();
-    try (TableIterator<RaftGroupId, ? extends KeyValue<RaftGroupId, RaftProtos.RaftConfigurationProto>>
-             raftGroupInfoIterator = metadataManager.getRaftGroupConfigurationTable().iterator()) {
-      while (raftGroupInfoIterator.hasNext()) {
-        KeyValue<RaftGroupId, RaftProtos.RaftConfigurationProto> entry = raftGroupInfoIterator.next();
-        raftGroups.put(entry.getKey(), entry.getValue());
-        if (!expectedRaftGroupIds.contains(entry.getKey().getUuid())) {
-          // This raft group is not expected, so it needs to be deleted.
-          groupsNeedToBeDeleted.add(entry.getKey().getUuid());
-        }
-      }
-    }
-    if (expectedRaftGroupIds.size() != raftGroups.size()) {
-      expectedRaftGroupIds.stream().filter(raftGroupId ->
-          !raftGroups.containsKey(RaftGroupId.valueOf(raftGroupId))).forEach(groupsNeedToBeCreated::add);
-    }
-    if (!groupsNeedToBeDeleted.isEmpty()) {
-      for (UUID uuid : groupsNeedToBeDeleted) {
-        metadataManager.getRaftGroupConfigurationTable().delete(RaftGroupId.valueOf(uuid));
-      }
-    }
-    if (!groupsNeedToBeCreated.isEmpty()) {
-      List<RaftPeer> omHARaftPeers = createRaftPeerList(omNodeDetails, peerNodesMap, false).getPeers();
-      RaftProtos.RaftConfigurationProto raftConfigurationProto =
-          RaftProtos.RaftConfigurationProto.newBuilder()
-              .addAllPeers(omHARaftPeers.stream().map(RaftPeer::getRaftPeerProto)
-                  .collect(Collectors.toList()))
-              .build();
-      for (UUID uuid : groupsNeedToBeCreated) {
-        metadataManager.getRaftGroupConfigurationTable().put(RaftGroupId.valueOf(uuid), raftConfigurationProto);
-      }
-    }
-    metadataManager.getMetaTable().put("bucketRaftGroupsCount", String.valueOf(getBucketRaftGroupsCount()));
-    metadataManager.getMetaTable().put("bucketRaftGroupsInitialized", "true");
-  }
-
   private void initializeRatisDirs(OzoneConfiguration conf) throws IOException {
     // Create Ratis storage dir
     String omRatisDirectory =
@@ -2345,16 +2294,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       throw new RuntimeException(e);
     }
     ozoneClient.getProxy().createRaftGroups(raftGroupIdsToCreate);
-  }
-
-  public void removeRaftGroups(List<UUID> raftGroupIdsToDelete) throws IOException {
-    OzoneClient ozoneClient;
-    try {
-      ozoneClient = OzoneClientFactory.getRpcClient(configuration);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
-    ozoneClient.getProxy().removeRaftGroups(raftGroupIdsToDelete);
   }
 
   private List<UUID> getBucketRaftGroupIds() {
@@ -5099,8 +5038,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return omRaftGroupManager.raftGroupName(volumeName, bucketName);
   }
 
-  public RaftGroupId raftGroupName(HddsProtos.UUID raftGroupId) {
-    return RaftGroupId.valueOf(new UUID(raftGroupId.getMostSigBits(), raftGroupId.getLeastSigBits()));
+  public RaftGroupId raftGroupName(String volumeName, String bucketName, HddsProtos.UUID raftGroupId) {
+    return omRaftGroupManager.raftGroupName(volumeName, bucketName, raftGroupId);
   }
 
   /**

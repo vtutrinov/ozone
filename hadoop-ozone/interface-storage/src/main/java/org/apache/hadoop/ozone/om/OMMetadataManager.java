@@ -538,7 +538,7 @@ public interface OMMetadataManager extends DBStoreHAManager, AutoCloseable {
    */
   Table<String, Long> getMultiRaftInfoTable();
 
-  Table<RaftGroupId, RaftProtos.RaftConfigurationProto> getRaftGroupConfigurationTable();
+
   /**
    * Return table mapped to the specified table name.
    * @param tableName

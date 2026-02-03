@@ -47,8 +47,6 @@ public interface OzoneManagerClientProtocol extends OzoneManagerProtocol {
 
   OzoneManagerProtocolProtos.CreateBucketRaftGroupsResponse createRaftGroups(List<UUID> groupIds) throws IOException;
 
-  OzoneManagerProtocolProtos.RemoveBucketRaftGroupsResponse removeRaftGroups(List<UUID> groupIds) throws IOException;
-
   GetRaftGroupHealthStateResponse getRaftGroupHealthState(
       OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest request)
       throws IOException;

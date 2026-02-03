@@ -326,7 +326,6 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   private boolean ignorePipelineinKey;
   private Table deletedDirTable;
   private Table<String, Long> multiRaftInfoTable;
-  private Table<RaftGroupId, RaftProtos.RaftConfigurationProto> raftGroupConfigurationTable;
 
 
   private OzoneManager ozoneManager;
@@ -1852,11 +1851,6 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   @Override
   public Table<String, Long> getMultiRaftInfoTable() {
     return multiRaftInfoTable;
-  }
-
-  @Override
-  public Table<RaftGroupId, RaftProtos.RaftConfigurationProto> getRaftGroupConfigurationTable() {
-    return raftGroupConfigurationTable;
   }
 
   /**
