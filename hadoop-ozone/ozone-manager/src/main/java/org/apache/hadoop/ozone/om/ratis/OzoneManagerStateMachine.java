@@ -209,6 +209,13 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     AUDIT.logWriteSuccess(ozoneManager.buildAuditMessageForSuccess(OMSystemAction.LEADER_CHANGE, auditParams));
 
     LOG.info("{}: leader changed to {}", groupMemberId, newLeaderId);
+    if (ozoneManager.areAllOMsOnline()) {
+      try {
+        ozoneManager.initBucketRaftGroups(); // TODO submit request to delete bucket raft group and create new ones
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
   }
 
   /** Notified by Ratis for non-StateMachine term-index update. */
@@ -586,6 +593,16 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     return CompletableFuture.supplyAsync(
         () -> ozoneManager.installSnapshotFromLeader(raftGroupId, leaderNodeId),
         installSnapshotExecutor);
+    return future;
+  }
+
+  /**
+   * Notifies the state machine that the raft peer is no longer leader.
+   */
+  @Override
+  public void notifyNotLeader(Collection<TransactionContext> pendingEntries)
+      throws IOException {
+    ozoneManager.getSafeModeManager().onLeadershipLost(); // TODO is is necessary?
   }
 
   @Override
@@ -617,12 +634,6 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
           request, context, ozoneManagerDoubleBuffer);
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
       OMResponse omResponse = omClientResponse.getOMResponse();
-      if (request.hasCreateBucketRequest() && ozoneManager.isMultiRaftEnabled()) {
-        String volumeName = request.getCreateBucketRequest().getBucketInfo().getVolumeName();
-        String bucketName = request.getCreateBucketRequest().getBucketInfo().getBucketName();
-        LOG.trace("Creating raft group while runCommand {}", bucketName);
-        ozoneManager.createRaftGroupForBucket(volumeName, bucketName);
-      }
       if (omLockDetails != null) {
         return omResponse.toBuilder()
             .setOmLockDetails(omLockDetails.toProtobufBuilder()).build();

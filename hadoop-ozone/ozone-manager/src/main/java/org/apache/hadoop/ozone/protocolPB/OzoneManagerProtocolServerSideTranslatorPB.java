@@ -27,6 +27,8 @@ import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateLim
 import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateRaftGroupId;
 import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 
+import org.apache.hadoop.ozone.om.OMConfigKeys;
+import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
 import org.apache.ratis.protocol.RaftGroupId;
 
 import java.io.IOException;
@@ -243,6 +245,11 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
 
       final OMResponse response;
       if (omClientRequest.getWriteReqBucketName() != null && ozoneManager.isMultiRaftEnabled()) {
+        try {
+          ozoneManager.getSafeModeManager().checkSafeMode();
+        } catch (OMInSafeModeException ex) {
+          throw new ServiceException(ex);
+        }
         response = omRatisServer.submitBucketWriteRequest(
                 requestToSubmit,
                 omClientRequest.getWriteReqVolumeName(),

@@ -4959,4 +4959,23 @@
       Can't been changed after cluster initialization.
     </description>
   </property>
+  <property>
+    <name>ozone.om.follower.read.enabled</name>
+    <value>false</value>
+    <tag>OZONE, OM</tag>
+    <description>
+      Enable/disable read from OM followers, disabled by default.
+    </description>
+  </property>
+  <property>
+    <name>ozone.om.safemode.enabled</name>
+    <value>false</value>
+    <tag>OM, OZONE</tag>
+    <description>
+        Enable/disable OzoneManager safemode. If enabled, OzoneManager will not allow any write operations
+        until it is exited from safemode.
+        This used in case of activated multiraft feature. OM will stay in safemode until OM main raft group elects a leader and all the expected
+        bucket raft groups are created
+    </description>
+  </property>
 </configuration>
