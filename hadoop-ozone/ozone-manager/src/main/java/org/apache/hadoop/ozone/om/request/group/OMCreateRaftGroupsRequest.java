@@ -13,29 +13,31 @@ import org.apache.ratis.protocol.RaftGroupId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Handles create raft group request.
+ */
 public class OMCreateRaftGroupsRequest extends OMClientRequest {
-    private static final Logger LOG =
-            LoggerFactory.getLogger(OMCreateRaftGroupsRequest.class);
+  private static final Logger LOG =
+          LoggerFactory.getLogger(OMCreateRaftGroupsRequest.class);
 
-    public OMCreateRaftGroupsRequest(OMRequest omRequest) {
-        super(omRequest);
-    }
+  public OMCreateRaftGroupsRequest(OMRequest omRequest) {
+    super(omRequest);
+  }
 
-    @Override
-    public OMClientResponse validateAndUpdateCache(OzoneManager ozoneManager, long transactionLogIndex) {
+  @Override
+  public OMClientResponse validateAndUpdateCache(OzoneManager ozoneManager, long transactionLogIndex) {
 
-        OMRequest omRequest = getOmRequest();
-        CreateBucketRaftGroupsRequest createBucketRaftGroupsRequest = omRequest.getCreateBucketRaftGroupsRequest();
-        createBucketRaftGroupsRequest.getGroupIdsList().forEach(groupId -> {
-            ozoneManager.createRaftGroupForBucket(RaftGroupId.valueOf(HddsUtils.fromProtobuf(groupId)));
-            ozoneManager.getOmRatisGroupManager().incrementRatisGroupCounter(HddsUtils.fromProtobuf(groupId));
-        });
-        final OzoneManagerProtocolProtos.OMResponse.Builder omResponse =
-                OmResponseUtil.getOMResponseBuilder(omRequest);
-        OzoneManagerProtocolProtos.CreateBucketRaftGroupsResponse createBucketRaftGroupsResponse = OzoneManagerProtocolProtos.CreateBucketRaftGroupsResponse.newBuilder().build();
-        omResponse.setCreateBucketRaftGroupsResponse(createBucketRaftGroupsResponse);
-        return new OMCreateRaftGroupsResponse(omResponse.build());
-    }
-
-
+    OMRequest omRequest = getOmRequest();
+    CreateBucketRaftGroupsRequest createBucketRaftGroupsRequest = omRequest.getCreateBucketRaftGroupsRequest();
+    createBucketRaftGroupsRequest.getGroupIdsList().forEach(groupId -> {
+      ozoneManager.createRaftGroupForBucket(RaftGroupId.valueOf(HddsUtils.fromProtobuf(groupId)));
+      ozoneManager.getOmRatisGroupManager().incrementRatisGroupCounter(HddsUtils.fromProtobuf(groupId));
+    });
+    final OzoneManagerProtocolProtos.OMResponse.Builder omResponse =
+            OmResponseUtil.getOMResponseBuilder(omRequest);
+    OzoneManagerProtocolProtos.CreateBucketRaftGroupsResponse createBucketRaftGroupsResponse =
+            OzoneManagerProtocolProtos.CreateBucketRaftGroupsResponse.newBuilder().build();
+    omResponse.setCreateBucketRaftGroupsResponse(createBucketRaftGroupsResponse);
+    return new OMCreateRaftGroupsResponse(omResponse.build());
+  }
 }

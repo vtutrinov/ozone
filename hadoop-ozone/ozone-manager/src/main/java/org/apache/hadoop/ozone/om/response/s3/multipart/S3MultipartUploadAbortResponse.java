@@ -45,6 +45,7 @@ public class S3MultipartUploadAbortResponse extends
   private OmMultipartKeyInfo omMultipartKeyInfo;
   private OmBucketInfo omBucketInfo;
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public S3MultipartUploadAbortResponse(@Nonnull OMResponse omResponse,
       String multipartKey, String multipartOpenKey,
       @Nonnull OmMultipartKeyInfo omMultipartKeyInfo,

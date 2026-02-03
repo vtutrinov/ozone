@@ -10,18 +10,21 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
+/**
+ * Response for create raft groups response.
+ */
 @CleanupTableInfo
 public class OMCreateRaftGroupsResponse extends OMClientResponse {
-    private static final Logger LOG =
-            LoggerFactory.getLogger(OMCreateRaftGroupsResponse.class);
+  private static final Logger LOG =
+          LoggerFactory.getLogger(OMCreateRaftGroupsResponse.class);
 
-    public OMCreateRaftGroupsResponse(OMResponse omResponse) {
-        super(omResponse);
-    }
+  public OMCreateRaftGroupsResponse(OMResponse omResponse) {
+    super(omResponse);
+  }
 
 
-    @Override
-    protected void addToDBBatch(OMMetadataManager omMetadataManager, BatchOperation batchOperation) throws IOException {
+  @Override
+  protected void addToDBBatch(OMMetadataManager omMetadataManager, BatchOperation batchOperation) throws IOException {
 
-    }
+  }
 }
