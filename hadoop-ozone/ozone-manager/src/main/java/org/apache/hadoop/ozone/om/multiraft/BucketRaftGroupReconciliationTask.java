@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static org.apache.hadoop.ozone.om.OmRaftGroupManager.generateRaftGroups;
@@ -52,17 +53,15 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
   public BackgroundTaskResult call() throws Exception {
     OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
     RaftGroup mainRaftGroup = omRatisServer.getCurrentRaftGroup();
-    LOG.error("Start reconciling bucket group RaftGroup. On {} - {}", mainRaftGroup, omRatisServer.getRaftPeerId());
     long currentMultiRaftTerm = ozoneManager.getBucketRaftGroupsReconfigurationIndex();
     if (!omRatisServer.checkLeaderStatus(mainRaftGroup.getGroupId()).equals(NOT_LEADER)) {
       LOG.trace("Start reconciling bucket group RaftGroup on leader {}", omRatisServer.getRaftPeerId());
       List<RaftGroup> groupsToBeReconfigured = new ArrayList<>();
       List<RaftGroup> existingRaftGroups = (List<RaftGroup>) omRatisServer.getServer().getGroups();
-
-      if (existingRaftGroups.size() == 1 &&
-          ozoneManager.isMultiRaftEnabled()) { // consist of only main raft group, as like as an initial setup
+      if (existingRaftGroups.size() == 1) { // consist of only main raft group, as like as an initial setup
         LOG.trace("Create all raft groups");
-        List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm, expectedRaftGroupsCount);
+        List<RaftGroupId> raftGroupIds = ozoneManager.getOmRaftGroupManager()
+            .generateRaftGroups(currentMultiRaftTerm, expectedRaftGroupsCount);
         ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()), true);
       } else {
         for (RaftGroup raftGroup : existingRaftGroups) {
@@ -118,16 +117,17 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
         if (ozoneManager.isMultiRaftEnabled()) {
           LOG.trace("Raft group to be reconfigured: {}", groupsToBeReconfigured);
           if (!groupsToBeReconfigured.isEmpty()) {
-            ozoneManager.moveOmToSafeMode();
-            List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm + 1, expectedRaftGroupsCount);
-            LOG.trace("Raft group to be created: {}", raftGroupIds);
-            ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()),
-                false);
+            if (ozoneManager.isMultiRaftEnabled()) {
+              ozoneManager.moveOmToSafeMode();
+              List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm + 1, expectedRaftGroupsCount);
+              LOG.trace("Raft group to be created: {}", raftGroupIds);
+              ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()),
+                  false);
+            }
           }
           if (existingRaftGroups.size() < expectedRaftGroupsCount + 1) {
-            List<RaftGroupId> raftGroupIds =
-                generateRaftGroups(currentMultiRaftTerm,
-                    expectedRaftGroupsCount - existingRaftGroups.size() + 1);
+            List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm,
+                expectedRaftGroupsCount - existingRaftGroups.size() + 1);
             ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()),
                 false);
           }
