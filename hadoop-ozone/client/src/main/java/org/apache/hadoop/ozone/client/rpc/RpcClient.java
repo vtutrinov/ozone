@@ -2822,7 +2822,8 @@ public class RpcClient implements ClientProtocol {
   }
 
   @Override
-  public GetRaftGroupHealthStateResponse getRaftGroupHealthState(GetRaftGroupHealthStateRequest request) throws IOException {
+  public GetRaftGroupHealthStateResponse getRaftGroupHealthState(GetRaftGroupHealthStateRequest request)
+      throws IOException {
     return ozoneManagerClient.getRaftGroupHealthState(request);
   }
 

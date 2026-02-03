@@ -22,6 +22,9 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 
+/**
+ * An InvocationHandler that handles retries and failovers for OzoneManager.
+ */
 public class OzoneRetryInvocationHandler<T> implements RpcInvocationHandler {
 
   public static final Logger LOG = LoggerFactory.getLogger(OzoneRetryInvocationHandler.class);
@@ -35,7 +38,7 @@ public class OzoneRetryInvocationHandler<T> implements RpcInvocationHandler {
   private HashSet<String> failedAtLeastOnce = new HashSet<>();
 
   private final RetryPolicy defaultPolicy;
-  private final Map<String,RetryPolicy> methodNameToPolicyMap;
+  private final Map<String, RetryPolicy> methodNameToPolicyMap;
 
   private final AsyncCallHandler asyncCallHandler = new AsyncCallHandler();
 
@@ -54,7 +57,7 @@ public class OzoneRetryInvocationHandler<T> implements RpcInvocationHandler {
 
   public RetryPolicy getRetryPolicy(Method method) {
     final RetryPolicy policy = methodNameToPolicyMap.get(method.getName());
-    return policy != null? policy: defaultPolicy;
+    return policy != null ? policy : defaultPolicy;
   }
 
   public long getFailoverCount() {
@@ -82,7 +85,7 @@ public class OzoneRetryInvocationHandler<T> implements RpcInvocationHandler {
   public Object invoke(Object proxy, Method method, Object[] args)
       throws Throwable {
     final boolean isRpc = isRpcInvocation(proxyDescriptor.getProxy());
-    final int callId = isRpc? Client.nextCallId(): RpcConstants.INVALID_CALL_ID;
+    final int callId = isRpc ? Client.nextCallId() : RpcConstants.INVALID_CALL_ID;
 
     final Call call = newCall(method, args, isRpc, callId);
     while (true) {
@@ -93,12 +96,12 @@ public class OzoneRetryInvocationHandler<T> implements RpcInvocationHandler {
       } else if (c.getState() != CallReturn.State.RETRY) {
         return c.getReturnValue();
       } else {
-        OMRequest omRequest =
+        OMRequest request =
             ((OMFailoverProxyProviderBase) proxyDescriptor.getProxyProvider()).getOmRequest();
         Object[] args1 = call.getArgs();
         for (int i = 0; i < args1.length; i++) {
           if (args1[i] instanceof OMRequest) {
-            args1[i] = omRequest;
+            args1[i] = request;
           }
         }
       }
@@ -107,7 +110,8 @@ public class OzoneRetryInvocationHandler<T> implements RpcInvocationHandler {
 
   public RetryInfo handleException(final Method method, final int callId,
                                                            final RetryPolicy policy, final Counters counters,
-                                                           final long expectFailoverCount, final Exception e) throws Exception {
+                                                           final long expectFailoverCount, final Exception e)
+      throws Exception {
     final RetryInfo retryInfo = RetryInfo.newRetryInfo(policy, e,
         counters, proxyDescriptor.idempotentOrAtMostOnce(method),
         expectFailoverCount);
@@ -115,9 +119,8 @@ public class OzoneRetryInvocationHandler<T> implements RpcInvocationHandler {
       // fail.
       if (retryInfo.getAction().reason != null) {
         if (LOG.isDebugEnabled()) {
-          LOG.debug("Exception while invoking call #" + callId + " "
-              + proxyDescriptor.getProxyInfo().getString(method.getName())
-              + ". Not retrying because " + retryInfo.getAction().reason, e);
+          LOG.debug("Exception while invoking call #{} {}. Not retrying because {}", callId,
+              proxyDescriptor.getProxyInfo().getString(method.getName()), retryInfo.getAction().reason, e);
         }
       }
       throw retryInfo.getFailException();
@@ -131,8 +134,7 @@ public class OzoneRetryInvocationHandler<T> implements RpcInvocationHandler {
                    final int retries, final long delay, final Exception ex) {
     boolean info = true;
     // If this is the first failover to this proxy, skip logging at INFO level
-    if (!failedAtLeastOnce.contains(proxyDescriptor.getProxyInfo().toString()))
-    {
+    if (!failedAtLeastOnce.contains(proxyDescriptor.getProxyInfo().toString())) {
       failedAtLeastOnce.add(proxyDescriptor.getProxyInfo().toString());
 
       // If successful calls were made to this proxy, log info even for first
@@ -150,8 +152,8 @@ public class OzoneRetryInvocationHandler<T> implements RpcInvocationHandler {
     if (failovers > 0) {
       b.append(" after ").append(failovers).append(" failover attempts");
     }
-    b.append(isFailover? ". Trying to failover ": ". Retrying ");
-    b.append(delay > 0? "after sleeping for " + delay + "ms.": "immediately.");
+    b.append(isFailover ? ". Trying to failover " : ". Retrying ");
+    b.append(delay > 0 ? "after sleeping for " + delay + "ms." : "immediately.");
     b.append(" Current retry count: ").append(retries).append(".");
 
     if (info) {

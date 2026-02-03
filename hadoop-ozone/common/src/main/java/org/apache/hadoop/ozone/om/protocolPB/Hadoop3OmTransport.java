@@ -118,7 +118,7 @@ public class Hadoop3OmTransport implements OmTransport {
    */
   private OzoneManagerProtocolPB createRetryProxy(InvocationHandler invocationHandler) {
     return (OzoneManagerProtocolPB) Proxy.newProxyInstance(getClass().getClassLoader(),
-        new Class<?>[] { OzoneManagerProtocolPB.class },
+        new Class<?>[] {OzoneManagerProtocolPB.class},
         invocationHandler);
   }
 

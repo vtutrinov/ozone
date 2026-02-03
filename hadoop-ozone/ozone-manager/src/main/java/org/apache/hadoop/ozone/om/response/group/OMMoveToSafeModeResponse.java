@@ -8,6 +8,9 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 
 import java.io.IOException;
 
+/**
+ * Response for MoveToSafeMode request.
+ */
 @CleanupTableInfo
 public class OMMoveToSafeModeResponse extends OMClientResponse {
 

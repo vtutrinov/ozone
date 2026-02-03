@@ -93,9 +93,8 @@ public class OmRaftGroupManager {
 
     while (bucketsPerRaftGroupCounter.size() < omRaftGroupCount) {
       try {
-        LOG.info(
-                "Waiting for group initiating {}-{}. {}", bucketsPerRaftGroupCounter.size(), omRaftGroupCount, bucketsPerRaftGroupCounter
-        );
+        LOG.info("Waiting for group initiating {}-{}. {}", bucketsPerRaftGroupCounter.size(), omRaftGroupCount,
+            bucketsPerRaftGroupCounter);
         wait(1000);
       } catch (InterruptedException e) {
         throw new RuntimeException(e);
@@ -154,8 +153,12 @@ public class OmRaftGroupManager {
     return RaftGroupId.valueOf(groupUuid);
   }
 
-  public void addGroupIdListToRaftGroupCounter(List<UUID> groupUuid) {
-    bucketsPerRaftGroupCounter.clear();
-    groupUuid.forEach(it -> bucketsPerRaftGroupCounter.put(it, 0));
+  public void removeGroup(RaftGroupId raftGroupId) {
+    bucketRaftGroups.entrySet().stream()
+            .filter(e -> e.getValue().equals(raftGroupId.getUuid()))
+            .map(Map.Entry::getKey)
+            .forEach(bucketRaftGroups::remove);
+    bucketsPerRaftGroupCounter.remove(raftGroupId.getUuid());
   }
+
 }

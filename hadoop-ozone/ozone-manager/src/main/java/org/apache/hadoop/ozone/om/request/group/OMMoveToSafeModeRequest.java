@@ -13,6 +13,9 @@ import java.io.IOException;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status.OK;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type.MoveOmToSafeMode;
 
+/**
+ * Handles move to safe mode request.
+ */
 public class OMMoveToSafeModeRequest extends OMClientRequest {
 
 
@@ -28,7 +31,8 @@ public class OMMoveToSafeModeRequest extends OMClientRequest {
         .setStatus(OK)
         .setCmdType(MoveOmToSafeMode).build()) {
       @Override
-      protected void addToDBBatch(OMMetadataManager omMetadataManager, BatchOperation batchOperation) throws IOException {
+      protected void addToDBBatch(OMMetadataManager omMetadataManager, BatchOperation batchOperation)
+          throws IOException {
 
       }
     };

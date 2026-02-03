@@ -36,6 +36,12 @@ import static org.apache.hadoop.ozone.om.OmRaftGroupManager.generateRaftGroups;
 import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type.BucketRaftGroupsStateChanged;
 
+/**
+ * A background task that runs on the Ozone Manager leader to reconcile the
+ * state of bucket Raft groups. It checks for any Raft groups that are closed
+ * or have unhealthy peers and removes them. It also creates new Raft groups
+ * if the number of existing groups is less than the expected count.
+ */
 public class BucketRaftGroupReconciliationTask implements BackgroundTask {
 
   public static final Logger LOG = LoggerFactory.getLogger(BucketRaftGroupReconciliationTask.class);
@@ -64,7 +70,9 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
         ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()), true);
       } else {
         for (RaftGroup raftGroup : existingRaftGroups) {
-          if (raftGroup.getGroupId().equals(mainRaftGroup.getGroupId())) continue;
+          if (raftGroup.getGroupId().equals(mainRaftGroup.getGroupId())) {
+            continue;
+          }
           RaftGroupId groupId = raftGroup.getGroupId();
           DivisionInfo divisionInfo = omRatisServer.getServer().getDivision(groupId).getInfo();
           RaftPeerId leaderId = divisionInfo.getLeaderId();
@@ -177,14 +185,14 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
             new GrpcTlsConfig(ozoneManager.getCertificateClient().getClientKeyStoresFactory().getKeyManagers()[0],
                 ozoneManager.getCertificateClient().getClientKeyStoresFactory().getTrustManagers()[0], true);
       } catch (IOException ex) {
-        LOG.error("Can't retrieve cert key store factory");
+        LOG.error("Can't retrieve cert key store factory", ex);
       }
     }
     LOG.trace("{} Delete raft group {}.", ozoneManager.getOMNodeId(), raftGroup.getGroupId());
     OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
     GrpcTlsConfig finalTlsConfig = tlsConfig;
     raftGroup.getPeers().stream()
-        .filter(pear -> !pear.getId().equals(omRatisServer.getRaftPeerId()))
+        .filter(peer -> !peer.getId().equals(omRatisServer.getRaftPeerId()))
         .forEach(peer -> {
           try (RaftClient raftClient = RatisHelper.newRaftClient(SupportedRpcType.valueOfIgnoreCase(rpcType),
               peer, retryPolicy, finalTlsConfig, ozoneManager.getConfiguration())) {

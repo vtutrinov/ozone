@@ -122,12 +122,12 @@ public final class OMHAMetrics implements MetricsSource {
   }
 
   public OMHAMetrics defineRaftGroupLeader(
-      RaftGroupId raftGroupId, String leaderId, boolean isMainRaftGroup) {
+      RaftGroupId raftGroupId, String groupLeaderId, boolean isMainRaftGroup) {
     // Update the raft group leader map with the new leader
-    raftGroupsLeaders.put(raftGroupId, leaderId);
+    raftGroupsLeaders.put(raftGroupId, groupLeaderId);
 
     if (isMainRaftGroup) {
-      this.leaderId = leaderId;
+      this.leaderId = groupLeaderId;
       this.mainRaftGroupId = raftGroupId;
     }
     return this;

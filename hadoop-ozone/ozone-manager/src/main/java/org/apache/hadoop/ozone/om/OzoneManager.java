@@ -655,8 +655,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return multiRaftTerm.get();
   }
 
-  public void setCurrentMultiRaftTerm(long multiRaftTerm) {
-    this.multiRaftTerm.set(multiRaftTerm);
+  public void setCurrentMultiRaftTerm(long multiRaftUpdateIndex) {
+    this.multiRaftTerm.set(multiRaftUpdateIndex);
   }
 
   // Used in MiniOzoneCluster testing
@@ -897,7 +897,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
 
     initializeRatisDirs(conf);
-    listOfRaftGroupToReset = cleanUpRaftGroups(OzoneManagerRatisUtils.getOMRatisDirectory(configuration), omRaftGroupName());
+    listOfRaftGroupToReset = cleanUpRaftGroups(OzoneManagerRatisUtils.getOMRatisDirectory(configuration),
+        omRaftGroupName());
     initializeRatisServer(isBootstrapping || isForcedBootstrapping);
 
     omClientProtocolMetrics = ProtocolMessageMetrics
@@ -1342,7 +1343,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
   }
 
-  public GetRaftGroupHealthStateResponse getRaftGroupHealthState(GetRaftGroupHealthStateRequest request) throws IOException {
+  public GetRaftGroupHealthStateResponse getRaftGroupHealthState(GetRaftGroupHealthStateRequest request)
+      throws IOException {
     long unhealthyPeerTimeout = configuration.getTimeDuration(
         OZONE_OM_RATIS_UNHEALTHY_PEER_TIMEOUT,
         OZONE_OM_RATIS_UNHEALTHY_PEER_TIMEOUT_DEFAULT,
@@ -1362,7 +1364,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         .setLastRpcResponseTimeMs(0)
         .build());
     for (RaftProtos.ServerRpcProto followerInfo : followerInfoList) {
-      responseBuilder.addPeerHealthInfo( PeerHealthInfo.newBuilder()
+      responseBuilder.addPeerHealthInfo(PeerHealthInfo.newBuilder()
           .setIsHealthy(followerInfo.getLastRpcElapsedTimeMs() < unhealthyPeerTimeout)
           .setPeerId(followerInfo.getId().getId().toStringUtf8())
           .setLastRpcResponseTimeMs(followerInfo.getLastRpcElapsedTimeMs())
@@ -2024,18 +2026,20 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     File ratisMetadataDir = new File(ratisDir);
     List<String> listOfRaftGroupsToReset = new ArrayList<>();
     if (ratisMetadataDir.exists()) {
-      String[] list = ratisMetadataDir.list((dir, name) -> {
+      String[] listOfRatisDirs = ratisMetadataDir.list((dir, name) -> {
         String exceptRaftGroupDirName = exceptRaftGroupDir.getUuid().toString();
         return !name.equals(exceptRaftGroupDirName);
       });
-      for (String s : list) {
-        File file = new File(ratisMetadataDir, s);
-        try {
-          deleteDirectory(file);
-          listOfRaftGroupsToReset.add(s);
-        } catch (IOException e) {
-          LOG.error("Can't delete directory {} in ratis metadata dir {}",
-              file.getAbsolutePath(), ratisMetadataDir.getAbsolutePath(), e);
+      if (listOfRatisDirs != null) {
+        for (String s : listOfRatisDirs) {
+          File file = new File(ratisMetadataDir, s);
+          try {
+            deleteDirectory(file);
+            listOfRaftGroupsToReset.add(s);
+          } catch (IOException e) {
+            LOG.error("Can't delete directory {} in ratis metadata dir {}",
+                file.getAbsolutePath(), ratisMetadataDir.getAbsolutePath(), e);
+          }
         }
       }
       try {
@@ -2406,7 +2410,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
     bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
     bucketRaftGroupsReconciler.start();
-    listOfRaftGroupToReset = cleanUpRaftGroups(OzoneManagerRatisUtils.getOMRatisDirectory(configuration), omRaftGroupName());
+    listOfRaftGroupToReset = cleanUpRaftGroups(OzoneManagerRatisUtils.getOMRatisDirectory(configuration),
+        omRaftGroupName());
     cleanUpRaftGroupsTransactions();
   }
 
@@ -3724,6 +3729,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
           omhaMetrics.defineRaftGroupLeader(bucketRaftGroupId, bucketRaftGroupNodeId, false);
         });
     tmpLeadersMap.clear();
+  }
+
+  public OMHAMultiRaftMetrics getOmMultiRaftMetrics() {
+    return omMultiRaftMetrics;
   }
 
   public long getBucketRaftGroupsReconfigurationIndex() throws IOException {

@@ -9,6 +9,9 @@ import java.util.concurrent.TimeUnit;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUPS_RECONCILER_INTERVAL;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUPS_RECONCILER_INTERVAL_DEFAULT;
 
+/**
+ * Background service to reconcile bucket raft groups state.
+ */
 public class BucketRaftGroupsReconciler extends BackgroundService {
 
   private final OzoneManager ozoneManager;

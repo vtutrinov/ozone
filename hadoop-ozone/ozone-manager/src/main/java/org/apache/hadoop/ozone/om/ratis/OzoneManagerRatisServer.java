@@ -453,7 +453,8 @@ public final class OzoneManagerRatisServer {
   }
 
   private OMResponse createOmResponse(OMRequest omRequest,
-                                      RaftClientReply raftClientReply, RaftGroupId raftGroupId) throws ServiceException {
+                                      RaftClientReply raftClientReply, RaftGroupId raftGroupId)
+      throws ServiceException {
     return captureLatencyNs(
         perfMetrics.getCreateOmResponseLatencyNs(),
         () -> createOmResponseImpl(omRequest, raftClientReply, raftGroupId));

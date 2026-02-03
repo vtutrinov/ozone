@@ -19,6 +19,9 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
+/**
+ * A handler for async calls.
+ */
 public class AsyncCallHandler {
   public static final Logger LOG = LoggerFactory.getLogger(AsyncCallHandler.class);
 
@@ -96,7 +99,7 @@ public class AsyncCallHandler {
 
     void addCall(AsyncCall call) {
       if (LOG.isDebugEnabled()) {
-        LOG.debug("add " + call);
+        LOG.debug("add {}", call);
       }
       queue.offer(call);
       processor.tryStart();
@@ -123,7 +126,7 @@ public class AsyncCallHandler {
 
     /** Process the async calls in the queue. */
     private class Processor {
-      static final long GRACE_PERIOD = 3*1000L;
+      static final long GRACE_PERIOD = 3 * 1000L;
       static final long MAX_WAIT_PERIOD = 100L;
 
       private final AtomicReference<Thread> running = new AtomicReference<>();
@@ -156,7 +159,7 @@ public class AsyncCallHandler {
           final boolean set = running.compareAndSet(current, daemon);
           Preconditions.checkState(set);
           if (LOG.isDebugEnabled()) {
-            LOG.debug("Starting AsyncCallQueue.Processor " + daemon);
+            LOG.debug("Starting AsyncCallQueue.Processor {}", daemon);
           }
           daemon.start();
         }
@@ -170,7 +173,7 @@ public class AsyncCallHandler {
 
       void kill(Daemon d) {
         if (LOG.isDebugEnabled()) {
-          LOG.debug("Killing " + d);
+          LOG.debug("Killing {}", d);
         }
         final boolean set = running.compareAndSet(d, null);
         Preconditions.checkState(set);
@@ -226,20 +229,20 @@ public class AsyncCallHandler {
       final CallReturn r = invokeOnce();
       LOG.debug("#{}: {}", getCallId(), r.getState());
       switch (r.getState()) {
-        case RETURNED:
-        case EXCEPTION:
-          asyncCallReturn.set(r); // the async call is done
-          return true;
-        case RETRY:
-          invokeOnce();
-          break;
-        case WAIT_RETRY:
-        case ASYNC_CALL_IN_PROGRESS:
-        case ASYNC_INVOKED:
-          // nothing to do
-          break;
-        default:
-          Preconditions.checkState(false);
+      case RETURNED:
+      case EXCEPTION:
+        asyncCallReturn.set(r); // the async call is done
+        return true;
+      case RETRY:
+        invokeOnce();
+        break;
+      case WAIT_RETRY:
+      case ASYNC_CALL_IN_PROGRESS:
+      case ASYNC_INVOKED:
+        // nothing to do
+        break;
+      default:
+        Preconditions.checkState(false);
       }
       return false;
     }
@@ -315,19 +318,20 @@ public class AsyncCallHandler {
 
     final AsyncGet<Object, Throwable> asyncGet
         = new AsyncGet<Object, Throwable>() {
-      @Override
-      public Object get(long timeout, TimeUnit unit) throws Throwable {
-        final CallReturn c = asyncCallReturn.waitAsyncValue(timeout, unit);
-        final Object r = c.getReturnValue();
-        hasSuccessfulCall = true;
-        return r;
-      }
 
-      @Override
-      public boolean isDone() {
-        return asyncCallReturn.isDone();
-      }
-    };
+          @Override
+          public Object get(long timeout, TimeUnit unit) throws Throwable {
+            final CallReturn c = asyncCallReturn.waitAsyncValue(timeout, unit);
+            final Object r = c.getReturnValue();
+            hasSuccessfulCall = true;
+            return r;
+          }
+
+          @Override
+          public boolean isDone() {
+            return asyncCallReturn.isDone();
+          }
+        };
     ASYNC_RETURN.set(asyncGet);
   }
 
