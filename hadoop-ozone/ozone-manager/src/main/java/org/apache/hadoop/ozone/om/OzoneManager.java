@@ -404,6 +404,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
+import static org.apache.commons.io.FileUtils.deleteDirectory;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 import static org.apache.hadoop.hdds.HddsConfigKeys.HDDS_BLOCK_TOKEN_ENABLED;
@@ -2057,6 +2058,33 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
   }
 
+  private void cleanUpRaftGroups(String ratisDir, RaftGroupId exceptRaftGroupDir) {
+    File ratisMetadataDir = new File(ratisDir);
+    if (ratisMetadataDir.exists()) {
+      String[] list = ratisMetadataDir.list((dir, name) -> {
+        String exceptRaftGroupDirName = exceptRaftGroupDir.getUuid().toString();
+        return !name.equals(exceptRaftGroupDirName);
+      });
+      for (String s : list) {
+        File file = new File(ratisMetadataDir, s);
+        try {
+          deleteDirectory(file);
+          RaftGroupId raftGroupId = RaftGroupId.valueOf(UUID.fromString(s));
+          getMetadataManager().getTransactionInfoTable().delete(TRANSACTION_INFO_KEY + raftGroupId.toString());
+        } catch (IOException e) {
+          LOG.error("Can't delete directory {} in ratis metadata dir {}",
+              file.getAbsolutePath(), ratisMetadataDir.getAbsolutePath(), e);
+        }
+      }
+      try {
+        getMetadataManager().getStore().flushDB();
+      } catch (IOException e) {
+        LOG.warn("Something went wrong on flushing db", e);
+        throw new RuntimeException(e);
+      }
+    }
+  }
+
   /**
    * Builds a message for logging startup information about an RPC server.
    *
@@ -2212,6 +2240,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     metadataManager.start(configuration);
 
     startSecretManagerIfNecessary();
+    cleanUpRaftGroups(OzoneManagerRatisUtils.getOMRatisDirectory(configuration), omRaftGroupName());
     // Start Ratis services
     if (omRatisServer != null) {
       omRatisServer.start();

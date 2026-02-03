@@ -552,22 +552,7 @@ public final class OmUtils {
   }
 
   public static void cleanUpRatisDir(String ratisDir, RaftGroupId exceptRaftGroupDir) {
-    File ratisMetadataDir = new File(ratisDir);
-    if (ratisMetadataDir.exists()) {
-      String[] list = ratisMetadataDir.list((dir, name) -> {
-        String exceptRaftGroupDirName = exceptRaftGroupDir.getUuid().toString();
-        return !name.equals(exceptRaftGroupDirName);
-      });
-      for (String s : list) {
-        File file = new File(ratisMetadataDir, s);
-        try {
-          FileUtils.deleteDirectory(file);
-        } catch (IOException e) {
-          LOG.error("Can't delete directory {} in ratis metadata dir {}",
-              file.getAbsolutePath(), ratisMetadataDir.getAbsolutePath(), e);
-        }
-      }
-    }
+
   }
 
   /**
