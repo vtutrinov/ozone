@@ -1,5 +1,6 @@
 package org.apache.hadoop.ozone.om.request.invocation;
 
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.io.retry.FailoverProxyProvider;
 import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.ipc.Client;
@@ -8,7 +9,12 @@ import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RpcConstants;
 import org.apache.hadoop.ipc.RpcInvocationHandler;
 import org.apache.hadoop.ozone.om.ha.OMFailoverProxyProviderBase;
+import org.apache.hadoop.ozone.om.helpers.OmKeyArgs;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteKeyArgs;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.KeyArgs;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RenameKeysArgs;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +27,7 @@ import java.lang.reflect.Proxy;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * An InvocationHandler that handles retries and failovers for OzoneManager.
@@ -168,7 +175,20 @@ public class OzoneRetryInvocationHandler<T> implements RpcInvocationHandler {
       if (!method.isAccessible()) {
         method.setAccessible(true);
       }
-      final Object r = method.invoke(proxyDescriptor.getProxy(), args);
+      T proxy = null;
+      if (args.length == 2 && args[1] instanceof OMRequest) {
+        String bucketPath = ((OMFailoverProxyProviderBase)proxyDescriptor.getProxyProvider())
+            .getWriteRequestBucketPath((OMRequest) args[1]);
+        if (bucketPath != null) {
+          proxy = (T) ((OMFailoverProxyProviderBase) proxyDescriptor.getProxyProvider()).selectProxyInfo(bucketPath);
+        }
+        if (proxy == null) {
+          proxy = proxyDescriptor.getProxy();
+        }
+      } else {
+        proxy = proxyDescriptor.getProxy();
+      }
+      final Object r = method.invoke(proxy, args);
       hasSuccessfulCall = true;
       return r;
     } catch (InvocationTargetException e) {
