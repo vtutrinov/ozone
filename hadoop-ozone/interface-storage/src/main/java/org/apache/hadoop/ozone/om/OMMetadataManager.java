@@ -530,7 +530,7 @@ public interface OMMetadataManager extends DBStoreHAManager, AutoCloseable {
    */
   Table<String, OmDirectoryInfo> getDirectoryTable();
 
-  Table<String, Long> getMultiRaftTermTable();
+  Table<String, Long> getMultiRaftInfoTable();
   /**
    * Return table mapped to the specified table name.
    * @param tableName
