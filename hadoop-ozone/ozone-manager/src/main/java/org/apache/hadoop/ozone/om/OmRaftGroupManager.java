@@ -41,7 +41,7 @@ public class OmRaftGroupManager {
       String omServiceId,
       OMMetadataManager metadataManager
   ) {
-    omRaftGroupCount = configuration.getInt(
+    omRaftGroupCount = configuration.getPositiveIntOrDefault(
         OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
         OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT
     );

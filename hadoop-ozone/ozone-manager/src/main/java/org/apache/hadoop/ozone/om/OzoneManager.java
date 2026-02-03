@@ -402,6 +402,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
+import static java.util.Optional.ofNullable;
 import static org.apache.commons.io.FileUtils.deleteDirectory;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
@@ -569,6 +570,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private final OmSnapshotInternalMetrics omSnapshotIntMetrics;
   private OMHAMetrics omhaMetrics;
   private final ProtocolMessageMetrics<OzoneManagerProtocolProtos.Type> omClientProtocolMetrics;
+
+  public OMHAMultiRaftMetrics getOmMultiRaftMetrics() {
+    return omMultiRaftMetrics;
+  }
+
   private OMHAMultiRaftMetrics omMultiRaftMetrics;
   private final DeletingServiceMetrics omDeletionMetrics;
   private OzoneManagerHttpServer httpServer;
@@ -677,7 +683,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private final Map<RaftGroupId, String> tmpLeadersMap = new HashMap<>();
   private BucketRaftGroupsReconciler bucketRaftGroupsReconciler;
   private List<String> listOfRaftGroupToReset;
-
+  private int bucketNumbersFromConfig;
   @SuppressWarnings("methodlength")
   private OzoneManager(OzoneConfiguration conf, StartupOption startupOption)
       throws IOException, AuthenticationException {
@@ -766,6 +772,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
             OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT
     );
 
+    bucketNumbersFromConfig = configuration.getPositiveIntOrDefault(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
+        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
     // Ratis server comes with JvmPauseMonitor, no need to start another
     jvmPauseMonitor = !isRatisEnabled ? newJvmPauseMonitor(omId) : null;
 
@@ -1195,8 +1203,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   }
 
   private boolean bucketRaftGroupsCreated() {
-    return omRaftGroups.size() == configuration.getInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
-        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT) + 1;
+    return omRaftGroups.size() == bucketNumbersFromConfig + 1;
   }
 
   /**
@@ -1939,11 +1946,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     certClient.initWithRecovery();
   }
 
-  private int getBucketRaftGroupsCount() {
-    return configuration.getInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
-        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
-  }
-
   private void initializeRatisDirs(OzoneConfiguration conf) throws IOException {
     // Create Ratis storage dir
     String omRatisDirectory =
@@ -2390,14 +2392,18 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     omState = State.RUNNING;
     auditMap.put("NewOmState", omState.name());
     SYSTEMAUDIT.logWriteSuccess(buildAuditMessageForSuccess(OMSystemAction.STARTUP, auditMap));
+    bucketNumbersFromConfig = configuration.getPositiveIntOrDefault(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
+        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
+
     if (omRatisServer != null) {
       isMultiRaftEnabled = configuration.getBoolean(
-              OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
-              OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT
+          OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
+          OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT
       );
       omRaftGroupManager =
-              new OmRaftGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
+          new OmRaftGroupManager(configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
     }
+
     bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
     bucketRaftGroupsReconciler.start();
     listOfRaftGroupToReset = cleanUpRaftGroups(OzoneManagerRatisUtils.getOMRatisDirectory(configuration), omRaftGroupName());
@@ -3721,7 +3727,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   }
 
   public long getBucketRaftGroupsReconfigurationIndex() throws IOException {
-    return getMetadataManager().getMultiRaftInfoTable().get("term");
+    return ofNullable(getMetadataManager().getMultiRaftInfoTable().get("term")).orElse(0L);
   }
 
   public void updateBucketRaftGroupsReconfigurationIndex(long index)

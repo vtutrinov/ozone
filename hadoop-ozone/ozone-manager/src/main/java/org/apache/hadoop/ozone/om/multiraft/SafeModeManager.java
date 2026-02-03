@@ -28,7 +28,7 @@ public class SafeModeManager  {
 
   public SafeModeManager(OzoneConfiguration configuration) {
     this.safeModeEnabled = configuration.getBoolean(OZONE_OM_SAFE_MODE_ENABLED, OZONE_OM_SAFE_MODE_ENABLED_DEFAULT);
-    this.bucketRaftGroupsExpectedCount = configuration.getInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
+    this.bucketRaftGroupsExpectedCount = configuration.getPositiveIntOrDefault(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
         OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
     if (!safeModeEnabled) {
       inSafeMode.set(false);

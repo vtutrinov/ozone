@@ -424,7 +424,7 @@ public final class OzoneManagerProtocolClientSideTranslatorPB
   }
 
   private static int getMultiRaftGroupCount(ConfigurationSource configuration) {
-    return configuration.getInt(
+    return configuration.getPositiveIntOrDefault(
             OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
             OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
   }
