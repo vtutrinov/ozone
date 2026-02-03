@@ -208,14 +208,6 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     auditParams.put(AUDIT_PARAM_NEW_LEADER, String.valueOf(newLeaderId));
     AUDIT.logWriteSuccess(ozoneManager.buildAuditMessageForSuccess(OMSystemAction.LEADER_CHANGE, auditParams));
 
-    LOG.info("{}: leader changed to {}", groupMemberId, newLeaderId);
-    if (ozoneManager.areAllOMsOnline()) {
-      try {
-        ozoneManager.initBucketRaftGroups(); // TODO submit request to delete bucket raft group and create new ones
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    }
   }
 
   /** Notified by Ratis for non-StateMachine term-index update. */

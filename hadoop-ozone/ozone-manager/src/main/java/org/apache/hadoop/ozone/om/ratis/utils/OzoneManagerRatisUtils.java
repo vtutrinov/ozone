@@ -29,6 +29,7 @@ import java.nio.file.Path;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos.NodeType;
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.security.SecurityConfig;
 import org.apache.hadoop.hdds.security.x509.certificate.client.CertificateClient;
 import org.apache.hadoop.hdds.server.ServerUtils;
@@ -120,6 +121,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Paths;
+import java.util.UUID;
 
 import static org.apache.hadoop.hdds.HddsConfigKeys.OZONE_METADATA_DIRS;
 import static org.apache.hadoop.ozone.OzoneConsts.OM_RATIS_SNAPSHOT_DIR;
@@ -375,6 +377,11 @@ public final class OzoneManagerRatisUtils {
     if (!bucketName.isEmpty()) {
       request.setWriteReqBucketName(bucketName);
       request.setWriteReqVolumeName(volumeName);
+      if (omRequest.hasRaftGroupId()) {
+        HddsProtos.UUID uuid = omRequest.getRaftGroupId();
+        RaftGroupId raftGroupId = RaftGroupId.valueOf(new UUID(uuid.getMostSigBits(), uuid.getLeastSigBits()));
+        request.setWriteRaftGroup(raftGroupId);
+      }
     }
     return request;
   }
@@ -533,7 +540,16 @@ public final class OzoneManagerRatisUtils {
     try {
       ozoneManager.checkLeaderStatus(ratisGroupId);
     } catch (OMNotLeaderException | OMLeaderNotReadyException e) {
-      LOG.error("{} For group {}", e.getMessage(), ratisGroupId);
+      LOG.error("{} For group {}, volume={}, bucket={}", e.getMessage(), ratisGroupId, volumeName, bucketName);
+      throw new ServiceException(e);
+    }
+  }
+
+  public static void checkLeaderStatus(RaftGroupId raftGroupId, OzoneManager ozoneManager) throws ServiceException {
+    try {
+      ozoneManager.checkLeaderStatus(raftGroupId);
+    } catch (OMNotLeaderException | OMLeaderNotReadyException e) {
+      LOG.error("{} For group {}", e.getMessage(), raftGroupId);
       throw new ServiceException(e);
     }
   }

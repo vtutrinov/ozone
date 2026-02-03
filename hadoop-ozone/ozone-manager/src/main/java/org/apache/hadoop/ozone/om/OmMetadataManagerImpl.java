@@ -100,6 +100,7 @@ import org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
 import org.apache.hadoop.ozone.om.helpers.ListKeysResult;
 import org.apache.hadoop.ozone.om.helpers.ListOpenFilesResult;
+import org.apache.hadoop.ozone.om.helpers.OMRatisHelper;
 import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.apache.hadoop.ozone.om.helpers.OmDBAccessIdInfo;
 import org.apache.hadoop.ozone.om.helpers.OmDBTenantState;
@@ -136,6 +137,8 @@ import org.apache.hadoop.ozone.snapshot.ListSnapshotResponse;
 import org.apache.hadoop.ozone.storage.proto.OzoneManagerStorageProtos.PersistedUserVolumeInfo;
 import org.apache.hadoop.util.Time;
 import org.apache.ozone.compaction.log.CompactionLogEntry;
+import org.apache.ratis.proto.RaftProtos;
+import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.util.ExitUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -257,6 +260,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
       "compactionLogTable";
   public static final String MULTI_RAFT_INFO_TABLE =
       "multiRaftInfoTable";
+  public static final String RAFT_GROUP_CONFIG_TABLE = "raftGroupConfigTable";
   static final String[] ALL_TABLES = new String[] {
       USER_TABLE,
       VOLUME_TABLE,
@@ -280,7 +284,8 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
       SNAPSHOT_INFO_TABLE,
       SNAPSHOT_RENAMED_TABLE,
       COMPACTION_LOG_TABLE,
-      MULTI_RAFT_INFO_TABLE
+      MULTI_RAFT_INFO_TABLE,
+      RAFT_GROUP_CONFIG_TABLE
   };
 
   private DBStore store;
@@ -321,6 +326,7 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   private boolean ignorePipelineinKey;
   private Table deletedDirTable;
   private Table<String, Long> multiRaftInfoTable;
+  private Table<RaftGroupId, RaftProtos.RaftConfigurationProto> raftGroupConfigurationTable;
 
 
   private OzoneManager ozoneManager;
@@ -1847,6 +1853,12 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
   public Table<String, Long> getMultiRaftInfoTable() {
     return multiRaftInfoTable;
   }
+
+  @Override
+  public Table<RaftGroupId, RaftProtos.RaftConfigurationProto> getRaftGroupConfigurationTable() {
+    return raftGroupConfigurationTable;
+  }
+
   /**
    * Get Snapshot Chain Manager.
    *

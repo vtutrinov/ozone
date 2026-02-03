@@ -153,7 +153,7 @@ public final class OzoneManagerRatisServer {
   private static final AtomicLong CALL_ID_COUNTER = new AtomicLong();
   private final Read.Option readOption;
 
-  private static long nextCallId() {
+  public static long nextCallId() {
     return CALL_ID_COUNTER.getAndIncrement() & Long.MAX_VALUE;
   }
 
@@ -297,7 +297,9 @@ public final class OzoneManagerRatisServer {
         certClient);
   }
 
-
+  public ClientId getCurrentClientId() {
+    return currentClientId;
+  }
 
   public static CreateRaftPeerListResult createRaftPeerList(
           OMNodeDetails omNodeDetails, Map<String, OMNodeDetails> peerNodes, boolean isBootstrapping) {
@@ -353,7 +355,8 @@ public final class OzoneManagerRatisServer {
   ) throws ServiceException {
     return commonSubmitRequest(
             omRequest,
-            ozoneManager.raftGroupName(volumeName, bucketName)
+            omRequest.hasRaftGroupId() ? ozoneManager.raftGroupName(omRequest.getRaftGroupId()) :
+                ozoneManager.raftGroupName(volumeName, bucketName)
     );
   }
 
@@ -366,7 +369,7 @@ public final class OzoneManagerRatisServer {
     if (ozoneManager.getPrepareState().requestAllowed(omRequest.getCmdType())) {
       RaftClientRequest raftClientRequest = createRaftRequest(omRequest, raftGroupId);
       RaftClientReply raftClientReply = submitRequestToRatis(raftClientRequest);
-      return createOmResponse(omRequest, raftClientReply);
+      return createOmResponse(omRequest, raftClientReply, raftGroupId);
     } else {
       LOG.info("Rejecting write request on OM {} because it is in prepare " +
           "mode: {}", ozoneManager.getOMNodeId(),
@@ -424,14 +427,14 @@ public final class OzoneManagerRatisServer {
             .build();
     RaftClientReply raftClientReply =
             submitRequestToRatis(raftClientRequest);
-    return createOmResponse(omRequest, raftClientReply);
+    return createOmResponse(omRequest, raftClientReply, raftGroupId);
   }
 
   private OMResponse createOmResponse(OMRequest omRequest,
-      RaftClientReply raftClientReply) throws ServiceException {
+                                      RaftClientReply raftClientReply, RaftGroupId raftGroupId) throws ServiceException {
     return captureLatencyNs(
         perfMetrics.getCreateOmResponseLatencyNs(),
-        () -> createOmResponseImpl(omRequest, raftClientReply));
+        () -> createOmResponseImpl(omRequest, raftClientReply, raftGroupId));
   }
 
   private RaftClientReply submitRequestToRatis(
@@ -468,7 +471,7 @@ public final class OzoneManagerRatisServer {
         .build();
     RaftClientReply raftClientReply =
         submitRequestToRatis(raftClientRequest);
-    return createOmResponse(omRequest, raftClientReply);
+    return createOmResponse(omRequest, raftClientReply, getCurrentRaftGroupId());
   }
 
 
@@ -714,13 +717,15 @@ public final class OzoneManagerRatisServer {
 
   /**
    * Process the raftClientReply and return OMResponse.
-   * @param omRequest Ozone Manager request
-   * @param reply Raft client reply
+   *
+   * @param omRequest   Ozone Manager request
+   * @param reply       Raft client reply
+   * @param raftGroupId
    * @return OMResponse - response which is returned to client.
    * @throws ServiceException thrown when problems with leader or processing Raft reply
    */
   private OMResponse createOmResponseImpl(OMRequest omRequest,
-      RaftClientReply reply) throws ServiceException {
+                                          RaftClientReply reply, RaftGroupId raftGroupId) throws ServiceException {
     // NotLeader exception is thrown only when the raft server to which the
     // request is submitted is not the leader. This can happen first time
     // when client is submitting request to OM.
@@ -730,7 +735,7 @@ public final class OzoneManagerRatisServer {
       if (notLeaderException != null) {
         throw new ServiceException(
             OMNotLeaderException.convertToOMNotLeaderException(
-                  notLeaderException, getRaftPeerId()));
+                  notLeaderException, getRaftPeerId(), raftGroupId));
       }
 
       LeaderNotReadyException leaderNotReadyException =
@@ -1172,11 +1177,11 @@ public final class OzoneManagerRatisServer {
     final RaftPeer leader = leaderId == null ? null : getServerDivision(raftGroupId).getRaftConf().getPeer(leaderId);
     if (leader == null) {
       // current peer is not a leader, and the leader is not elected yet for the raft group
-      return new OMNotLeaderException(raftPeerId);
+      return new OMNotLeaderException(raftPeerId, raftGroupId);
     }
     final String leaderAddress = getRaftLeaderAddress(leader);
     LOG.trace("Create not leader exception for group {}, leaderId {}, leader address {}",
             raftGroupId, leaderId, leaderAddress);
-    return new OMNotLeaderException(raftPeerId, leader.getId(), leaderAddress);
+    return new OMNotLeaderException(raftPeerId, leader.getId(), leaderAddress, raftGroupId);
   }
 }

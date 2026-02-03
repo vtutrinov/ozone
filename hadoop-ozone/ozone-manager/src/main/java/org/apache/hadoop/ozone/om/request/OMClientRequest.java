@@ -31,6 +31,8 @@ import java.util.Objects;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hdds.utils.TransactionInfo;
 import org.apache.hadoop.ipc_.ProtobufRpcEngine;
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
+import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.audit.AuditAction;
@@ -63,6 +65,19 @@ import org.apache.ratis.util.function.UncheckedAutoCloseableSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.ratis.protocol.RaftGroupId;
+
+import javax.annotation.Nonnull;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.nio.file.InvalidPathException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.INVALID_KEY_NAME;
+import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.UNAUTHORIZED;
+
 /**
  * OMClientRequest provides methods which every write OM request should
  * implement.
@@ -85,6 +100,7 @@ public abstract class OMClientRequest implements RequestAuditor {
 
   private String writeBucketName;
   private String writeVolumeName;
+  private RaftGroupId writeRaftGroup;
   /**
    * Stores the result of request execution in
    * OMClientRequest#validateAndUpdateCache.
@@ -97,6 +113,12 @@ public abstract class OMClientRequest implements RequestAuditor {
 
   public OMClientRequest(OMRequest omRequest) {
     Objects.requireNonNull(omRequest, "omRequest == null");
+    Preconditions.checkNotNull(omRequest);
+    if (omRequest.hasRaftGroupId()) {
+      HddsProtos.UUID uuid = omRequest.getRaftGroupId();
+      RaftGroupId raftGroupId = RaftGroupId.valueOf(new UUID(uuid.getMostSigBits(), uuid.getLeastSigBits()));
+      setWriteRaftGroup(raftGroupId);
+    }
     this.omRequest = omRequest;
     this.omLockDetails.clear();
   }
@@ -625,5 +647,13 @@ public abstract class OMClientRequest implements RequestAuditor {
 
   public void setWriteReqVolumeName(String volumeName) {
     this.writeVolumeName = volumeName;
+  }
+
+  public RaftGroupId getWriteRaftGroup() {
+    return writeRaftGroup;
+  }
+
+  public void setWriteRaftGroup(RaftGroupId writeRaftGroup) {
+    this.writeRaftGroup = writeRaftGroup;
   }
 }

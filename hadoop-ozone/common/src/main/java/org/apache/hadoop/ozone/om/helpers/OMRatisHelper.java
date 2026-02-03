@@ -26,10 +26,27 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRespo
 import org.apache.ratis.proto.RaftProtos.StateMachineLogEntryProto;
 import org.apache.ratis.protocol.Message;
 import org.apache.ratis.protocol.RaftClientReply;
+import org.apache.hadoop.hdds.utils.db.Codec;
+import org.apache.hadoop.hdds.utils.db.DelegatedCodec;
+import org.apache.hadoop.hdds.utils.db.Proto2Codec;
+import org.apache.hadoop.hdds.utils.db.Proto3Codec;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos
+    .OMRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos
+    .OMResponse;
+import org.apache.ratis.proto.RaftProtos;
+import org.apache.ratis.proto.RaftProtos.StateMachineLogEntryProto;
+import org.apache.ratis.protocol.Message;
+import org.apache.ratis.protocol.RaftClientReply;
+import org.apache.ratis.protocol.RaftGroupId;
+import org.apache.ratis.protocol.RaftPeerId;
 import org.apache.ratis.thirdparty.com.google.protobuf.ByteString;
 import org.apache.ratis.thirdparty.com.google.protobuf.UnsafeByteOperations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.UUID;
 
 /**
  * Helper methods for converting between proto 2 (OM) and proto 3 (Ratis) messages.
@@ -37,6 +54,10 @@ import org.slf4j.LoggerFactory;
 public final class OMRatisHelper {
   private static final Logger LOG = LoggerFactory.getLogger(
       OMRatisHelper.class);
+
+  private static final Codec<RaftGroupId> RAFT_GROUP_ID_ROCKS_DB_CODEC = new RaftGroupIdCodec();
+  private static final Codec<RaftProtos.RaftConfigurationProto> RAFT_CONFIGURATION_ROCKS_DB_CODEC =
+      new RaftConfigurationCodec();
 
   private OMRatisHelper() {
   }
@@ -84,4 +105,48 @@ public final class OMRatisHelper {
       return "Failed to smProtoToString: " + ex;
     }
   }
+
+  public static Codec<RaftGroupId> getRaftGroupIdRocksDbCodec() {
+    return RAFT_GROUP_ID_ROCKS_DB_CODEC;
+  }
+
+  public static Codec<RaftProtos.RaftConfigurationProto> getRaftConfigurationRocksDbCodec() {
+    return RAFT_CONFIGURATION_ROCKS_DB_CODEC;
+  }
+
+  public static class RaftConfigurationCodec implements Codec<RaftProtos.RaftConfigurationProto> {
+
+    @Override
+    public byte[] toPersistedFormat(RaftProtos.RaftConfigurationProto raftConfiguration) throws IOException {
+      return raftConfiguration.toByteArray();
+    }
+
+    @Override
+    public RaftProtos.RaftConfigurationProto fromPersistedFormat(byte[] rawData) throws IOException {
+      return RaftProtos.RaftConfigurationProto.parseFrom(rawData);
+    }
+
+    @Override
+    public RaftProtos.RaftConfigurationProto copyObject(RaftProtos.RaftConfigurationProto object) {
+      return null;
+    }
+  }
+
+  public static class RaftGroupIdCodec implements Codec<RaftGroupId> {
+    @Override
+    public byte[] toPersistedFormat(RaftGroupId raftGroupId) throws IOException {
+      return raftGroupId.getUuid().toString().getBytes();
+    }
+
+    @Override
+    public RaftGroupId fromPersistedFormat(byte[] rawData) throws IOException {
+      return RaftGroupId.valueOf(UUID.nameUUIDFromBytes(rawData));
+    }
+
+    @Override
+    public RaftGroupId copyObject(RaftGroupId object) {
+      return object;
+    }
+  }
+
 }

@@ -695,6 +695,20 @@ public final class OMConfigKeys {
 
   public static final boolean OZONE_OM_SAFE_MODE_ENABLED_DEFAULT = true;
 
+  public static final String OZONE_OM_SAFE_MODE_CHECK_INTERVAL = "ozone.om.safemode.check.interval";
+
+  public static final String OZONE_OM_SAFE_MODE_CHECK_INTERVAL_DEFAULT = "60s";
+
+  public static final String OZONE_OM_BUCKET_RAFT_GROUPS_RECONCILER_INTERVAL =
+      "ozone.om.bucket.raft.groups.reconciler.interval";
+
+  public static final String OZONE_OM_BUCKET_RAFT_GROUPS_RECONCILER_INTERVAL_DEFAULT = "60s";
+
+  public static final String OZONE_OM_RATIS_UNHEALTHY_PEER_TIMEOUT =
+      "ozone.om.ratis.unhealthy.peer.timeout";
+
+  public static final String OZONE_OM_RATIS_UNHEALTHY_PEER_TIMEOUT_DEFAULT = "30s";
+
   /**
    * Never constructed.
    */

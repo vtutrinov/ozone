@@ -116,10 +116,16 @@ public final class OMHAMetrics implements MetricsSource {
         .register(SOURCE_NAME, "Metrics for OM HA", metrics);
   }
 
+  public void resetMainGroup() {
+    this.leaderId = null;
+    this.mainRaftGroupId = null;
+  }
+
   public OMHAMetrics defineRaftGroupLeader(
       RaftGroupId raftGroupId, String leaderId, boolean isMainRaftGroup) {
     // Update the raft group leader map with the new leader
     raftGroupsLeaders.put(raftGroupId, leaderId);
+
     if (isMainRaftGroup) {
       this.leaderId = leaderId;
       this.mainRaftGroupId = raftGroupId;

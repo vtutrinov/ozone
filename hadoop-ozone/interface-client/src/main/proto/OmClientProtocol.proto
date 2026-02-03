@@ -158,6 +158,7 @@ enum Type {
   DeleteObjectTagging = 142;
   CreateBucketRaftGroups = 143;
   RemoveBucketRaftGroups = 144;
+  GetRaftGroupHealthState = 145;
 }
 
 enum SafeMode {
@@ -308,6 +309,8 @@ message OMRequest {
   repeated SetSnapshotPropertyRequest       SetSnapshotPropertyRequests    = 143;
   optional CreateBucketRaftGroupsRequest    CreateBucketRaftGroupsRequest         = 144;
   optional RemoveBucketRaftGroupsRequest    RemoveBucketRaftGroupsRequest         = 145;
+  optional GetRaftGroupHealthStateRequest   getRaftGroupHealthStateRequest      = 146;
+  optional hadoop.hdds.UUID raftGroupId = 147; // Used for raft group health state
 }
 
 message OMResponse {
@@ -443,6 +446,7 @@ message OMResponse {
   optional DeleteObjectTaggingResponse       deleteObjectTaggingResponse   = 142;
   optional CreateBucketRaftGroupsResponse    CreateBucketRaftGroupsResponse = 143;
   optional RemoveBucketRaftGroupsResponse    RemoveBucketRaftGroupsResponse = 144;
+  optional GetRaftGroupHealthStateResponse   getRaftGroupHealthStateResponse     = 145;
 }
 
 enum Status {
@@ -2379,6 +2383,20 @@ message DeleteObjectTaggingRequest {
 }
 
 message DeleteObjectTaggingResponse {
+}
+
+message PeerHealthInfo {
+  required string peerId = 1;
+  required bool isHealthy = 2;
+  required int64 lastRpcResponseTimeMs = 3;
+}
+
+message GetRaftGroupHealthStateRequest {
+  required hadoop.hdds.UUID groupId = 1;
+}
+
+message GetRaftGroupHealthStateResponse {
+  repeated PeerHealthInfo peerHealthInfo = 1;
 }
 
 /**

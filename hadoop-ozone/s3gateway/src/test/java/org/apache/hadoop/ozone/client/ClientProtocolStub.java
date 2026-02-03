@@ -64,6 +64,12 @@ import org.apache.hadoop.ozone.snapshot.ListSnapshotResponse;
 import org.apache.hadoop.ozone.snapshot.SnapshotDiffResponse;
 import org.apache.hadoop.security.token.Token;
 
+import java.io.IOException;
+import java.net.URI;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
 /**
  * ClientProtocol implementation with in-memory state.
  */
@@ -777,6 +783,7 @@ public class ClientProtocolStub implements ClientProtocol {
   }
 
   @Override
+<<<<<<< HEAD
   public LeaseKeyInfo recoverLease(String volumeName, String bucketName,
       String keyName, boolean force) throws IOException {
     return null;
@@ -801,6 +808,21 @@ public class ClientProtocolStub implements ClientProtocol {
   @Override
   public void deleteObjectTagging(String volumeName, String bucketName, String keyName) throws IOException {
     getBucket(volumeName, bucketName).deleteObjectTagging(keyName);
+  }
+
+  public void removeRaftGroups(List<UUID> raftGroupIds) throws IOException {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @Override
+  public void createRaftGroups(List<UUID> raftGroupIds) throws IOException {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @Override
+  public OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse getRaftGroupHealthState(
+      OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest request) throws IOException {
+    throw new UnsupportedOperationException("Not supported yet.");
   }
 
 }
