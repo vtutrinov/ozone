@@ -180,7 +180,7 @@ public final class OzoneManagerRatisServer {
         conf, port, ratisStorageDir);
 
     this.raftPeerId = localRaftPeerId;
-    this.currentRaftGroupId = om.omRatisGroupName();
+    this.currentRaftGroupId = om.omRaftGroupName();
     this.raftPeerMap = Maps.newHashMap();
     peers.forEach(e -> raftPeerMap.put(e.getId().toString(), e));
     this.currentRaftGroup = RaftGroup.valueOf(currentRaftGroupId, peers);
@@ -272,12 +272,7 @@ public final class OzoneManagerRatisServer {
     StateMachineException stateMachineException =
         reply.getStateMachineException();
     if (stateMachineException != null) {
-      try {
-        throw stateMachineException;
-      } catch (StateMachineException e) {
-        LOG.error("Remove raft group {} error state machine", raftGroupId, e);
-        throw new RuntimeException(e);
-      }
+      throw stateMachineException;
     }
   }
 
@@ -358,7 +353,7 @@ public final class OzoneManagerRatisServer {
   ) throws ServiceException {
     return commonSubmitRequest(
             omRequest,
-            ozoneManager.ratisGroupName(volumeName, bucketName)
+            ozoneManager.raftGroupName(volumeName, bucketName)
     );
   }
 
@@ -403,7 +398,7 @@ public final class OzoneManagerRatisServer {
     LOG.trace("Submit write request to Ratis Server {} - {} - {} - {}",
             omRequest.getCmdType(), clientId, callId, bucketName
     );
-    return submitRequest(omRequest, clientId, callId, ozoneManager.ratisGroupName(volumeName, bucketName));
+    return submitRequest(omRequest, clientId, callId, ozoneManager.raftGroupName(volumeName, bucketName));
   }
 
   public OMResponse submitRequest(

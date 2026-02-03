@@ -345,7 +345,8 @@ public final class OMDBDefinition extends DBDefinition.WithMap {
           TENANT_STATE_TABLE_DEF,
           TRANSACTION_INFO_TABLE_DEF,
           USER_TABLE_DEF,
-          VOLUME_TABLE_DEF);
+          VOLUME_TABLE_DEF,
+          MULTI_RAFT_INFO_TABLE_DEF);
 
   private static final OMDBDefinition INSTANCE = new OMDBDefinition();
 
