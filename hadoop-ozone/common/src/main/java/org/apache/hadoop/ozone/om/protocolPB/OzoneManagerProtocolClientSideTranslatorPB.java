@@ -112,6 +112,7 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Allocat
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BasicKeyInfo;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketArgs;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketInfo;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketRaftGroupAssignResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CancelDelegationTokenResponseProto;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CancelPrepareRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CancelPrepareResponse;
@@ -255,6 +256,7 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.TenantR
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.TenantRevokeUserAccessIdRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.VolumeInfo;
+import org.apache.hadoop.ozone.protocol.proto3.OzoneManagerProtocolProtos.BucketRaftGroupAssignRequest;
 import org.apache.hadoop.ozone.protocolPB.OMPBHelper;
 import org.apache.hadoop.ozone.security.OzoneTokenIdentifier;
 import org.apache.hadoop.ozone.security.acl.OzoneObj;
@@ -2766,6 +2768,28 @@ public final class OzoneManagerProtocolClientSideTranslatorPB
   @Override
   public void moveOmToSafeMode() throws IOException {
     OMRequest omRequest = createOMRequest(Type.MoveOmToSafeMode).build();
+    handleError(submitRequest(omRequest));
+  }
+
+  @Override
+  public BucketRaftGroupAssignResponse assignBucketRaftGroup(
+      OzoneManagerProtocolProtos.BucketRaftGroupAssignRequest request) throws IOException {
+    OzoneManagerProtocolProtos.OMRequest omRequest =
+        createOMRequest(OzoneManagerProtocolProtos.Type.BucketRaftGroupAssign)
+            .setBucketRaftGroupAssignRequest(request)
+            .build();
+    return handleError(submitRequest(omRequest)).getBucketRaftGroupAssignResponse();
+  }
+
+  @Override
+  public void acquireBucketRaftGroupAssignmentWriteLock() throws IOException {
+    OMRequest omRequest = createOMRequest(Type.AcquireBucketRaftGroupAssignmentWriteLock).build();
+    handleError(submitRequest(omRequest));
+  }
+
+  @Override
+  public void releaseBucketRaftGroupAssignmentWriteLock() throws IOException {
+    OMRequest omRequest = createOMRequest(Type.ReleaseBucketRaftGroupAssignmentWriteLock).build();
     handleError(submitRequest(omRequest));
   }
 

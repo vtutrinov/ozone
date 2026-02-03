@@ -42,11 +42,17 @@ import com.google.protobuf.RpcController;
 import com.google.protobuf.ServiceException;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.protobuf.ProtocolMessageEnum;
+import com.google.protobuf.RpcController;
+import com.google.protobuf.ServiceException;
+import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
 import org.apache.hadoop.hdds.server.OzoneProtocolMessageDispatcher;
 import org.apache.hadoop.hdds.utils.ProtocolMessageMetrics;
 import org.apache.hadoop.ipc_.ProcessingDetails.Timing;
 import org.apache.hadoop.ipc_.Server;
 import org.apache.hadoop.ozone.OmUtils;
+import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OMPerformanceMetrics;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
@@ -64,11 +70,26 @@ import org.apache.hadoop.ozone.security.S3SecurityUtil;
 import org.apache.ratis.proto.RaftProtos.CommitInfoProto;
 import org.apache.ratis.proto.RaftProtos.FollowerInfoProto;
 import org.apache.ratis.proto.RaftProtos.ServerRpcProto;
+import org.apache.ratis.protocol.RaftGroupId;
+import org.apache.ratis.protocol.RaftPeer;
 import org.apache.ratis.protocol.RaftPeerId;
 import org.apache.ratis.server.DivisionInfo;
 import org.apache.ratis.server.RaftServer.Division;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static org.apache.hadoop.ozone.om.OzoneManager.LOG_MULTI_RAFT;
+import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.LEADER_AND_READY;
+import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER;
+import static org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils.createClientRequest;
+import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type.PrepareStatus;
+import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 
 /**
  * This is the server-side translator that forwards requests received
@@ -188,13 +209,38 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
     boolean s3Auth = false;
 
     try {
+      OMRequest requestToSubmit;
+
+      RaftGroupId bucketRaftGroupId;
+
+      if (OmUtils.isReadOnly(request)) {
+        bucketRaftGroupId = ozoneManager.omRaftGroupName();
+      } else {
+        omClientRequest = createClientRequest(request, ozoneManager);
+        // check retry cache
+        String volumeName = omClientRequest.getWriteReqVolumeName();
+        String bucketName = omClientRequest.getWriteReqBucketName();
+
+        if (bucketName == null || !ozoneManager.isMultiRaftEnabled()) {
+          bucketRaftGroupId = ozoneManager.omRaftGroupName();
+        } else {
+          if (request.hasRaftGroupId()) {
+            bucketRaftGroupId = RaftGroupId.valueOf(new UUID(request.getRaftGroupId().getMostSigBits(),
+                request.getRaftGroupId().getLeastSigBits()));
+          } else {
+            bucketRaftGroupId = ozoneManager.getOmRaftGroupManager().getRaftGroupToHandleBucketWriteRequest(volumeName,
+                bucketName);
+          }
+        }
+      }
+
       if (request.hasS3Authentication()) {
         OzoneManager.setS3Auth(request.getS3Authentication());
         try {
           s3Auth = true;
           // If request has S3Authentication, validate S3 credentials.
           // If current OM is leader and then proceed with the request.
-          S3SecurityUtil.validateS3Credential(request, ozoneManager);
+          S3SecurityUtil.validateS3Credential(request, ozoneManager, bucketRaftGroupId);
         } catch (IOException ex) {
           return createErrorResponse(request, ex);
         }
@@ -207,7 +253,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
       // To validate credentials we have already verified leader status.
       // This will skip of checking leader status again if request has S3Auth.
       if (!s3Auth) {
-        OzoneManagerRatisUtils.checkLeaderStatus(ozoneManager);
+        OzoneManagerRatisUtils.checkLeaderStatus(bucketRaftGroupId, ozoneManager);
       }
 
       // check retry cache
@@ -247,6 +293,11 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
         }
         return createErrorResponse(request, ex);
       }
+      // TODO: Note: Due to HDDS-6055, createClientRequest() could now
+      //  return null, which triggered the findbugs warning.
+      //  Added the assertion.
+      assert (omClientRequest != null);
+      requestToSubmit = preExecute(omClientRequest);
 
       final OMResponse response;
       if (omClientRequest.getWriteReqBucketName() != null && ozoneManager.isMultiRaftEnabled()) {
@@ -256,11 +307,9 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
           LOG.error("OM is in safe mode, cannot process request: {}", request.getCmdType(), ex);
           throw new ServiceException(ex);
         }
-        response = omRatisServer.submitBucketWriteRequest(
-                requestToSubmit,
-                omClientRequest.getWriteReqVolumeName(),
-                omClientRequest.getWriteReqBucketName()
-        );
+        LOG_MULTI_RAFT.debug("Handle {} request for bucket {}/{}", requestToSubmit.getCmdType(),
+            omClientRequest.getWriteReqVolumeName(), omClientRequest.getWriteReqBucketName());
+        response = omRatisServer.submitBucketWriteRequest(requestToSubmit, bucketRaftGroupId);
       } else {
         response = omRatisServer.submitRequest(requestToSubmit);
       }
@@ -269,6 +318,11 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
         omClientRequest.handleRequestFailure(ozoneManager);
       }
       return response;
+    } catch (IOException ex) {
+      if (omClientRequest != null) {
+        omClientRequest.handleRequestFailure(ozoneManager);
+      }
+      return createErrorResponse(request, ex);
     } finally {
       OzoneManager.setS3Auth(null);
     }

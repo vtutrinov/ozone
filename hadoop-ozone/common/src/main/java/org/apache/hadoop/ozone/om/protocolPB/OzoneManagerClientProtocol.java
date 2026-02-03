@@ -20,6 +20,8 @@ package org.apache.hadoop.ozone.om.protocolPB;
 import org.apache.hadoop.ozone.om.protocol.OzoneManagerProtocol;
 import org.apache.hadoop.ozone.om.protocol.S3Auth;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketRaftGroupAssignRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketRaftGroupAssignResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateBucketRaftGroupsResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 
@@ -54,5 +56,11 @@ public interface OzoneManagerClientProtocol extends OzoneManagerProtocol {
       throws IOException;
 
   void moveOmToSafeMode() throws IOException;
+
+  BucketRaftGroupAssignResponse assignBucketRaftGroup(BucketRaftGroupAssignRequest request) throws IOException;
+
+  void acquireBucketRaftGroupAssignmentWriteLock() throws IOException;
+
+  void releaseBucketRaftGroupAssignmentWriteLock() throws IOException;
 
 }

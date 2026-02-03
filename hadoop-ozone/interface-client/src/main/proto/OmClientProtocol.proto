@@ -161,6 +161,9 @@ enum Type {
   GetRaftGroupHealthState = 145;
   BucketRaftGroupsStateChanged = 146;
   MoveOmToSafeMode = 147;
+  BucketRaftGroupAssign = 148;
+  AcquireBucketRaftGroupAssignmentWriteLock = 149;
+  ReleaseBucketRaftGroupAssignmentWriteLock = 150;
 }
 
 enum SafeMode {
@@ -314,6 +317,7 @@ message OMRequest {
   optional GetRaftGroupHealthStateRequest   getRaftGroupHealthStateRequest      = 146;
   optional hadoop.hdds.UUID                 raftGroupId                    = 147; // Used for raft group that the request should be executed in
   optional BucketRaftGroupsStateChangedRequest bucketRaftGroupsStateChangedRequest = 148; // Used to notify OM about bucket raft groups state changes
+  optional BucketRaftGroupAssignRequest     bucketRaftGroupAssignRequest    = 149;
 }
 
 message OMResponse {
@@ -451,6 +455,7 @@ message OMResponse {
   optional RemoveBucketRaftGroupsResponse    RemoveBucketRaftGroupsResponse = 144;
   optional GetRaftGroupHealthStateResponse   getRaftGroupHealthStateResponse     = 145;
   optional BucketRaftGroupsStateChangedResponse bucketRaftGroupsStateChangedResponse = 146;
+  optional BucketRaftGroupAssignResponse     bucketRaftGroupAssignResponse    = 147;
 }
 
 enum Status {
@@ -2409,6 +2414,16 @@ message BucketRaftGroupsStateChangedRequest {
 }
 
 message BucketRaftGroupsStateChangedResponse {
+}
+
+message BucketRaftGroupAssignRequest {
+  required string bucketPath = 2;
+  required hdds.UUID raftGroupId = 3;
+}
+
+message BucketRaftGroupAssignResponse {
+  required string bucketPath = 1;
+  required hdds.UUID raftGroupId = 3;
 }
 
 /**

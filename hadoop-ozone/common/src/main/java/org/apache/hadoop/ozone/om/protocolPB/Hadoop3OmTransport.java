@@ -106,6 +106,12 @@ public class Hadoop3OmTransport implements OmTransport {
   }
 
   @Override
+  public OMResponse submitRequest(OMRequest payload, String omNodeId) throws IOException {
+    // TODO try to send request to the certain om node with omNodeId
+    return submitRequest(payload);
+  }
+
+  @Override
   public Text getDelegationTokenService() {
     return omFailoverProxyProvider.getCurrentProxyDelegationToken();
   }

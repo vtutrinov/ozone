@@ -372,6 +372,9 @@ public final class OmUtils {
     case PutObjectTagging:
     case DeleteObjectTagging:
     case UnknownCommand:
+    case BucketRaftGroupAssign:
+    case AcquireBucketRaftGroupAssignmentWriteLock:
+    case ReleaseBucketRaftGroupAssignmentWriteLock:
       return false;
     case EchoRPC:
       return omRequest.getEchoRPCRequest().getReadOnly();
