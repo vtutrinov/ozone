@@ -29,6 +29,7 @@ import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
+import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus;
 import org.apache.ratis.protocol.RaftGroupId;
 
 import java.io.IOException;

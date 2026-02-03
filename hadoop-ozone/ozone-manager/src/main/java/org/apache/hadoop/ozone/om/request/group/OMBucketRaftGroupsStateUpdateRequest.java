@@ -24,6 +24,7 @@ public class OMBucketRaftGroupsStateUpdateRequest extends OMClientRequest {
     OMRequest omRequest = getOmRequest();
     long stateChangedIndex = omRequest.getBucketRaftGroupsStateChangedRequest().getStateChangedIndex();
     try {
+      ozoneManager.setCurrentMultiRaftTerm(stateChangedIndex);
       ozoneManager.updateBucketRaftGroupsReconfigurationIndex(stateChangedIndex);
       ozoneManager.getMetadataManager().getStore().flushDB();
       final OzoneManagerProtocolProtos.OMResponse.Builder omResponse =
