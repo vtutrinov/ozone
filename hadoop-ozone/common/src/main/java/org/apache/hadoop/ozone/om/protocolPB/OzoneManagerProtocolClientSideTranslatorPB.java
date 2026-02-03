@@ -289,16 +289,6 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT;
 import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes;
 import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.TOKEN_ERROR_OTHER;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BasicKeyInfo;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CancelSnapshotDiffRequest;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetContentSummaryRequest;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetContentSummaryResponse;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.KeyInfo;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListSnapshotDiffJobRequest;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListSnapshotRequest;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.PrepareResponse;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RepeatedKeyInfo;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.SnapshotDiffRequest;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status.ACCESS_DENIED;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status.DIRECTORY_ALREADY_EXISTS;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status.OK;
@@ -434,7 +424,7 @@ public final class OzoneManagerProtocolClientSideTranslatorPB
   }
 
   private static int getMultiRaftGroupCount(ConfigurationSource configuration) {
-    return configuration.getPositiveIntOrDefault(
+    return configuration.getInt(
             OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
             OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
   }
@@ -2765,7 +2755,8 @@ public final class OzoneManagerProtocolClientSideTranslatorPB
   }
 
   @Override
-  public OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse getRaftGroupHealthState(OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest request) throws IOException {
+  public GetRaftGroupHealthStateResponse getRaftGroupHealthState(
+      OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest request) throws IOException {
     OMRequest omRequest = createOMRequest(Type.GetRaftGroupHealthState)
         .setGetRaftGroupHealthStateRequest(request)
         .build();
