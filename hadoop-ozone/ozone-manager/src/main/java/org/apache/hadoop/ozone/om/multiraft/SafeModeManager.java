@@ -2,14 +2,9 @@ package org.apache.hadoop.ozone.om.multiraft;
 
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
-import org.apache.hadoop.hdds.utils.BackgroundService;
-import org.apache.hadoop.hdds.utils.BackgroundTask;
-import org.apache.hadoop.hdds.utils.BackgroundTaskQueue;
-import org.apache.hadoop.hdds.utils.BackgroundTaskResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -44,6 +39,14 @@ public class SafeModeManager  {
   public void checkSafeMode() throws OMInSafeModeException {
     if (safeModeEnabled && inSafeMode.get()) {
       throw new OMInSafeModeException("OM is in safe mode. Please wait until it exits safe mode.");
+    }
+  }
+
+  public void moveToSaveMode() {
+    if (safeModeEnabled) {
+      inSafeMode.set(true);
+      bucketGroupsReady.set(false);
+      LOG.info("OM is moved to safe mode.");
     }
   }
 

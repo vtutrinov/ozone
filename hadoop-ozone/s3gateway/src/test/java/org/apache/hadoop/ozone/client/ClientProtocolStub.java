@@ -814,13 +814,18 @@ public class ClientProtocolStub implements ClientProtocol {
   }
 
   @Override
-  public void createRaftGroups(List<UUID> raftGroupIds) throws IOException {
+  public void createRaftGroups(List<UUID> raftGroupIds, boolean purgeExistingRaftGroups) throws IOException {
     throw new UnsupportedOperationException("Not supported yet.");
   }
 
   @Override
   public OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse getRaftGroupHealthState(
       OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest request) throws IOException {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @Override
+  public void moveOmToSafeMode() throws IOException {
     throw new UnsupportedOperationException("Not supported yet.");
   }
 

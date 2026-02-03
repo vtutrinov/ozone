@@ -169,7 +169,6 @@ import org.apache.hadoop.ozone.om.protocolPB.OmTransport;
 import org.apache.hadoop.ozone.om.protocolPB.OmTransportFactory;
 import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerClientProtocol;
 import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerProtocolClientSideTranslatorPB;
-import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRoleInfo;
@@ -2818,13 +2817,18 @@ public class RpcClient implements ClientProtocol {
   }
 
   @Override
-  public void createRaftGroups(List<UUID> raftGroupIds) throws IOException {
-    ozoneManagerClient.createRaftGroups(raftGroupIds);
+  public void createRaftGroups(List<UUID> raftGroupIds, boolean purgeExistingRaftGroups) throws IOException {
+    ozoneManagerClient.createRaftGroups(raftGroupIds, purgeExistingRaftGroups);
   }
 
   @Override
   public GetRaftGroupHealthStateResponse getRaftGroupHealthState(GetRaftGroupHealthStateRequest request) throws IOException {
     return ozoneManagerClient.getRaftGroupHealthState(request);
+  }
+
+  @Override
+  public void moveOmToSafeMode() throws IOException {
+    ozoneManagerClient.moveOmToSafeMode();
   }
 
   private static ExecutorService createThreadPoolExecutor(

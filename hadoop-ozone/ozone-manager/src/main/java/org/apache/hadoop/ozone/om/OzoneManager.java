@@ -285,7 +285,6 @@ import org.apache.hadoop.ozone.om.protocolPB.OMInterServiceProtocolPB;
 import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerProtocolPB;
 import org.apache.hadoop.ozone.om.ratis.BucketStateMachine;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
-import org.apache.hadoop.ozone.om.ratis.OzoneManagerStateMachine;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.ratis_snapshot.OmRatisSnapshotProvider;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
@@ -670,7 +669,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private int bucketNumbersFromConfig;
   private final SafeModeManager omSafeModeManager;
   private final Map<RaftGroupId, String> tmpLeadersMap = new HashMap<>();
-  private final BucketRaftGroupsReconciler bucketRaftGroupsreconciler;
+  private final BucketRaftGroupsReconciler bucketRaftGroupsReconciler;
   private final List<String> listOfRaftGroupToReset;
 
   @SuppressWarnings("methodlength")
@@ -917,10 +916,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     omHostName = HddsUtils.getHostName(conf);
     multiRaftTerm = Optional.fromNullable(metadataManager.getMultiRaftInfoTable().get("term")).or(0L);
     omSafeModeManager = new SafeModeManager(configuration);
-    bucketRaftGroupsreconciler = new BucketRaftGroupsReconciler(this);
     if (this.getOmRatisServer() != null) {
       this.getOmRatisServer().startSchedulingLeaderReconfiguration();
     }
+    bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
   }
 
   public boolean areAllOMsOnline(RaftGroupId raftGroupId) {
@@ -2282,31 +2281,33 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     omState = State.RUNNING;
     auditMap.put("NewOmState", omState.name());
     SYSTEMAUDIT.logWriteSuccess(buildAuditMessageForSuccess(OMSystemAction.STARTUP, auditMap));
-    bucketRaftGroupsreconciler.start();
+    if (isMultiRaftEnabled) {
+      bucketRaftGroupsReconciler.start();
+    }
   }
 
   public SafeModeManager getSafeModeManager() {
     return omSafeModeManager;
   }
 
-  public void createRaftGroups(List<UUID> raftGroupIdsToCreate) throws IOException {
+  public void createRaftGroups(List<UUID> raftGroupIdsToCreate, boolean purgeExistingRaftGroups) throws IOException {
     OzoneClient ozoneClient;
     try {
       ozoneClient = OzoneClientFactory.getRpcClient(configuration);
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
-    ozoneClient.getProxy().createRaftGroups(raftGroupIdsToCreate);
+    ozoneClient.getProxy().createRaftGroups(raftGroupIdsToCreate, purgeExistingRaftGroups);
   }
 
-  private List<UUID> getBucketRaftGroupIds() {
-    int count = configuration.getInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
-        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
-    List<UUID> groupIds = new ArrayList<>();
-    for (int i = 0; i < count; i++) {
-      groupIds.add(OmRaftGroupManager.toUuid(String.valueOf(i)));
+  public void moveOmToSafeMode() throws IOException {
+    OzoneClient ozoneClient;
+    try {
+      ozoneClient = OzoneClientFactory.getRpcClient(configuration);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
     }
-    return groupIds;
+    ozoneClient.getProxy().moveOmToSafeMode();
   }
 
   /**
