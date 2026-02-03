@@ -4439,4 +4439,10 @@
       Repetition period for scheduling transfer leadership for multi raft bucket groups.
     </description>
   </property>
+  <property>
+    <name>ozone.https.cert.validation.allowed.cn</name>
+    <value/>
+    <tag>OM,SCM,DATANODE,OZONE,S3GATEWAY</tag>
+    <description>List of allowed CNs for client TLS certificates</description>
+  </property>
 </configuration>

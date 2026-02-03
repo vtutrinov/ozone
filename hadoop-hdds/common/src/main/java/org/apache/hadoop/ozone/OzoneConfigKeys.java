@@ -684,6 +684,10 @@ public final class OzoneConfigKeys {
 
   public static final boolean OZONE_RATIS_DROPWIZARD_METRICS_USE_ISOLATED_HTTP_ENDPOINT_DEFAULT = false;
 
+  public static final String OZONE_HTTPS_SSL_ALLOWED_CN_LIST = "ozone.https.cert.validation.allowed.cn";
+
+  public static final String OZONE_HTTPS_SSL_ALLOWED_CN_LIST_DEFAULT = "CI02421073-PROM-sdpm,CI02421070-PSI-sdpm";
+
   /**
    * There is no need to instantiate this class.
    */
