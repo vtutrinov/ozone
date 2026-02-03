@@ -544,6 +544,9 @@ public class BucketStateMachine extends BaseStateMachine {
   @Override
   public void notifyGroupRemove() {
     LOG.trace("Start removing group {}", currentRaftGroupId);
+    ozoneManager.getStateMachines().remove(currentRaftGroupId);
+    ozoneManager.getOmRaftGroups().remove(currentRaftGroupId);
+    ozoneManager.getOmhaMetrics().deleteRaftGroup(currentRaftGroupId);
     ozoneManager.getOmRaftGroupManager().removeGroup(currentRaftGroupId);
     try {
       LOG.trace("Deleting transaction for group {}", currentRaftGroupId);
@@ -596,13 +599,4 @@ public class BucketStateMachine extends BaseStateMachine {
     return OMRatisHelper.smProtoToString(proto);
   }
 
-
-  @Override
-  public void notifyLeaderReady() {
-    LOG.trace("Leader ready for {} - {}. OM leader: {}",
-            currentRaftGroupId,
-            ozoneManager.getOmRatisServer().getLeaderId(currentRaftGroupId),
-            ozoneManager.getOmRatisServer().getLeaderId(ozoneManager.omRatisGroupName())
-    );
-  }
 }
