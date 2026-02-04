@@ -45,9 +45,13 @@ public class OmRateLimiterMetrics implements MetricsSource {
   private static final MetricsInfo RATE_LIMITER_REQUESTS_REJECTED = Interns.info(
         "requests_rejected",
         "Number of rejected requests");
+  private static final MetricsInfo RATE_LIMITER_CONFIG_RPS = Interns.info(
+        "config_rps",
+        "Configured RPS for rate limiter");
 
-  private final ConcurrentMap<LimiterKey, Long> allowedRequests = new ConcurrentHashMap<>();
-  private final ConcurrentMap<LimiterKey, Long> rejectedRequests = new ConcurrentHashMap<>();
+  private final ConcurrentMap<LimiterKey, Integer> allowedRequests = new ConcurrentHashMap<>();
+  private final ConcurrentMap<LimiterKey, Integer> rejectedRequests = new ConcurrentHashMap<>();
+  private final ConcurrentMap<LimiterKey, Integer> configuredRps = new ConcurrentHashMap<>();
 
   public static OmRateLimiterMetrics create() {
     OmRateLimiterMetrics omRateLimiterMetrics = new OmRateLimiterMetrics();
@@ -65,12 +69,13 @@ public class OmRateLimiterMetrics implements MetricsSource {
   public void getMetrics(MetricsCollector metricsCollector, boolean b) {
     buildRecords(metricsCollector, allowedRequests, RATE_LIMITER_REQUESTS_ALLOWED);
     buildRecords(metricsCollector, rejectedRequests, RATE_LIMITER_REQUESTS_REJECTED);
+    buildRecords(metricsCollector, configuredRps, RATE_LIMITER_CONFIG_RPS);
   }
 
   private void buildRecords(MetricsCollector metricsCollector,
-                          ConcurrentMap<LimiterKey,
-                          Long> requests, MetricsInfo info) {
-    for (ConcurrentMap.Entry<LimiterKey, Long> entry : requests.entrySet()) {
+                            ConcurrentMap<LimiterKey, Integer> limiterKeyMap,
+                            MetricsInfo info) {
+    for (ConcurrentMap.Entry<LimiterKey, Integer> entry : limiterKeyMap.entrySet()) {
       MetricsRecordBuilder recordBuilder = metricsCollector.addRecord(OmRateLimiterMetrics.class.getSimpleName())
               .setContext("ozone");
       LimiterKey key = entry.getKey();
@@ -83,11 +88,22 @@ public class OmRateLimiterMetrics implements MetricsSource {
   }
 
   public void incAllowedRequests(String volume, String bucket, String type) {
-    allowedRequests.merge(getRateLimiter(volume, bucket, type), 1L, Long::sum);
+    allowedRequests.merge(getRateLimiter(volume, bucket, type), 1, Integer::sum);
   }
 
   public void incRejectedRequests(String volume, String bucket, String type) {
-    rejectedRequests.merge(getRateLimiter(volume, bucket, type), 1L, Long::sum);
+    rejectedRequests.merge(getRateLimiter(volume, bucket, type), 1, Integer::sum);
+  }
+
+  public void updateConfiguredRps(String volume, String bucket, String type, int rps) {
+    configuredRps.put(getRateLimiter(volume, bucket, type), rps);
+  }
+
+  public void removeRateLimiter(String volume, String bucket, String type) {
+    LimiterKey limiterKey = getRateLimiter(volume, bucket, type);
+    allowedRequests.remove(limiterKey);
+    rejectedRequests.remove(limiterKey);
+    configuredRps.remove(limiterKey);
   }
 
   private LimiterKey getRateLimiter(String volume, String bucket, String type) {
