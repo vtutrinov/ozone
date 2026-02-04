@@ -87,6 +87,12 @@ public class RateLimiterManager {
       return bl;
     });
 
+    rateLimiterMetrics.updateConfiguredRps(
+            info.getVolumeName(),
+            info.getBucketName(),
+            info.getType().name(),
+            info.getRps());
+
     LOG.debug("Registered/updated rate limiter in memory: bucketKey={}, type={}, rps={}",
             bucketKey, info.getType(), info.getRps());
   }
@@ -106,6 +112,7 @@ public class RateLimiterManager {
       return bl;
     });
 
+    rateLimiterMetrics.removeRateLimiter(volume, bucket, type.name());
     LOG.debug("Removed rate limiter from memory: bucketKey={}, type={}",
             bucketKey, type);
   }
