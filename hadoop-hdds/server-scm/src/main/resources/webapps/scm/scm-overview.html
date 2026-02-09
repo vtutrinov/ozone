@@ -28,6 +28,45 @@
     </tbody>
 </table>
 
+<h2>Container Balancer</h2>
+<table class="table table-bordered table-striped">
+    <tbody>
+        <tr>
+            <td>Status: </td>
+            <td>
+                <span ng-if="$ctrl.balancerStatus == 'Running'" class="badge badge-success" style="color: white; background-color: #28a745">Running</span>
+                <span ng-if="$ctrl.balancerStatus == 'Stopping'" class="badge badge-secondary" style="color: white; background-color: #355a3c">Stopping</span>
+                <span ng-if="$ctrl.balancerStatus == 'Stopped'" class="badge badge-secondary" style="color: white; background-color: #6c757d">Stopped</span>
+                <span ng-if="$ctrl.balancerStatus == 'Unknown'" class="badge badge-warning">Unknown</span>
+            </td>
+        </tr>
+        <tr>
+            <td>Threshold</td>
+            <td>{{$ctrl.balancerConfiguration.threshold}}</td>
+        </tr>
+        <tr>
+            <td>Iterations</td>
+            <td>{{$ctrl.balancerConfiguration.iterations}}</td>
+        </tr>
+        <tr>
+            <td>max-datanodes-percentage-to-involve-per-iteration</td>
+            <td>{{$ctrl.balancerConfiguration.maxDatanodesPercentageToInvolvePerIteration}}</td>
+        </tr>
+        <tr>
+            <td>max-size-to-move-per-iteration-in-gb</td>
+            <td>{{$ctrl.balancerConfiguration.maxSizeToMovePerIteration}}</td>
+        </tr>
+        <tr>
+            <td>max-size-entering-target-in-gb</td>
+            <td>{{$ctrl.balancerConfiguration.maxSizeEnteringTarget}}</td>
+        </tr>
+        <tr>
+            <td>max-size-leaving-source-in-gb</td>
+            <td>{{$ctrl.balancerConfiguration.maxSizeLeavingSource}}</td>
+        </tr>
+    </tbody>
+</table>
+
 <h2>Node Status</h2>
 <div class="row">
     <div class="col-md-6 text-left">
