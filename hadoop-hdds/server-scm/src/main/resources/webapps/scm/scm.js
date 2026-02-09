@@ -206,6 +206,47 @@
                     });
                 });
 
+            ctrl.balancerStatus = "Unknown"
+            ctrl.balancerConfiguration = {
+                threshold: "N/A",
+                iterations: "N/A",
+                maxDatanodesPercentageToInvolvePerIteration: "N/A",
+                maxSizeToMovePerIteration: "N/A",
+                maxSizeEnteringTarget: "N/A",
+                maxSizeLeavingSource: "N/A",
+            }
+
+            var GB = 1024 * 1024 * 1024;
+
+            $http.get("jmx?qry=Hadoop:service=StorageContainerManager,name=ContainerBalancerMetrics")
+                .then(function (result) {
+                    if(result.data && result.data.beans && result.data.beans.length > 0) {
+                        var bean = result.data.beans[0];
+                        if(bean.BalancerStatus === 2) {
+                            ctrl.balancerStatus = "Running"
+                        }
+                        else if(bean.BalancerStatus === 1) {
+                            ctrl.balancerStatus = "Stopping"
+                        }
+                        else ctrl.balancerStatus = "Stopped"
+
+                        ctrl.balancerConfiguration = {
+                            threshold: bean.Threshold || "N/A",
+                            iterations: bean.Iterations || "N/A",
+                            maxDatanodesPercentageToInvolvePerIteration: bean.MaxDatanodesPercentageToInvolvePerIteration || "N/A",
+                            maxSizeToMovePerIteration: bean.MaxSizeToMovePerIteration / GB || "N/A",
+                            maxSizeEnteringTarget: bean.MaxSizeEnteringTarget / GB || "N/A",
+                            maxSizeLeavingSource: bean.MaxSizeLeavingSource / GB || "N/A",
+                        }
+                    }
+                    else {
+                    ctrl.balancerStatus = "Unknown"
+                    }
+                }, function (error) {
+                    console.log("Could not fetch Container Balancer metrics", error);
+                    ctrl.balancerStatus = "Unknown"
+                });
+
             $http.get("jmx?qry=Hadoop:service=SCMPipelineManager,name=SCMPipelineManagerInfo")
                 .then(function (result) {
                     const URLScheme = location.protocol.replace(":" , "");

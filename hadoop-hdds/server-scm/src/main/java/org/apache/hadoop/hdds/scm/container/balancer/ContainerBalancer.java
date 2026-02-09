@@ -72,7 +72,7 @@ public class ContainerBalancer extends StatefulService<ContainerBalancerConfigur
     this.config = ozoneConfiguration.getObject(
         ContainerBalancerConfiguration.class);
     this.scmContext = scm.getScmContext();
-    this.metrics = ContainerBalancerMetrics.create();
+    this.metrics = ContainerBalancerMetrics.create(this);
 
     this.lock = new ReentrantLock();
     scm.getSCMServiceManager().register(this);
@@ -505,6 +505,10 @@ public class ContainerBalancer extends StatefulService<ContainerBalancerConfigur
         "%-30s %s%n" +
         "%-30s %b%n", "Key", "Value", "Running", isBalancerRunning());
     return status + config.toString();
+  }
+
+  public ContainerBalancerConfiguration getBalancerConfiguration() {
+    return this.config;
   }
 
   /**
