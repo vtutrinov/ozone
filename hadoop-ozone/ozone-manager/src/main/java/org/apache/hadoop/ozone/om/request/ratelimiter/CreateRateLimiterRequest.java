@@ -1,13 +1,12 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.hadoop.ozone.om.request.ratelimiter;
 
 import static org.apache.hadoop.ozone.om.lock.OzoneManagerLock.LeveledResource.BUCKET_LOCK;
@@ -54,12 +54,12 @@ public class CreateRateLimiterRequest extends OMClientRequest {
   @Override
   public OMClientResponse validateAndUpdateCache(OzoneManager ozoneManager, ExecutionContext context) {
     OMRequest omRequest = getOmRequest();
-    OzoneManagerProtocolProtos.CreateRateLimiterRequest createRateLimiterResponse =
+    OzoneManagerProtocolProtos.CreateRateLimiterRequest createRateLimiterRequest =
             getOmRequest().getCreateRateLimiterRequest();
-    String volumeName = createRateLimiterResponse.getVolumeName();
-    String bucketName = createRateLimiterResponse.getBucketName();
-    int rps = createRateLimiterResponse.getRps();
-    OzoneManagerProtocolProtos.RateLimiterType type = createRateLimiterResponse.getType();
+    String volumeName = createRateLimiterRequest.getVolumeName();
+    String bucketName = createRateLimiterRequest.getBucketName();
+    int rps = createRateLimiterRequest.getRps();
+    OzoneManagerProtocolProtos.RateLimiterType type = createRateLimiterRequest.getType();
     OMMetadataManager metadataManager = ozoneManager.getMetadataManager();
     OzoneManagerProtocolProtos.OMResponse.Builder omResponse =
             OmResponseUtil.getOMResponseBuilder(omRequest);
@@ -79,12 +79,17 @@ public class CreateRateLimiterRequest extends OMClientRequest {
               metadataManager.getRateLimiterInfoTable();
       String key = toDBKey(metadataManager, volumeName, bucketName, type);
       RateLimiterInfo existing = rateLimiterTable.get(key);
-      if (existing != null) {
+      if (metadataManager.getVolumeTable().get(metadataManager.getVolumeKey(volumeName)) == null) {
+        status = OzoneManagerProtocolProtos.Status.VOLUME_NOT_FOUND;
+        errorMsg = "Volume not found: " + volumeName;
+      } else if (metadataManager.getBucketTable().get(metadataManager.getBucketKey(volumeName, bucketName)) == null) {
+        status = OzoneManagerProtocolProtos.Status.BUCKET_NOT_FOUND;
+        errorMsg = "Bucket not found: " + volumeName + "/" + bucketName;
+      } else if (existing != null) {
         errorMsg = "Rate limiter already exists for volume=" + volumeName
                 + ", bucket=" + bucketName + ", type=" + type.name();
-        LOG.error(errorMsg);
+        LOG.warn(errorMsg);
         status = OzoneManagerProtocolProtos.Status.RATELIMITER_ALREADY_EXISTS;
-        rateLimiterInfo = existing;
       } else {
         rateLimiterInfo = RateLimiterInfo.newBuilder()
                 .setVolumeName(volumeName)
@@ -113,10 +118,11 @@ public class CreateRateLimiterRequest extends OMClientRequest {
     OzoneManagerProtocolProtos.CreateRateLimiterResponse.Builder createRespBuilder =
             OzoneManagerProtocolProtos.CreateRateLimiterResponse.newBuilder();
 
-    if (rateLimiterInfo != null) {
+    if (status == OzoneManagerProtocolProtos.Status.OK && rateLimiterInfo != null) {
       createRespBuilder.setRateLimiter(rateLimiterInfo.toProtobuf());
     }
     omResponse.setStatus(status)
+            .setSuccess(status == OzoneManagerProtocolProtos.Status.OK)
             .setCreateRateLimiterResponse(createRespBuilder.build());
 
     if (status == OzoneManagerProtocolProtos.Status.OK) {
