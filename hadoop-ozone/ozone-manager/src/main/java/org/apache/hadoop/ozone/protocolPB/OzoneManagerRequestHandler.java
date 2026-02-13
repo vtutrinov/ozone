@@ -38,11 +38,9 @@ import org.apache.hadoop.hdds.protocol.proto.HddsProtos.TransferLeadershipRespon
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos.UpgradeFinalizationStatus;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.utils.FaultInjector;
-import org.apache.hadoop.hdds.utils.db.BatchOperation;
 import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OzoneAcl;
 import org.apache.hadoop.ozone.common.PayloadUtils;
-import org.apache.hadoop.ozone.om.OMMetadataManager;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.OzoneManagerPrepareState;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
@@ -196,19 +194,6 @@ public class OzoneManagerRequestHandler implements RequestHandler {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Received OMRequest: {}, ", request);
     }
-
-    if (!getOzoneManager()
-            .getRateLimiterManager()
-            .tryAcquire(request, false)) {
-
-      OMResponse.Builder resp = OmResponseUtil.getOMResponseBuilder(request)
-              .setSuccess(false)
-              .setStatus(OzoneManagerProtocolProtos.Status.RATE_LIMIT_EXCEEDED)
-              .setMessage("Rate limit exceeded");
-
-      return resp.build();
-    }
-
     Type cmdType = request.getCmdType();
     OMResponse.Builder responseBuilder = OmResponseUtil.getOMResponseBuilder(
         request);
@@ -434,17 +419,6 @@ public class OzoneManagerRequestHandler implements RequestHandler {
   public OMClientResponse handleWriteRequest(OMRequest omRequest,
       long transactionLogIndex) throws IOException {
     injectPause();
-    if (!getOzoneManager()
-            .getRateLimiterManager()
-            .tryAcquire(omRequest, true)) {
-
-      OMResponse.Builder resp = OmResponseUtil.getOMResponseBuilder(omRequest)
-              .setSuccess(false)
-              .setStatus(OzoneManagerProtocolProtos.Status.RATE_LIMIT_EXCEEDED)
-              .setMessage("Rate limit exceeded");
-
-      return new OMNoOpClientResponse(resp.build());
-    }
     OMClientRequest omClientRequest =
         OzoneManagerRatisUtils.createClientRequest(omRequest, impl);
     return captureLatencyNs(
@@ -1583,21 +1557,6 @@ public class OzoneManagerRequestHandler implements RequestHandler {
     default:
       throw new IllegalArgumentException("Unexpected safe mode action " +
           safeMode);
-    }
-  }
-
-  /**
-   * OMClientResponse implementation that does not perform any DB operations.
-   * Used for in-memory responses such as rate limiter errors.
-   */
-  private class OMNoOpClientResponse extends OMClientResponse {
-    OMNoOpClientResponse(OMResponse omResponse) {
-      super(omResponse);
-    }
-
-    @Override
-    protected void addToDBBatch(OMMetadataManager omMetadataManager, BatchOperation batchOperation) throws IOException {
-      //NOOP
     }
   }
 }

@@ -20,6 +20,7 @@ package org.apache.hadoop.ozone.admin.ratelimiter;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hdds.cli.HddsVersionProvider;
 import org.apache.hadoop.ozone.client.rpc.RpcClient;
+import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RateLimiterType;
 import picocli.CommandLine;
 
@@ -87,8 +88,12 @@ public class RateLimiterCreateSubCommand implements Callable<Void> {
       }
 
       client.createRateLimiter(volumeName, bucketName, rps, rateLimiterType);
+    } catch (OMException exception) {
+      System.err.println("Failed to create a rate limiter: " + exception.getMessage());
+      return null;
     } catch (Exception e) {
       System.err.println("Failed to create a rate limiter.");
+      return null;
     }
     return null;
   }

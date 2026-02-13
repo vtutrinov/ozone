@@ -25,6 +25,7 @@ import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus;
+import org.apache.hadoop.ozone.om.request.util.OmResponseUtil;
 import org.apache.ratis.protocol.RaftGroupId;
 
 import java.io.IOException;
@@ -212,6 +213,13 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
       }
 
       if (OmUtils.isReadOnly(request)) {
+        if (!ozoneManager.getRateLimiterManager().tryAcquire(request, false)) {
+          return OmResponseUtil.getOMResponseBuilder(request)
+                  .setSuccess(false)
+                  .setStatus(OzoneManagerProtocolProtos.Status.RATE_LIMIT_EXCEEDED)
+                  .setMessage("Rate limit exceeded for operation: " + request.getCmdType())
+                  .build();
+        }
         return submitReadRequestToOM(request);
       }
 
@@ -236,6 +244,13 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements
         //  return null, which triggered the findbugs warning.
         //  Added the assertion.
         assert (omClientRequest != null);
+        if (!ozoneManager.getRateLimiterManager().tryAcquire(request, true)) {
+          return OmResponseUtil.getOMResponseBuilder(request)
+                  .setSuccess(false)
+                  .setStatus(OzoneManagerProtocolProtos.Status.RATE_LIMIT_EXCEEDED)
+                  .setMessage("Rate limit exceeded for operation: " + request.getCmdType())
+                  .build();
+        }
         requestToSubmit = preExecute(omClientRequest);
       } catch (IOException ex) {
         if (omClientRequest != null) {

@@ -143,7 +143,13 @@ public class RateLimiterManager {
             isWrite ? OzoneManagerProtocolProtos.RateLimiterType.WRITE
                     : OzoneManagerProtocolProtos.RateLimiterType.READ;
 
-    return tryAcquire(key.getVolume(), key.getBucket(), limiterType);
+    boolean allowed = tryAcquire(key.getVolume(), key.getBucket(), limiterType);
+    if (!allowed) {
+      LOG.warn("Rate limit exceeded: cmdType={}, volume={}, bucket={}, traceId={}",
+              cmdType, key.getVolume(), key.getBucket(), request.getTraceID());
+    }
+
+    return allowed;
   }
 
   public boolean tryAcquire(String volume, String bucket, RateLimiterType type) {

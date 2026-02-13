@@ -39,7 +39,7 @@ public class TestRateLimiterCoverage {
 
     assertEquals(expectedTypeCount,
             currentSupportedCount,
-            "OMRequest Type enum size changed. If you added a new Type, " +
+            "OMRequest Type enum size changed. If a new Type was added, " +
                     "review and update RateLimiterManager.");
   }
 }
