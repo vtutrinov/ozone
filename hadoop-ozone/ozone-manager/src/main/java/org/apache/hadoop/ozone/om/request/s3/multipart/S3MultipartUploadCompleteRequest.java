@@ -294,7 +294,7 @@ public class S3MultipartUploadCompleteRequest extends OMKeyRequest {
         // All parts have same replication information. Here getting from last
         // part.
         OmKeyInfo omKeyInfo =
-            getOmKeyInfo(trxnLogIndex, keyArgs, volumeName,
+            getOmKeyInfo(ozoneManager, trxnLogIndex, keyArgs, volumeName,
                 bucketName, keyName, dbMultipartOpenKey, omMetadataManager,
                 dbOzoneKey, partKeyInfoMap, partLocationInfos, dataSize);
 
@@ -454,11 +454,11 @@ public class S3MultipartUploadCompleteRequest extends OMKeyRequest {
   }
 
   @SuppressWarnings("checkstyle:ParameterNumber")
-  protected OmKeyInfo getOmKeyInfo(long trxnLogIndex,
-      KeyArgs keyArgs, String volumeName, String bucketName, String keyName,
-      String multipartOpenKey, OMMetadataManager omMetadataManager,
-      String ozoneKey, OmMultipartKeyInfo.PartKeyInfoMap partKeyInfoMap,
-      List<OmKeyLocationInfo> partLocationInfos, long dataSize)
+  protected OmKeyInfo getOmKeyInfo(OzoneManager ozoneManager, long trxnLogIndex,
+                                   KeyArgs keyArgs, String volumeName, String bucketName, String keyName,
+                                   String multipartOpenKey, OMMetadataManager omMetadataManager,
+                                   String ozoneKey, OmMultipartKeyInfo.PartKeyInfoMap partKeyInfoMap,
+                                   List<OmKeyLocationInfo> partLocationInfos, long dataSize)
           throws IOException {
     OzoneManagerProtocolProtos.KeyInfo partKeyInfo =
         partKeyInfoMap.lastEntry().getPartKeyInfo();
@@ -525,7 +525,6 @@ public class S3MultipartUploadCompleteRequest extends OMKeyRequest {
         .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
         .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
         .setUpdateID(trxnLogIndex).build();
-    return omKeyInfo;
   }
 
   protected String getDBOzoneKey(OMMetadataManager omMetadataManager,

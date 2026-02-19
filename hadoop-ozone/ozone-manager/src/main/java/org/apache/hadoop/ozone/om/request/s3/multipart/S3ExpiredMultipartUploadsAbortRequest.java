@@ -112,15 +112,10 @@ public class S3ExpiredMultipartUploadsAbortRequest extends OMKeyRequest {
       }
 
       omClientResponse = new S3ExpiredMultipartUploadsAbortResponse(
-<<<<<<< HEAD
-          omResponse.build(), abortedMultipartUploads
-=======
           omResponse.build(),
           abortedMultipartUploads,
-          ozoneManager.isRatisEnabled(),
           ozoneManager.isMultiRaftEnabled(),
           ozoneManager.getCurrentMultiRaftTerm()
->>>>>>> ecfa089a32 ([SDPOZN-1708] Changing multiraft configuration)
       );
 
       result = Result.SUCCESS;
@@ -242,18 +237,11 @@ public class S3ExpiredMultipartUploadsAbortRequest extends OMKeyRequest {
           }
 
           // Set the UpdateID to current transactionLogIndex
-<<<<<<< HEAD
           omMultipartKeyInfo = omMultipartKeyInfo.toBuilder()
               .setUpdateID(trxnLogIndex)
+              .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
+              .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
               .build();
-=======
-          omMultipartKeyInfo.setUpdateID(
-                  trxnLogIndex,
-                  ozoneManager.isRatisEnabled(),
-                  ozoneManager.isMultiRaftEnabled(),
-                  ozoneManager.getCurrentMultiRaftTerm()
-          );
->>>>>>> ecfa089a32 ([SDPOZN-1708] Changing multiraft configuration)
 
           // Parse the multipart upload components (e.g. volume, bucket, key)
           // from the multipartInfoTable db key

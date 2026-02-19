@@ -76,7 +76,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
   /**
    * modification time of bucket.
    */
-  private final long modificationTime;
+  private long modificationTime;
 
   /**
    * Bucket encryption key info if encryption is enabled.
@@ -108,7 +108,7 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
    */
   private final BucketLayout bucketLayout;
 
-  private final String owner;
+  private String owner;
 
   private UUID raftGroup;
 
@@ -581,12 +581,12 @@ public final class OmBucketInfo extends WithObjectID implements Auditable, CopyO
       return this;
     }
 
-    public void setMultiRaftEnabled(boolean multiRaftEnabled) {
+    public Builder setMultiRaftEnabled(boolean multiRaftEnabled) {
       isMultiRaftEnabled = multiRaftEnabled;
       return this;
     }
 
-    public void setMultiRaftTerm(long multiRaftTerm) {
+    public Builder setMultiRaftTerm(long multiRaftTerm) {
       this.multiRaftTerm = multiRaftTerm;
       return this;
     }

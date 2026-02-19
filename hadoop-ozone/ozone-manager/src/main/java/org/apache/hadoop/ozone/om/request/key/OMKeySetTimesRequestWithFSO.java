@@ -62,6 +62,7 @@ public class OMKeySetTimesRequestWithFSO extends OMKeySetTimesRequest {
 
   @Override
   public OMClientResponse validateAndUpdateCache(OzoneManager ozoneManager, ExecutionContext context) {
+    OmKeyInfo omKeyInfo = null;
     final long trxnLogIndex = context.getIndex();
 
     OzoneManagerProtocolProtos.OMResponse.Builder omResponse = onInit();

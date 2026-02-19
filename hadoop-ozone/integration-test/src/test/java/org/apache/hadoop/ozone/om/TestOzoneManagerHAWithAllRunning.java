@@ -465,7 +465,8 @@ class TestOzoneManagerHAWithAllRunning extends TestOzoneManagerHA {
     OzoneManagerRatisServer ozoneManagerRatisServer =
         getCluster().getOzoneManager(currentLeaderNodeId).getOmRatisServer();
 
-    final RaftServer raftServer = ozoneManagerRatisServer.getServerDivision().getRaftServer();
+    final RaftServer raftServer = ozoneManagerRatisServer
+        .getServerDivision(ozoneManagerRatisServer.getCurrentRaftGroupId()).getRaftServer();
 
     ClientId clientId = ClientId.randomId();
     long callId = 2000L;

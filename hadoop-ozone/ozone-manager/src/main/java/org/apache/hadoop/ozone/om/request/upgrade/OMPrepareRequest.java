@@ -119,7 +119,7 @@ public class OMPrepareRequest extends OMClientRequest {
       // This guarantees the log index of this request will be the same as
       // the snapshot index in the prepared state.
       OzoneManagerDoubleBuffer doubleBuffer = omRatisServer.getOmDoubleBuffer(raftGroupId);
-      doubleBuffer.add(response, transactionLogIndex);
+      doubleBuffer.add(response, context.getTermIndex());
       final RaftServer.Division division = omRatisServer.getServerDivision(raftGroupId);
 
       // Wait for outstanding double buffer entries
@@ -127,7 +127,8 @@ public class OMPrepareRequest extends OMClientRequest {
       // - to be notified by Ratis.
       // The log index returned, will be used as the prepare index, is the last Ratis commit index
       // which can be higher than the transactionLogIndex of this request.
-      final long prepareIndex = waitForLogIndex(transactionLogIndex, ozoneManager, stateMachine,
+      final long prepareIndex = waitForLogIndex(transactionLogIndex, ozoneManager,
+          (OzoneManagerStateMachine) division.getStateMachine(),
           flushTimeout, flushCheckInterval);
       Preconditions.assertTrue(prepareIndex >= transactionLogIndex);
       takeSnapshotAndPurgeLogs(prepareIndex, division);

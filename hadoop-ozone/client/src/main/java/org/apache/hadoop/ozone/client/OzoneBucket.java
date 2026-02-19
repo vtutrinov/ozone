@@ -1456,7 +1456,7 @@ public class OzoneBucket extends WithMetadata {
         metadata,
         status.isFile(),
         keyInfo.getOwnerName(),
-        Collections.emptyMap());
+        Collections.emptyMap(), keyInfo.getUpdateId());
   }
 
   /**
@@ -1927,7 +1927,7 @@ public class OzoneBucket extends WithMetadata {
             keyInfo.getDataSize(), keyInfo.getCreationTime(),
             keyInfo.getModificationTime(),
             keyInfo.getReplicationConfig(),
-            keyInfo.isFile(), keyInfo.getOwnerName());
+            keyInfo.isFile(), keyInfo.getOwnerName(), keyInfo.getUpdateID());
         keysResultList.add(ozoneKey);
       }
     }

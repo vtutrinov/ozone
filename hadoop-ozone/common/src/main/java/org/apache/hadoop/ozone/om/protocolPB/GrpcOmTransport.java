@@ -211,12 +211,13 @@ public class GrpcOmTransport implements OmTransport {
   @Override
   public OMResponse submitRequest(OMRequest payload, String omNodeId) throws IOException {
     AtomicReference<OMResponse> resp = new AtomicReference<>();
+    int requestFailoverCount = 0;
     boolean tryOtherHost = true;
     int expectedFailoverCount = 0;
     ResultCodes resultCode = ResultCodes.INTERNAL_ERROR;
     while (tryOtherHost) {
       tryOtherHost = false;
-      expectedFailoverCount = syncFailoverCount.get();
+      expectedFailoverCount = globalFailoverCount.get();
       try {
         String omGrpcAddress = omFailoverProxyProvider.getGrpcProxyAddress(omNodeId);
         InetAddress inetAddress = InetAddress.getLocalHost();
@@ -238,7 +239,7 @@ public class GrpcOmTransport implements OmTransport {
         }
         Exception exp = new Exception(e);
         tryOtherHost = shouldRetry(unwrapException(exp),
-            expectedFailoverCount);
+            expectedFailoverCount, ++requestFailoverCount);
         if (!tryOtherHost) {
           throw new OMException(resultCode);
         }

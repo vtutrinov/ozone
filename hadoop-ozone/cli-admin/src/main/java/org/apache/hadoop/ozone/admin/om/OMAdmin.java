@@ -119,8 +119,16 @@ public class OMAdmin implements AdminSubcommand {
     if (!forceHA || (forceHA && OmUtils.isOmHAServiceId(conf, omServiceID))) {
       OmTransport omTransport = new Hadoop3OmTransportFactory()
           .createOmTransport(conf, ugi, omServiceID);
+      String finalOmServiceID = omServiceID;
       return new OzoneManagerProtocolClientSideTranslatorPB(omTransport,
-          clientId);
+          clientId, conf, () -> {
+        try {
+          return new Hadoop3OmTransportFactory().createOmTransport(conf, UserGroupInformation.getCurrentUser(),
+              finalOmServiceID);
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+      });
     } else {
       throw new OzoneClientException("This command works only on OzoneManager" +
           " HA cluster. Service ID specified does not match" +

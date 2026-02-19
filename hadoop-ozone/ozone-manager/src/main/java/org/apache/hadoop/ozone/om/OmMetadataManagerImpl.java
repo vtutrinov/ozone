@@ -322,7 +322,6 @@ public class OmMetadataManagerImpl implements OMMetadataManager,
 
   private boolean isRatisEnabled;
   private boolean ignorePipelineinKey;
-  private Table deletedDirTable;
   private Table<String, Long> multiRaftInfoTable;
 
 

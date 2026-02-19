@@ -106,23 +106,19 @@ public class TrashOzoneFileSystem extends FileSystem {
   private void submitRequest(OzoneManagerProtocolProtos.OMRequest omRequest)
           throws Exception {
     ozoneManager.getMetrics().incNumTrashWriteRequests();
-    if (ozoneManager.isRatisEnabled()) {
-      OMClientRequest omClientRequest =
-              OzoneManagerRatisUtils.createClientRequest(omRequest, ozoneManager);
-      omRequest = omClientRequest.preExecute(ozoneManager);
+    OMClientRequest omClientRequest =
+            OzoneManagerRatisUtils.createClientRequest(omRequest, ozoneManager);
+    omRequest = omClientRequest.preExecute(ozoneManager);
 
-      OMKeyRequest omKeyRequest = (OMKeyRequest) omClientRequest;
-      String bucketName = omKeyRequest.getWriteReqBucketName();
-      String volumeName = omKeyRequest.getWriteReqVolumeName();
-      if (bucketName != null && ozoneManager.isMultiRaftEnabled()) {
-        OzoneManagerRatisUtils.submitWriteRequest(
-                ozoneManager, omRequest, CLIENT_ID, runCount.getAndIncrement(), volumeName, bucketName
-        );
-      } else {
-        OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, CLIENT_ID, runCount.getAndIncrement());
-      }
+    OMKeyRequest omKeyRequest = (OMKeyRequest) omClientRequest;
+    String bucketName = omKeyRequest.getWriteReqBucketName();
+    String volumeName = omKeyRequest.getWriteReqVolumeName();
+    if (bucketName != null && ozoneManager.isMultiRaftEnabled()) {
+      OzoneManagerRatisUtils.submitWriteRequest(
+              ozoneManager, omRequest, CLIENT_ID, runCount.getAndIncrement(), volumeName, bucketName
+      );
     } else {
-      ozoneManager.getOmServerProtocol().submitRequest(NULL_RPC_CONTROLLER, omRequest);
+      OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, CLIENT_ID, runCount.getAndIncrement());
     }
   }
 

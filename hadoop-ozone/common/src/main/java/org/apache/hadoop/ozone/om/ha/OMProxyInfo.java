@@ -17,11 +17,13 @@
 
 package org.apache.hadoop.ozone.om.ha;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.retry.FailoverProxyProvider.ProxyInfo;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.SecurityUtil;
+import org.apache.ratis.util.function.CheckedFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,6 +77,16 @@ public class OMProxyInfo<T> extends ProxyInfo<T> {
 
   public InetSocketAddress getAddress() {
     return rpcAddr;
+  }
+
+  public synchronized void createProxyIfNeeded(CheckedFunction<InetSocketAddress, T, IOException> createProxy) {
+    if (proxy == null) {
+      try {
+        proxy = createProxy.apply(getAddress());
+      } catch (IOException ioe) {
+        throw new IllegalStateException("Failed to create OM proxy for " + this, ioe);
+      }
+    }
   }
 
   public Text getDelegationTokenService() {

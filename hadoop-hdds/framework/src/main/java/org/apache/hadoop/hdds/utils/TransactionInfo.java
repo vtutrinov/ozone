@@ -166,6 +166,11 @@ public final class TransactionInfo implements Comparable<TransactionInfo> {
     return metadataManager.getTransactionInfoTable().getSkipCache(TRANSACTION_INFO_KEY);
   }
 
+  public static TransactionInfo readTransactionInfo(
+      DBStoreHAManager metadataManager, String raftGroupId) throws IOException {
+    return metadataManager.getTransactionInfoTable().get(TRANSACTION_INFO_KEY + raftGroupId);
+  }
+
   public ByteString toByteString() throws IOException {
     return ByteString.copyFrom(getCodec().toPersistedFormat(this));
   }
@@ -181,30 +186,5 @@ public final class TransactionInfo implements Comparable<TransactionInfo> {
 
   public SnapshotInfo toSnapshotInfo() {
     return snapshotInfo;
-  }
-
-  public static Builder builder() {
-    return new Builder();
-  }
-  /**
-   * Builder to build {@link TransactionInfo}.
-   */
-  public static class Builder {
-    private long currentTerm = 0;
-    private long transactionIndex = -1;
-
-    public Builder setCurrentTerm(long term) {
-      this.currentTerm = term;
-      return this;
-    }
-
-    public Builder setTransactionIndex(long tIndex) {
-      this.transactionIndex = tIndex;
-      return this;
-    }
-
-    public TransactionInfo build() {
-      return new TransactionInfo(currentTerm, transactionIndex);
-    }
   }
 }

@@ -86,6 +86,10 @@ public class OMDirectoriesPurgeResponseWithFSO extends OmKeyResponse {
     this.multiRaftTerm = currentMultiRaftTerm;
   }
 
+  public OMDirectoriesPurgeResponseWithFSO(OMResponse omResponse) {
+    super(omResponse);
+  }
+
   @Override
   public void addToDBBatch(OMMetadataManager metadataManager,
       BatchOperation batchOp) throws IOException {

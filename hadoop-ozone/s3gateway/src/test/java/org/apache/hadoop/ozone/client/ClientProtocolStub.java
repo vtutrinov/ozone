@@ -809,10 +809,6 @@ public class ClientProtocolStub implements ClientProtocol {
     getBucket(volumeName, bucketName).deleteObjectTagging(keyName);
   }
 
-  public void removeRaftGroups(List<UUID> raftGroupIds) throws IOException {
-    throw new UnsupportedOperationException("Not supported yet.");
-  }
-
   @Override
   public void createRaftGroups(List<UUID> raftGroupIds, boolean purgeExistingRaftGroups) throws IOException {
     throw new UnsupportedOperationException("Not supported yet.");
@@ -829,4 +825,19 @@ public class ClientProtocolStub implements ClientProtocol {
     throw new UnsupportedOperationException("Not supported yet.");
   }
 
+  @Override
+  public OzoneManagerProtocolProtos.BucketRaftGroupAssignResponse assignBucketRaftGroup(
+      OzoneManagerProtocolProtos.BucketRaftGroupAssignRequest request) throws IOException {
+    return null;
+  }
+
+  @Override
+  public void acquireBucketRaftGroupAssignmentWriteLock() throws IOException {
+
+  }
+
+  @Override
+  public void releaseBucketRaftGroupAssignmentWriteLock() throws IOException {
+
+  }
 }

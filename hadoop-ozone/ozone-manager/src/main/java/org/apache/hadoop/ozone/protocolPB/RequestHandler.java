@@ -64,9 +64,9 @@ public interface RequestHandler {
    * @param ozoneManagerDoubleBuffer for adding response
    * @return OMClientResponse
    */
-  default OMClientResponse handleWriteRequest(OMRequest omRequest, ExecutionContext context,
+  default OMClientResponse handleWriteRequest(OMRequest omRequest, ExecutionContext context, RaftGroupId raftGroupId,
       OzoneManagerDoubleBuffer ozoneManagerDoubleBuffer) throws IOException {
-    final OMClientResponse response = handleWriteRequestImpl(omRequest, context);
+    final OMClientResponse response = handleWriteRequestImpl(omRequest, context, raftGroupId);
     if (omRequest.getCmdType() != Type.Prepare) {
       ozoneManagerDoubleBuffer.add(response, context.getTermIndex());
     }

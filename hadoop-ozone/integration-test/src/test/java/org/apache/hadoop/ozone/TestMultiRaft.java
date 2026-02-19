@@ -2,6 +2,7 @@ package org.apache.hadoop.ozone;
 
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.server.ServerUtils;
 import org.apache.hadoop.metrics2.impl.MetricsCollectorImpl;
 import org.apache.hadoop.ozone.client.OzoneBucket;
@@ -93,9 +94,8 @@ class TestMultiRaft {
     }
 
     int numOfOMs = 3;
-    MiniOzoneHAClusterImpl currentCluster = (MiniOzoneHAClusterImpl) MiniOzoneCluster.newOMHABuilder(conf)
-        .setClusterId(clusterId)
-        .setScmId(scmId)
+    MiniOzoneHAClusterImpl currentCluster = (MiniOzoneHAClusterImpl) MiniOzoneCluster.newHABuilder(conf)
+        .setSCMServiceId(scmId)
         .setOMServiceId(omServiceId)
         .setNumOfOzoneManagers(numOfOMs)
         .build();
@@ -773,7 +773,7 @@ class TestMultiRaft {
   }
 
   private List<String> getDirsList(OzoneConfiguration configuration) {
-    String omRatisDirectory = ServerUtils.getDefaultRatisDirectory(configuration);
+    String omRatisDirectory = ServerUtils.getDefaultRatisDirectory(configuration, HddsProtos.NodeType.OM);
     File ratisMetadataDir = new File(omRatisDirectory);
     if (ratisMetadataDir.exists()) {
       String[] list = ratisMetadataDir.list();

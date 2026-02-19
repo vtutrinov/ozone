@@ -18,6 +18,8 @@
 package org.apache.hadoop.ozone.om;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Optional.ofNullable;
+import static org.apache.commons.io.FileUtils.deleteDirectory;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 import static org.apache.hadoop.hdds.HddsConfigKeys.HDDS_BLOCK_TOKEN_ENABLED;
@@ -71,8 +73,14 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_KEY_PATH_LOCK_ENA
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_KEY_PATH_LOCK_ENABLED_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_METRICS_SAVE_INTERVAL;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_METRICS_SAVE_INTERVAL_DEFAULT;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_NAMESPACE_STRICT_S3;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_NAMESPACE_STRICT_S3_DEFAULT;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_RATIS_UNHEALTHY_PEER_TIMEOUT;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_RATIS_UNHEALTHY_PEER_TIMEOUT_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_READ_THREADPOOL_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_READ_THREADPOOL_KEY;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_S3_GPRC_SERVER_ENABLED;
@@ -102,7 +110,6 @@ import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SE
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerInterServiceProtocolProtos.OzoneManagerInterService;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OzoneManagerService;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.PrepareStatusResponse.PrepareStatus;
-import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateLimitedRaftGroupId;
 import static org.apache.hadoop.security.UserGroupInformation.getCurrentUser;
 import static org.apache.hadoop.util.ExitUtil.terminate;
 import static org.apache.hadoop.util.Time.monotonicNow;
@@ -111,7 +118,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -140,6 +146,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.Timer;
@@ -149,6 +156,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
@@ -216,8 +224,8 @@ import org.apache.hadoop.hdds.utils.db.cache.CacheKey;
 import org.apache.hadoop.hdds.utils.db.cache.CacheValue;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
-import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.Server;
+import org.apache.hadoop.ipc_.RPC;
 import org.apache.hadoop.metrics2.util.MBeans;
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.OzoneAcl;
@@ -233,8 +241,6 @@ import org.apache.hadoop.ozone.audit.AuditMessage;
 import org.apache.hadoop.ozone.audit.Auditor;
 import org.apache.hadoop.ozone.audit.OMAction;
 import org.apache.hadoop.ozone.audit.OMSystemAction;
-import org.apache.hadoop.ozone.client.OzoneClient;
-import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.common.Storage.StorageState;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes;
@@ -242,8 +248,6 @@ import org.apache.hadoop.ozone.om.exceptions.OMLeaderNotReadyException;
 import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
 import org.apache.hadoop.ozone.om.execution.OMExecutionFlow;
 import org.apache.hadoop.ozone.om.ha.OMHAMetrics;
-import org.apache.hadoop.ozone.om.multiraft.BucketRaftGroupsReconciler;
-import org.apache.hadoop.ozone.om.multiraft.OMHAMultiRaftMetrics;
 import org.apache.hadoop.ozone.om.ha.OMHANodeDetails;
 import org.apache.hadoop.ozone.om.helpers.BasicOmKeyInfo;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
@@ -274,6 +278,8 @@ import org.apache.hadoop.ozone.om.helpers.TenantUserInfoValue;
 import org.apache.hadoop.ozone.om.helpers.TenantUserList;
 import org.apache.hadoop.ozone.om.lock.OMLockDetails;
 import org.apache.hadoop.ozone.om.lock.OzoneLockProvider;
+import org.apache.hadoop.ozone.om.multiraft.BucketRaftGroupsReconciler;
+import org.apache.hadoop.ozone.om.multiraft.OMHAMultiRaftMetrics;
 import org.apache.hadoop.ozone.om.multiraft.SafeModeManager;
 import org.apache.hadoop.ozone.om.protocol.OMConfiguration;
 import org.apache.hadoop.ozone.om.protocol.OMInterServiceProtocol;
@@ -294,7 +300,6 @@ import org.apache.hadoop.ozone.om.service.CompactDBService;
 import org.apache.hadoop.ozone.om.service.DirectoryDeletingService;
 import org.apache.hadoop.ozone.om.service.OMRangerBGSyncService;
 import org.apache.hadoop.ozone.om.service.QuotaRepairTask;
-import org.apache.hadoop.ozone.om.snapshot.OmSnapshotUtils;
 import org.apache.hadoop.ozone.om.snapshot.defrag.SnapshotDefragService;
 import org.apache.hadoop.ozone.om.upgrade.OMLayoutFeature;
 import org.apache.hadoop.ozone.om.upgrade.OMLayoutVersionManager;
@@ -304,14 +309,14 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DBUpdatesRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.EchoRPCResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ExtendedUserAccessIdInfo;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.KeyArgs;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRoleInfo;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.PeerHealthInfo;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.S3Authentication;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ServicePort;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.TenantState;
-import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
-import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
-import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.PeerHealthInfo;
 import org.apache.hadoop.ozone.protocolPB.OMAdminProtocolServerSideImpl;
 import org.apache.hadoop.ozone.protocolPB.OMInterServiceProtocolServerSideImpl;
 import org.apache.hadoop.ozone.protocolPB.OzoneManagerProtocolServerSideTranslatorPB;
@@ -332,8 +337,8 @@ import org.apache.hadoop.ozone.snapshot.ListSnapshotDiffJobResponse;
 import org.apache.hadoop.ozone.snapshot.ListSnapshotResponse;
 import org.apache.hadoop.ozone.snapshot.SnapshotDiffResponse;
 import org.apache.hadoop.ozone.storage.proto.OzoneManagerStorageProtos.PersistedUserVolumeInfo;
+import org.apache.hadoop.ozone.upgrade.UpgradeFinalization.StatusAndMessages;
 import org.apache.hadoop.ozone.upgrade.UpgradeFinalizer;
-import org.apache.hadoop.ozone.upgrade.UpgradeFinalizer.StatusAndMessages;
 import org.apache.hadoop.ozone.util.OzoneNetUtils;
 import org.apache.hadoop.ozone.util.OzoneVersionInfo;
 import org.apache.hadoop.ozone.util.ShutdownHookManager;
@@ -344,7 +349,6 @@ import org.apache.hadoop.security.authentication.client.AuthenticationException;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.KMSUtil;
 import org.apache.hadoop.util.Time;
-import org.apache.ozone.graph.PrintableGraph;
 import org.apache.ratis.client.RaftClient;
 import org.apache.ratis.grpc.GrpcTlsConfig;
 import org.apache.ratis.proto.RaftProtos;
@@ -362,143 +366,8 @@ import org.apache.ratis.util.ExitUtils;
 import org.apache.ratis.util.FileUtils;
 import org.apache.ratis.util.LifeCycle;
 import org.apache.ratis.util.function.UncheckedAutoCloseableSupplier;
-import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.management.ObjectName;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.UncheckedIOException;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.security.PrivilegedExceptionAction;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiFunction;
-import java.util.stream.Collectors;
-
-import static java.util.Optional.ofNullable;
-import static org.apache.commons.io.FileUtils.deleteDirectory;
-import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
-import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
-import static org.apache.hadoop.hdds.HddsConfigKeys.HDDS_BLOCK_TOKEN_ENABLED;
-import static org.apache.hadoop.hdds.HddsConfigKeys.HDDS_BLOCK_TOKEN_ENABLED_DEFAULT;
-import static org.apache.hadoop.hdds.HddsUtils.getScmAddressForClients;
-import static org.apache.hadoop.hdds.HddsUtils.preserveThreadName;
-import static org.apache.hadoop.hdds.ratis.RatisHelper.newJvmPauseMonitor;
-import static org.apache.hadoop.hdds.server.ServerUtils.updateRPCListenAddress;
-import static org.apache.hadoop.hdds.utils.HAUtils.getScmInfo;
-import static org.apache.hadoop.hdds.utils.HddsServerUtil.getRemoteUser;
-import static org.apache.hadoop.hdds.utils.HddsServerUtil.getScmSecurityClientWithMaxRetry;
-import static org.apache.hadoop.ozone.OmUtils.MAX_TRXN_ID;
-import static org.apache.hadoop.ozone.OzoneAcl.AclScope.ACCESS;
-import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ACL_ENABLED;
-import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ACL_ENABLED_DEFAULT;
-import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ADMINISTRATORS;
-import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_FLEXIBLE_FQDN_RESOLUTION_ENABLED;
-import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_FLEXIBLE_FQDN_RESOLUTION_ENABLED_DEFAULT;
-import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_KEY_PREALLOCATION_BLOCKS_MAX;
-import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_KEY_PREALLOCATION_BLOCKS_MAX_DEFAULT;
-import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_READONLY_ADMINISTRATORS;
-import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SCM_BLOCK_SIZE;
-import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SCM_BLOCK_SIZE_DEFAULT;
-import static org.apache.hadoop.ozone.OzoneConsts.DB_TRANSIENT_MARKER;
-import static org.apache.hadoop.ozone.OzoneConsts.DEFAULT_OM_UPDATE_ID;
-import static org.apache.hadoop.ozone.OzoneConsts.LAYOUT_VERSION_KEY;
-import static org.apache.hadoop.ozone.OzoneConsts.OM_METRICS_FILE;
-import static org.apache.hadoop.ozone.OzoneConsts.OM_METRICS_TEMP_FILE;
-import static org.apache.hadoop.ozone.OzoneConsts.OM_RATIS_SNAPSHOT_DIR;
-import static org.apache.hadoop.ozone.OzoneConsts.OM_SNAPSHOT_DIR;
-import static org.apache.hadoop.ozone.OzoneConsts.PREPARE_MARKER_KEY;
-import static org.apache.hadoop.ozone.OzoneConsts.RPC_PORT;
-import static org.apache.hadoop.ozone.OzoneConsts.TRANSACTION_INFO_KEY;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_DEFAULT_BUCKET_LAYOUT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_DEFAULT_BUCKET_LAYOUT_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_KEY_DELETING_LIMIT_PER_TASK;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_ADDRESS_KEY;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_ENABLE_FILESYSTEM_PATHS;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_ENABLE_FILESYSTEM_PATHS_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_HANDLER_COUNT_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_HANDLER_COUNT_KEY;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_HTTP_AUTH_TYPE;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_KERBEROS_KEYTAB_FILE_KEY;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_KERBEROS_PRINCIPAL_KEY;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_KEY_PATH_LOCK_ENABLED;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_KEY_PATH_LOCK_ENABLED_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_METRICS_SAVE_INTERVAL;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_METRICS_SAVE_INTERVAL_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_NAMESPACE_STRICT_S3;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_NAMESPACE_STRICT_S3_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_RATIS_UNHEALTHY_PEER_TIMEOUT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_RATIS_UNHEALTHY_PEER_TIMEOUT_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_S3_GPRC_SERVER_ENABLED;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_S3_GRPC_SERVER_ENABLED_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_USER_MAX_VOLUME;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_USER_MAX_VOLUME_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_VOLUME_LISTALL_ALLOWED;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_VOLUME_LISTALL_ALLOWED_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_SERVER_DEFAULT_REPLICATION_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_SERVER_DEFAULT_REPLICATION_KEY;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_SERVER_DEFAULT_REPLICATION_TYPE_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_SERVER_DEFAULT_REPLICATION_TYPE_KEY;
-import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.DETECTED_LOOP_IN_BUCKET_LINKS;
-import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.FEATURE_NOT_ENABLED;
-import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.INTERNAL_ERROR;
-import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.INVALID_AUTH_METHOD;
-import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.INVALID_REQUEST;
-import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.PERMISSION_DENIED;
-import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.TOKEN_ERROR_OTHER;
-import static org.apache.hadoop.ozone.om.lock.OzoneManagerLock.Resource.BUCKET_LOCK;
-import static org.apache.hadoop.ozone.om.lock.OzoneManagerLock.Resource.VOLUME_LOCK;
-import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.LEADER_AND_READY;
-import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.createRaftPeerList;
-import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.DEFAULT_SECRET_STORAGE_TYPE;
-import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SECRET_ENCRYPTION_ENABLED;
-import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SECRET_ENCRYPTION_KEY;
-import static org.apache.hadoop.ozone.om.s3.S3SecretStoreConfigurationKeys.S3_SECRET_STORAGE_TYPE;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerInterServiceProtocolProtos.OzoneManagerInterService;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DBUpdatesRequest;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.EchoRPCResponse;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ExtendedUserAccessIdInfo;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.KeyArgs;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRoleInfo;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OzoneManagerService;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.PrepareStatusResponse.PrepareStatus;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.S3Authentication;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ServicePort;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.TenantState;
-import static org.apache.hadoop.security.UserGroupInformation.getCurrentUser;
-import static org.apache.hadoop.util.ExitUtil.terminate;
-import static org.apache.ozone.graph.PrintableGraph.GraphType.FILE_NAME;
 
 /**
  * Ozone Manager is the metadata manager of ozone.
@@ -571,10 +440,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private OMHAMetrics omhaMetrics;
   private final ProtocolMessageMetrics<OzoneManagerProtocolProtos.Type> omClientProtocolMetrics;
 
-  public OMHAMultiRaftMetrics getOmMultiRaftMetrics() {
-    return omMultiRaftMetrics;
-  }
-
   private OMHAMultiRaftMetrics omMultiRaftMetrics;
   private final DeletingServiceMetrics omDeletionMetrics;
   private OzoneManagerHttpServer httpServer;
@@ -597,7 +462,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private String omComponent;
   private OzoneManagerProtocolServerSideTranslatorPB omServerProtocol;
 
-  private final boolean isRatisEnabled;
   private boolean isMultiRaftEnabled;
   private OmRaftGroupManager omRaftGroupManager;
   private OzoneManagerRatisServer omRatisServer;
@@ -683,7 +547,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private final Map<RaftGroupId, String> tmpLeadersMap = new HashMap<>();
   private BucketRaftGroupsReconciler bucketRaftGroupsReconciler;
   private List<String> listOfRaftGroupToReset;
-  private int bucketNumbersFromConfig;
   @SuppressWarnings("methodlength")
   private OzoneManager(OzoneConfiguration conf, StartupOption startupOption)
       throws IOException, AuthenticationException {
@@ -760,13 +623,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         OZONE_OM_NAMESPACE_STRICT_S3,
         OZONE_OM_NAMESPACE_STRICT_S3_DEFAULT);
 
-    // TODO: This is a temporary check. Once fully implemented, all OM state
-    //  change should go through Ratis - be it standalone (for non-HA) or
-    //  replicated (for HA).
-    isRatisEnabled = configuration.getBoolean(
-        OMConfigKeys.OZONE_OM_RATIS_ENABLE_KEY,
-        OMConfigKeys.OZONE_OM_RATIS_ENABLE_DEFAULT);
-
     isMultiRaftEnabled = configuration.getBoolean(
             OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
             OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT
@@ -774,8 +630,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
     bucketNumbersFromConfig = configuration.getPositiveIntOrDefault(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
         OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
-    // Ratis server comes with JvmPauseMonitor, no need to start another
-    jvmPauseMonitor = !isRatisEnabled ? newJvmPauseMonitor(omId) : null;
 
     String defaultBucketLayoutString =
         configuration.getTrimmed(OZONE_DEFAULT_BUCKET_LAYOUT,
@@ -831,7 +685,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
 
     RPC.setProtocolEngine(configuration, OzoneManagerProtocolPB.class,
-        ProtobufRpcEngine.class);
+        org.apache.hadoop.ipc_.ProtobufRpcEngine.class);
 
     secConfig = new SecurityConfig(configuration);
     // Create the KMS Key Provider
@@ -929,7 +783,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
     bucketUtilizationMetrics = BucketUtilizationMetrics.create(metadataManager);
     omHostName = HddsUtils.getHostName(conf);
-    multiRaftTerm = new AtomicLong(Optional.fromNullable(metadataManager.getMultiRaftInfoTable().get("term")).or(0L));
+    multiRaftTerm = new AtomicLong(
+        com.google.common.base.Optional.fromNullable(metadataManager.getMultiRaftInfoTable().get("term")).or(0L));
     omSafeModeManager = new SafeModeManager(configuration);
     if (this.getOmRatisServer() != null) {
       this.getOmRatisServer().startSchedulingLeaderReconfiguration();
@@ -939,10 +794,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     if (this.getOmRatisServer() != null) {
       this.getOmRatisServer().startSchedulingLeaderReconfiguration();
     }
-  }
-
-  public boolean areAllOMsOnline(RaftGroupId raftGroupId) {
-    return omStatusChecker.areAllOMsOnline(raftGroupId);
   }
 
   public void initializeEdekCache(OzoneConfiguration conf) {
@@ -1054,10 +905,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         throw new RuntimeException(e);
       }
     }
-  }
-
-  private boolean bucketRaftGroupsCreated() {
-    return omRaftGroups.size() == bucketNumbersFromConfig + 1;
   }
 
   public void warmUpEdekCache(final ExecutorService executor, final int delay, final int interval, int maxRetries) {
@@ -1177,33 +1024,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       LOG.error("clusterId from {} is {}, but is {} in {}",
           scmBlockAddress, scmInfo.getClusterId(),
           omStorage.getClusterID(), omStorage.getVersionFile());
-    }
-  }
-
-  @SuppressWarnings("checkstyle:EmptyBlock")
-  public void createRaftGroupForBucket(RaftGroupId raftGroupId) {
-    InitBucketResult initBucketResult = initBucketRaftGroupAndStateMachine(raftGroupId);
-    if (!initBucketResult.getResult()) {
-      LOG.trace("Skipping creating raft group {}", raftGroupId);
-      return;
-    }
-    try {
-      RaftGroup raftGroup = initBucketResult.getRaftGroup();
-      omRatisServer.addBucketRaftGroup(raftGroup);
-      metadataManager.getTransactionInfoTable().delete(TRANSACTION_INFO_KEY + raftGroup.getGroupId().toString());
-      LOG.info("Bucket group {} created with peers {}", raftGroupId, raftGroup.getPeers());
-      if (bucketRaftGroupsCreated()) {
-        LOG.info("All bucket raft groups are created, " +
-            "starting SafeModeManager");
-        omSafeModeManager.onBucketRaftGroupsReady();
-      }
-    } catch (AlreadyExistsException ex) {
-      // do nothing
-    } catch (IOException e) {
-      if (!(e.getCause() instanceof AlreadyExistsException)) {
-        LOG.error("Failed to create bucket raft group : {}", raftGroupId, e);
-        throw new RuntimeException(e);
-      }
     }
   }
 
@@ -1334,19 +1154,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
   }
 
-  private S3SecretEncryption initS3SecretEncryption(boolean encryptionEnabled) throws IOException {
-    if (!encryptionEnabled) {
-      return S3SecretEncryption.NOOP;
-    } else {
-      char[] secretKeyRaw = configuration.getPassword(S3_SECRET_ENCRYPTION_KEY);
-      if (secretKeyRaw == null) {
-        throw new IOException("The configuration property 'ozone.secret.s3.store.encryption.key' is not set");
-      }
-      String secretKey = new String(secretKeyRaw).trim();
-      return new S3SecretEncryptionImpl(secretKey);
-    }
-  }
-
   public GetRaftGroupHealthStateResponse getRaftGroupHealthState(GetRaftGroupHealthStateRequest request)
       throws IOException {
     long unhealthyPeerTimeout = configuration.getTimeDuration(
@@ -1355,7 +1162,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         TimeUnit.MILLISECONDS);
     RaftGroupId raftGroupId = RaftGroupId.valueOf(new UUID(request.getGroupId().getMostSigBits(),
         request.getGroupId().getLeastSigBits()));
-    RaftServer.Division division = omRatisServer.getServer().getDivision(raftGroupId);
+    RaftServer.Division division = omRatisServer.getServerDivision(raftGroupId);
     if (!division.getInfo().isLeader()) {
       throw new NotLeaderException(division.getMemberId(), division.getPeer(), null);
     }
@@ -2307,9 +2114,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   }
 
   public void createRaftGroups(List<UUID> raftGroupIdsToCreate, boolean purgeExistingRaftGroups) throws IOException {
-    OzoneClient ozoneClient;
+    org.apache.hadoop.ozone.client.OzoneClient ozoneClient;
     try {
-      ozoneClient = OzoneClientFactory.getRpcClient(configuration);
+      ozoneClient = org.apache.hadoop.ozone.client.OzoneClientFactory.getRpcClient(configuration);
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -2317,9 +2124,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   }
 
   public void moveOmToSafeMode() throws IOException {
-    OzoneClient ozoneClient;
+    org.apache.hadoop.ozone.client.OzoneClient ozoneClient;
     try {
-      ozoneClient = OzoneClientFactory.getRpcClient(configuration);
+      ozoneClient = org.apache.hadoop.ozone.client.OzoneClientFactory.getRpcClient(configuration);
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -2528,7 +2335,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       omInterServiceProtocol.bootstrap(omNodeDetails);
 
       LOG.info("Successfully bootstrapped OM {} and joined the Ratis group " +
-          "{}", getOMNodeId(), omRatisServer.getRaftGroup());
+          "{}", getOMNodeId(), omRatisServer.getCurrentRaftGroup());
     } catch (Exception e) {
       LOG.error("Failed to Bootstrap OM.");
       throw e;
@@ -3681,27 +3488,22 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
   @Override
   public String getMainRatisRole() {
-    if (isRatisEnabled) {
-      if (null == omRatisServer) {
-        return "Server is shutting down";
-      }
-      OzoneManagerRatisServer.RaftServerStatus status =
-          omRatisServer.checkLeaderStatus(omRatisServer.getCurrentRaftGroupId());
-      return status == OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER ? "FOLLOWER" : "LEADER";
-    } else {
-      return "Ratis Disabled";
+    if (null == omRatisServer) {
+      return "Server is shutting down";
     }
+    OzoneManagerRatisServer.RaftServerStatus status =
+        omRatisServer.checkLeaderStatus(omRatisServer.getCurrentRaftGroupId());
+    return status == OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER ? "FOLLOWER" : "LEADER";
   }
 
   @Override
   public List<List<String>> getRatisRoles() {
     int port = omNodeDetails.getRatisPort();
-    RaftPeer leaderId;
     if (null == omRatisServer) {
       return getRatisRolesException("Server is shutting down");
     }
-    omRatisServer.checkLeaderStatus(omRatisServer.getCurrentRaftGroupId());
-    leaderId = omRatisServer.getLeader();
+    String leaderReadiness = omRatisServer.getLeaderStatus().name();
+    final RaftPeerId leaderId = omRatisServer.getLeaderId(omRatisServer.getCurrentRaftGroupId());
     if (leaderId == null) {
       LOG.error(NO_LEADER_ERROR_MESSAGE);
       return getRatisRolesException(NO_LEADER_ERROR_MESSAGE);
@@ -3713,7 +3515,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       LOG.error("Failed to getServiceList", e);
       return getRatisRolesException("IO-Exception Occurred, " + e.getMessage());
     }
-    return OmUtils.format(serviceList, port, leaderId.getId().toString());
+    return OmUtils.format(serviceList, port, leaderId.toString(), leaderReadiness);
   }
 
   /**
@@ -3814,7 +3616,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     if (omRatisServer == null) {
       selfRole = RaftPeerRole.LEADER;
     } else {
-      leaderId = omRatisServer.getLeaderId();
+      leaderId = omRatisServer.getLeaderId(omRatisServer.getCurrentRaftGroupId());
       RaftPeerId selfPeerId = omRatisServer.getRaftPeerId();
       if (leaderId != null && leaderId.equals(selfPeerId)) {
         selfRole = RaftPeerRole.LEADER;
@@ -4001,11 +3803,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     auditMap.put("newLeaderId", newLeaderId);
     try {
       RaftGroupId groupID = omRatisServer.getCurrentRaftGroup().getGroupId();
-      RaftServer.Division division = omRatisServer.getServer()
-          .getDivision(groupID);
+      RaftServer.Division division = omRatisServer.getServerDivision(groupID);
       RaftPeerId targetPeerId;
       if (newLeaderId.isEmpty()) {
-        final RaftPeerId curLeader = omRatisServer.getLeaderId();
+        final RaftPeerId curLeader = omRatisServer.getLeaderId(omRatisServer.getCurrentRaftGroupId());
         targetPeerId = division.getGroup().getPeers().stream()
             .map(RaftPeer::getId)
             .filter(id -> !id.equals(curLeader))
@@ -4554,8 +4355,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
     TermIndex termIndex = null;
     try {
-      // Install hard links.
-      OmSnapshotUtils.createHardLinks(omDBCheckpoint.getCheckpointLocation());
+      Path checkpointLocation = omDBCheckpoint.getCheckpointLocation();
+      if (checkpointLocation == null) {
+        throw new IOException("Cannot install checkpoint from leader " + leaderId + ": checkpointLocation is null");
+      }
       termIndex = installCheckpoint(raftGroupId, leaderId, omDBCheckpoint);
     } catch (Exception ex) {
       LOG.error("Failed to install snapshot from Leader OM.", ex);
@@ -4586,7 +4389,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     LOG.info("Installing checkpoint with OMTransactionInfo {}",
         checkpointTrxnInfo);
 
-    return installCheckpoint(raftGroupId, leaderId, checkpointLocation, checkpointTrxnInfo);
+    return installCheckpoint(raftGroupId, leaderId, omDBCheckpoint.getCheckpointLocation(), checkpointTrxnInfo);
   }
 
   TermIndex installCheckpoint(RaftGroupId raftGroupId, String leaderId, Path checkpointLocation,
@@ -5021,11 +4824,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    */
   public boolean isLeaderReady() {
     final OzoneManagerRatisServer ratisServer = omRatisServer;
-    return !isRatisEnabled ||
-            (
-                    ratisServer != null
-                            && ratisServer.checkLeaderStatus(ratisServer.getCurrentRaftGroupId()) == LEADER_AND_READY
-            );
+    return ratisServer != null
+        && ratisServer.checkLeaderStatus(ratisServer.getCurrentRaftGroupId()) == LEADER_AND_READY;
   }
 
   /**
@@ -5060,13 +4860,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
           OMLeaderNotReadyException {
     RaftGroupId raftGroupId = omRatisServer.getCurrentRaftGroupId();
     checkLeaderStatus(raftGroupId);
-  }
-
-  /**
-   * Return if Ratis is enabled or not.
-   */
-  public boolean isRatisEnabled() {
-    return isRatisEnabled;
   }
 
   /**

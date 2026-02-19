@@ -27,7 +27,6 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.ozone.OzoneConsts;
-import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 import org.apache.ratis.protocol.RaftGroupId;
 
 import java.util.HashMap;
@@ -87,14 +86,7 @@ public final class OMHAMetrics implements MetricsSource {
     }
   }
 
-  public static final String SOURCE_NAME =
-      OMHAMetrics.class.getSimpleName();
-  private final OMHAMetricsInfo omhaMetricsInfo = new OMHAMetricsInfo();
-  private MetricsRegistry metricsRegistry;
-
-  private String currNodeId;
   private Map<RaftGroupId, String> raftGroupsLeaders = new HashMap<>();
-  private String leaderId;
   private RaftGroupId mainRaftGroupId;
 
   private OMHAMetrics(String currNodeId, String leaderId, RaftGroupId raftGroupId) {
@@ -112,7 +104,7 @@ public final class OMHAMetrics implements MetricsSource {
   public static OMHAMetrics create(
       String nodeId, String leaderId, RaftGroupId raftGroupId) {
     OMHAMetrics metrics = new OMHAMetrics(nodeId, leaderId, raftGroupId);
-    return OzoneMetricsSystem.instance()
+    return DefaultMetricsSystem.instance()
         .register(SOURCE_NAME, "Metrics for OM HA", metrics);
   }
 

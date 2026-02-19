@@ -96,7 +96,7 @@ public class S3MultipartUploadCommitPartResponse extends OmKeyResponse {
       // multipart upload. So, delete this part information.
 
       RepeatedOmKeyInfo repeatedOmKeyInfo =
-          OmUtils.prepareKeyForDelete(openPartKeyInfoToBeDeleted,
+          OmUtils.prepareKeyForDelete(omBucketInfo.getObjectID(), openPartKeyInfoToBeDeleted,
               openPartKeyInfoToBeDeleted.getUpdateID(),
               isMultiRaftEnabled, multiRaftTerm);
       // multi-part key format is volumeName/bucketName/keyName/uploadId

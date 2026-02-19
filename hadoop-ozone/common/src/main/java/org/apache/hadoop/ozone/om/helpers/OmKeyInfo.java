@@ -656,13 +656,13 @@ public final class OmKeyInfo extends WithParentObjectId
     }
 
     @Override
-    public void setMultiRaftEnabled(boolean multiRaftEnabled) {
+    public Builder setMultiRaftEnabled(boolean multiRaftEnabled) {
       super.setMultiRaftEnabled(multiRaftEnabled);
       return this;
     }
 
     @Override
-    public void setMultiRaftTerm(long multiRaftTerm) {
+    public Builder setMultiRaftTerm(long multiRaftTerm) {
       super.setMultiRaftTerm(multiRaftTerm);
       return this;
     }

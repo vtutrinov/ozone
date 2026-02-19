@@ -34,6 +34,7 @@ import org.apache.ratis.protocol.exceptions.NotLeaderException;
  */
 public class OMNotLeaderException extends IOException {
 
+  private final String currentPeerId;
   private final String leaderPeerId;
   private final String leaderAddress;
   private final RaftGroupId raftGroupId;
@@ -62,6 +63,7 @@ public class OMNotLeaderException extends IOException {
   public OMNotLeaderException(RaftPeerId currentPeerId, RaftGroupId raftGroupId) {
     super("OM:" + currentPeerId + " is not the leader. Could not " +
         "determine the leader node.");
+    this.currentPeerId = currentPeerId.toString();
     this.leaderPeerId = null;
     this.leaderAddress = null;
     this.raftGroupId = raftGroupId;
@@ -84,12 +86,7 @@ public class OMNotLeaderException extends IOException {
     this.leaderPeerId = suggestedLeaderPeerId.toString();
     this.leaderAddress = suggestedLeaderAddress;
     this.raftGroupId = raftGroupId;
-  }
-
-  public OMNotLeaderException(String msg) {
-    super(msg);
-    this.leaderPeerId = null;
-    this.leaderAddress = null;
+    this.currentPeerId = currentPeerId.toString();
   }
 
   public String getSuggestedLeaderNodeId() {

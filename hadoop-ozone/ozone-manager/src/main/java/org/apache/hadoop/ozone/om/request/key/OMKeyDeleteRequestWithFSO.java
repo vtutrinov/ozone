@@ -127,7 +127,7 @@ public class OMKeyDeleteRequestWithFSO extends OMKeyDeleteRequest {
       // Set the UpdateID to current transactionLogIndex
       omKeyInfo = omKeyInfo.toBuilder()
           .setUpdateID(trxnLogIndex)
-          .setMultuRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
+          .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
           .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
           .build();
       final long volumeId = omMetadataManager.getVolumeId(volumeName);

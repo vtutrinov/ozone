@@ -21,6 +21,7 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_ADDRESS_KEY;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -122,11 +123,9 @@ public class HadoopRpcOMFailoverProxyProvider<T> extends
 
   @Override
   ProxyInfo<T> getProxy(String omNodeId) {
-    ProxyInfo proxyInfo = getOMProxyMap().get(omNodeId);
-    if (proxyInfo == null) {
-      proxyInfo = createOMProxy(omNodeId);
-    }
-    return proxyInfo;
+    final OMProxyInfo<T> omProxyInfo = getOMProxyMap().get(omNodeId);
+    omProxyInfo.createProxyIfNeeded(this::createOMProxy);
+    return omProxyInfo;
   }
 
   /**

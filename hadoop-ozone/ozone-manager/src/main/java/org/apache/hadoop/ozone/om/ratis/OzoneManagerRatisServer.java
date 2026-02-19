@@ -20,12 +20,17 @@ package org.apache.hadoop.ozone.om.ratis;
 import static org.apache.hadoop.ipc_.RpcConstants.DUMMY_CLIENT_ID;
 import static org.apache.hadoop.ipc_.RpcConstants.INVALID_CALL_ID;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_HA_PREFIX;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_INITIAL_DELAY;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_INITIAL_DELAY_DEFAULT;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_PERIOD;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_PERIOD_DEFAULT;
 import static org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils.createServerTlsConfig;
 import static org.apache.hadoop.ozone.util.MetricUtil.captureLatencyNs;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.ServiceException;
 import java.io.File;
 import java.io.IOException;
@@ -43,9 +48,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Supplier;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.apache.hadoop.hdds.HddsUtils;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
@@ -56,11 +63,10 @@ import org.apache.hadoop.hdds.security.SecurityConfig;
 import org.apache.hadoop.hdds.security.x509.certificate.client.CertificateClient;
 import org.apache.hadoop.hdds.tracing.TracingUtil;
 import org.apache.hadoop.ipc_.ProtobufRpcEngine.Server;
-import org.apache.hadoop.ipc.ProtobufRpcEngine.Server;
-import org.apache.hadoop.ozone.om.balancing.LeaderCheckExecutor;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OMPerformanceMetrics;
 import org.apache.hadoop.ozone.om.OzoneManager;
+import org.apache.hadoop.ozone.om.balancing.LeaderCheckExecutor;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.exceptions.OMLeaderNotReadyException;
 import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
@@ -101,41 +107,11 @@ import org.apache.ratis.server.RetryCache;
 import org.apache.ratis.server.protocol.TermIndex;
 import org.apache.ratis.server.storage.RaftStorage;
 import org.apache.ratis.util.LifeCycle;
-import org.apache.ratis.util.MemoizedSupplier;
 import org.apache.ratis.util.SizeInBytes;
 import org.apache.ratis.util.StringUtils;
 import org.apache.ratis.util.TimeDuration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.File;
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
-
-import static org.apache.hadoop.ipc.RpcConstants.DUMMY_CLIENT_ID;
-import static org.apache.hadoop.ipc.RpcConstants.INVALID_CALL_ID;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_HA_PREFIX;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_INITIAL_DELAY;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_INITIAL_DELAY_DEFAULT;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_PERIOD;
-import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_PERIOD_DEFAULT;
-import static org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils.createServerTlsConfig;
-import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 
 /**
  * Creates a Ratis server endpoint for OM.
@@ -144,7 +120,6 @@ public final class OzoneManagerRatisServer {
   private static final Logger LOG = LoggerFactory.getLogger(OzoneManagerRatisServer.class);
 
   private final int port;
-  private final InetSocketAddress omRatisAddress;
   private final Function<RaftGroupId, RaftServer.Division> serverDivision;
   private final RaftServer server;
   private final RaftGroupId currentRaftGroupId;
@@ -205,10 +180,11 @@ public final class OzoneManagerRatisServer {
         raftPeersStr.append(", ").append(peer.getAddress());
       }
       LOG.info("Instantiating OM Ratis server with groupID: {} and peers: {}",
-          raftGroupIdStr, raftPeersStr.substring(2));
-              omServiceId, raftPeersStr.toString().substring(2);
+              omServiceId, raftPeersStr.toString().substring(2));
     }
     this.omStateMachine = getStateMachine(conf);
+
+    this.readOption = RaftServerConfigKeys.Read.option(serverProperties);
 
     om.getStateMachines().put(currentRaftGroupId, omStateMachine);
     om.getOmRaftGroups().put(currentRaftGroupId, currentRaftGroup);
@@ -228,13 +204,6 @@ public final class OzoneManagerRatisServer {
         })
         .setOption(RaftStorage.StartupOption.RECOVER)
         .build();
-    this.serverDivision = MemoizedSupplier.valueOf(() -> {
-      try {
-        return server.getDivision(raftGroupId);
-      } catch (IOException e) {
-        throw new IllegalStateException("Failed to getDivision for " + raftGroupId, e);
-      }
-    });
     this.perfMetrics = om.getPerfMetrics();
     this.serverDivision = (raftGroupId) -> {
       try {
@@ -358,11 +327,8 @@ public final class OzoneManagerRatisServer {
    * @return OMResponse - response returned to the client.
    * @throws ServiceException throw when applying Ratis request
    */
-  public OMResponse submitRequest(OMRequest omRequest) throws ServiceException {
-    return commonSubmitRequest(
-            omRequest,
-            getCurrentRaftGroupId()
-    );
+  public OMResponse submitRequest(OMRequest omRequest, boolean isWrite) throws ServiceException {
+    return commonSubmitRequest(omRequest, getCurrentRaftGroupId(), isWrite);
   }
 
   /**
@@ -376,17 +342,18 @@ public final class OzoneManagerRatisServer {
   public OMResponse submitBucketWriteRequest(
           OMRequest omRequest,
           RaftGroupId raftGroupId) throws ServiceException {
-    return commonSubmitRequest(omRequest, raftGroupId);
+    return commonSubmitRequest(omRequest, raftGroupId, true);
   }
 
   public OMResponse commonSubmitRequest(
           OMRequest omRequest,
-          RaftGroupId raftGroupId
+          RaftGroupId raftGroupId,
+          boolean isWrite
   ) throws ServiceException {
     // In prepare mode, only prepare and cancel requests are allowed to go
     // through.
     if (ozoneManager.getPrepareState().requestAllowed(omRequest.getCmdType())) {
-      RaftClientRequest raftClientRequest = createRaftRequest(omRequest, raftGroupId);
+      RaftClientRequest raftClientRequest = createRaftRequest(omRequest, raftGroupId, isWrite);
       RaftClientReply raftClientReply = submitRequestToRatis(raftClientRequest);
       return createOmResponse(omRequest, raftClientReply, raftGroupId);
     } else {
@@ -465,36 +432,12 @@ public final class OzoneManagerRatisServer {
         () -> submitRequestToRatisImpl(raftClientRequest));
   }
 
-  private RaftClientRequest createRaftRequest(OMRequest omRequest, RaftGroupId raftGroupId) {
+  private RaftClientRequest createRaftRequest(OMRequest omRequest, RaftGroupId raftGroupId, boolean isWrite) {
     RaftClientRequest raftClientRequest = captureLatencyNs(
         perfMetrics.getCreateRatisRequestLatencyNs(),
-        () -> createRaftRequestImpl(omRequest, raftGroupId));
+        () -> createRaftRequestImpl(omRequest, raftGroupId, isWrite));
     return raftClientRequest;
   }
-
-  /**
-   * API used internally from OzoneManager Server when requests needs to be
-   * submitted to ratis, where the crafted RaftClientRequest is passed along.
-   * @param omRequest Ozone Manager request
-   * @param raftClientRequest Raft client request
-   * @return OMResponse
-   * @throws ServiceException thrown when problems with leader or processing Raft reply
-   */
-  public OMResponse submitRequest(OMRequest omRequest, ClientId cliId, long callId) throws ServiceException {
-    RaftClientRequest raftClientRequest = RaftClientRequest.newBuilder()
-        .setClientId(cliId)
-        .setServerId(getRaftPeerId())
-        .setGroupId(getRaftGroupId())
-        .setCallId(callId)
-        .setMessage(Message.valueOf(
-            OMRatisHelper.convertRequestToByteString(omRequest)))
-        .setType(RaftClientRequest.writeRequestType())
-        .build();
-    RaftClientReply raftClientReply =
-        submitRequestToRatis(raftClientRequest);
-    return createOmResponse(omRequest, raftClientReply, getCurrentRaftGroupId());
-  }
-
 
   private RaftClientReply submitRequestToRatisImpl(
       RaftClientRequest raftClientRequest) throws ServiceException {
@@ -601,15 +544,15 @@ public final class OzoneManagerRatisServer {
    */
   private void updateRatisConfiguration(List<RaftPeer> followers, List<RaftPeer> listeners,
       String operation, String nodeId) throws IOException {
-    SetConfigurationRequest request = new SetConfigurationRequest(clientId,
+    SetConfigurationRequest request = new SetConfigurationRequest(currentClientId,
         server.getId(), currentRaftGroupId, nextCallId(), followers, listeners);
 
     RaftClientReply raftClientReply = server.setConfiguration(request);
     if (raftClientReply.isSuccess()) {
-      LOG.info("{} OM {} in Ratis group {}.", operation, nodeId, raftGroupId);
+      LOG.info("{} OM {} in Ratis group {}.", operation, nodeId, currentRaftGroupId);
     } else {
       LOG.error("Failed to {} OM {} in Ratis group {}. Ratis " +
-              "SetConfiguration reply: {}", operation.toLowerCase(), nodeId, raftGroupId,
+              "SetConfiguration reply: {}", operation.toLowerCase(), nodeId, currentRaftGroupId,
           raftClientReply);
       throw new IOException("Failed to " + operation.toLowerCase() + " OM " + nodeId + " in " +
           "Ratis ring.");
@@ -690,7 +633,7 @@ public final class OzoneManagerRatisServer {
    * @return RaftClientRequest - Raft Client request which is submitted to
    * ratis server.
    */
-  private RaftClientRequest createRaftRequestImpl(OMRequest omRequest, boolean isWrite) {
+  private RaftClientRequest createRaftRequestImpl(OMRequest omRequest, RaftGroupId raftGroupId, boolean isWrite) {
     return RaftClientRequest.newBuilder()
         .setClientId(getClientId())
         .setServerId(server.getId())
@@ -719,9 +662,9 @@ public final class OzoneManagerRatisServer {
     return callId;
   }
 
-  public OMResponse checkRetryCache() throws ServiceException {
+  public OMResponse checkRetryCache(RaftGroupId raftGroupId) throws ServiceException {
     final ClientInvocationId invocationId = ClientInvocationId.valueOf(getClientId(), getCallId());
-    final RetryCache.Entry cacheEntry = getServerDivision().getRetryCache().getIfPresent(invocationId);
+    final RetryCache.Entry cacheEntry = getServerDivision(raftGroupId).getRetryCache().getIfPresent(invocationId);
     if (cacheEntry == null) {
       return null;  //cache miss
     }
@@ -834,11 +777,6 @@ public final class OzoneManagerRatisServer {
     return this.currentRaftGroup;
   }
 
-  @VisibleForTesting
-  public RaftServer.Division getServerDivision() {
-    return serverDivision.get();
-  }
-
   public boolean isLinearizableRead() {
     return readOption == Read.Option.LINEARIZABLE;
   }
@@ -854,6 +792,13 @@ public final class OzoneManagerRatisServer {
             TracingUtil.isTracingEnabled(conf)
     );
   }
+
+
+  @VisibleForTesting
+  public RaftServer getServer() {
+    return server;
+  }
+
 
   @VisibleForTesting
   public OzoneManagerStateMachine getOmStateMachine() {
@@ -1067,27 +1012,6 @@ public final class OzoneManagerRatisServer {
         .getPropsMatchPrefixAndTrimPrefix(OZONE_OM_HA_PREFIX + ".");
   }
 
-
-  public RaftPeer getLeader() {
-    try {
-      RaftServer.Division division = server.getDivision(currentRaftGroupId);
-      if (division != null) {
-        if (division.getInfo().isLeader()) {
-          return division.getPeer();
-        } else {
-          ByteString leaderId = division.getInfo().getRoleInfoProto()
-                  .getFollowerInfo().getLeaderInfo().getId().getId();
-          return leaderId.isEmpty() ? null :
-                  division.getRaftConf().getPeer(RaftPeerId.valueOf(leaderId));
-        }
-      }
-    } catch (IOException e) {
-      // In this case we return not a leader.
-      LOG.error("Fail to get RaftServer impl and therefore it's not clear " +
-          "whether it's leader. ", e);
-    }
-  }
-
   /**
    * Defines RaftServer Status.
    */
@@ -1097,9 +1021,14 @@ public final class OzoneManagerRatisServer {
     LEADER_AND_READY;
   }
 
-  public RaftServerStatus checkOmLeaderStatus() {
+  public RaftServerStatus getLeaderStatus() {
     return checkLeaderStatus(getCurrentRaftGroupId());
   }
+
+  public static UUID getRaftGroupIdFromOmServiceId(String omServiceId) {
+    return UUID.nameUUIDFromBytes(omServiceId.getBytes(StandardCharsets.UTF_8));
+  }
+
   /**
    * Check Leader status and return the state of the RaftServer.
    *

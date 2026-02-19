@@ -48,7 +48,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Handles DeleteKeys request for recursive bucket deletion.
  */
-public class c extends OMKeysDeleteRequest {
+public class OmKeysDeleteRequestWithFSO extends OMKeysDeleteRequest {
 
   private static final Logger LOG = LoggerFactory.getLogger(OmKeysDeleteRequestWithFSO.class);
 

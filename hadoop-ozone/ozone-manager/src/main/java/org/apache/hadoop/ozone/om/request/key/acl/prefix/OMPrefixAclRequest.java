@@ -94,7 +94,6 @@ public abstract class OMPrefixAclRequest extends OMClientRequest {
             .setUpdateID(trxnLogIndex)
             .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
             .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
-            .set
             .build();
       }
 

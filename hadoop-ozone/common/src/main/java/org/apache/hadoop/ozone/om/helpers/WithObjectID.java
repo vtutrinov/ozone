@@ -31,8 +31,8 @@ import org.apache.hadoop.ozone.OzoneConsts;
 @Immutable
 public abstract class WithObjectID extends WithMetadata {
 
-  private final long objectID;
-  private final long updateID;
+  private /*final*/ long objectID;
+  private /*final*/ long updateID;
 
   protected WithObjectID() {
     super();
@@ -51,19 +51,6 @@ public abstract class WithObjectID extends WithMetadata {
     objectID = other.objectID;
     updateID = other.updateID;
   }
-
-  /**
-   * ObjectIDs are unique and immutable identifier for each object in the
-   * System.
-   */
-  @SuppressWarnings("visibilitymodifier")
-  protected long objectID;
-  /**
-   * UpdateIDs are monotonically increasing values which are updated
-   * each time there is an update.
-   */
-  @SuppressWarnings("visibilitymodifier")
-  protected long updateID;
 
   private long multiRaftTerm;
 
@@ -104,10 +91,9 @@ public abstract class WithObjectID extends WithMetadata {
    * Sets the update ID. For each modification of this object, we will set
    * this to a value greater than the current value.
    * @param updateId  long
-   * @param isRatisEnabled boolean
    */
   public void setUpdateID(
-      long updateId, boolean isRatisEnabled, boolean isMultiraftEnabled, long currentMultiraftTerm
+      long updateId, boolean isMultiraftEnabled, long currentMultiraftTerm
   ) {
 
     // Because in non-HA, we have multiple rpc handler threads and
@@ -135,10 +121,8 @@ public abstract class WithObjectID extends WithMetadata {
     // Main reason, in non-HA transaction Index after restart starts from 0.
     // And also because of this same reason we don't do replay checks in non-HA.
     if ((!isMultiraftEnabled || currentMultiraftTerm == multiRaftTerm)
-        && isRatisEnabled && updateId < this.updateID
+         && updateId < this.updateID
     ) {
-      LOG.error("IsMultiraftEnabled: {}, current multiraft are equals: {}, ratis enabled: {}", isMultiraftEnabled,
-          currentMultiraftTerm == multiRaftTerm, isRatisEnabled);
       throw new IllegalArgumentException(String.format(
           "Trying to set updateID to %d which is not greater than the " +
           "current value of %d for %s. Multiraft term: %s", updateId, this.updateID,
@@ -202,12 +186,12 @@ public abstract class WithObjectID extends WithMetadata {
       return this;
     }
 
-    public void setMultiRaftEnabled(boolean multiRaftEnabled) {
+    public Builder<T> setMultiRaftEnabled(boolean multiRaftEnabled) {
       this.multiRaftEnabled = multiRaftEnabled;
       return this;
     }
 
-    public void setMultiRaftTerm(long multiRaftTerm) {
+    public Builder<T> setMultiRaftTerm(long multiRaftTerm) {
       this.multiRaftTerm = multiRaftTerm;
       return this;
     }

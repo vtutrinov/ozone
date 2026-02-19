@@ -57,7 +57,7 @@ public class S3MultipartUploadCommitPartResponseWithFSO
       boolean multiRaftEnabled, long currentMultiRaftTerm) {
 
     super(omResponse, multipartKey, openKey, omMultipartKeyInfo,
-            oldPartKeyInfo, openPartKeyInfoToBeDeleted,
-            omBucketInfo, bucketLayout, multiRaftEnabled, currentMultiRaftTerm);
+        keyToDeleteMap, openPartKeyInfoToBeDeleted,
+            omBucketInfo, bucketId, bucketLayout, multiRaftEnabled, currentMultiRaftTerm);
   }
 }

@@ -4,8 +4,8 @@ import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.annotation.Metrics;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.Interns;
-import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 import org.apache.hadoop.ozone.om.OzoneManager;
 
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
@@ -29,12 +29,12 @@ public class OMHAMultiRaftMetrics implements MetricsSource  {
 
   public static OMHAMultiRaftMetrics create(OzoneManager ozoneManager) {
     OMHAMultiRaftMetrics omhaMultiRaftMetrics = new OMHAMultiRaftMetrics(ozoneManager);
-    return OzoneMetricsSystem.instance()
+    return DefaultMetricsSystem.instance()
         .register(SOURCE_NAME, "Metrics for OM HA", omhaMultiRaftMetrics);
   }
 
   public static void unRegister() {
-    OzoneMetricsSystem.instance().unregisterSource(SOURCE_NAME);
+    DefaultMetricsSystem.instance().unregisterSource(SOURCE_NAME);
   }
 
   @Override

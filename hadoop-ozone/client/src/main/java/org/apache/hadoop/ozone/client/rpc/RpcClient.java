@@ -1753,7 +1753,7 @@ public class RpcClient implements ClientProtocol {
               Collections.singletonMap(ETAG, key.getETag()),
               key.isFile(),
               key.getOwnerName(),
-              Collections.emptyMap()))
+              Collections.emptyMap(), key.getUpdateId()))
           .collect(Collectors.toList());
     } else {
       List<OmKeyInfo> keys = ozoneManagerClient.listKeys(
@@ -1768,7 +1768,8 @@ public class RpcClient implements ClientProtocol {
               key.getMetadata(),
               key.isFile(),
               key.getOwnerName(),
-              key.getTags()))
+              key.getTags(),
+              key.getUpdateID()))
           .collect(Collectors.toList());
     }
   }
@@ -1802,7 +1803,7 @@ public class RpcClient implements ClientProtocol {
         keyInfo.getFileEncryptionInfo(),
         () -> getInputStreamWithRetryFunction(keyInfo), keyInfo.isFile(),
         keyInfo.getOwnerName(), keyInfo.getTags(),
-        keyInfo.getGeneration()
+        keyInfo.getGeneration(), keyInfo.getUpdateID()
     );
   }
 
@@ -2813,10 +2814,6 @@ public class RpcClient implements ClientProtocol {
         .setKeyName(keyName)
         .build();
     ozoneManagerClient.deleteObjectTagging(keyArgs);
-  }
-
-  public void removeRaftGroups(List<UUID> raftGroupIds) throws IOException {
-    ozoneManagerClient.removeRaftGroups(raftGroupIds);
   }
 
   @Override

@@ -55,6 +55,7 @@ import org.apache.ratis.statemachine.SnapshotInfo;
 import org.apache.ratis.util.ExitUtils;
 import org.apache.ratis.util.LifeCycle;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -201,7 +202,7 @@ public class TestOzoneManagerRatisServer {
         .getBytes(UTF_8));
     RaftGroupId raftGroupId = omRatisServer.getCurrentRaftGroup().getGroupId();
     Assertions.assertEquals(uuid, raftGroupId.getUuid());
-    Assertions.assertEquals(raftGroupId.toByteString().size(), 16);
+    Assertions.assertEquals(16, raftGroupId.toByteString().size());
   }
 
   @Test

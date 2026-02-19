@@ -245,7 +245,7 @@ public class S3MultipartUploadCommitPartRequest extends OMKeyRequest {
             OmKeyInfo.getFromProtobuf(oldPartKeyInfo.getPartKeyInfo());
         correctedSpace -= partKeyToBeDeleted.getReplicatedSize();
         RepeatedOmKeyInfo oldVerKeyInfo = getOldVersionsToCleanUp(partKeyToBeDeleted, omBucketInfo.getObjectID(),
-            trxnLogIndex);
+            trxnLogIndex, ozoneManager.isMultiRaftEnabled(), ozoneManager.getCurrentMultiRaftTerm());
         // Unlike normal key commit, we can reuse the objectID for MPU part key because MPU part key
         // always use a new object ID regardless whether there is an existing key.
         String delKeyName = omMetadataManager.getOzoneDeletePathKey(

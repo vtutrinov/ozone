@@ -119,7 +119,6 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
 
   public OzoneManagerStateMachine(OzoneManagerRatisServer ratisServer,
       RaftGroupId raftGroupId, boolean isTracingEnabled) throws IOException {
-    this.omRatisServer = ratisServer;
     this.raftGroupId = raftGroupId;
     this.isTracingEnabled = isTracingEnabled;
     this.ozoneManager = ratisServer.getOzoneManager();
@@ -170,14 +169,6 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     final SnapshotInfo snapshotInfo = ozoneManager.getTransactionInfo(raftGroupId).toSnapshotInfo();
     LOG.debug("Latest Snapshot Info {}", snapshotInfo);
     return snapshotInfo;
-  }
-
-  @Override
-  public void notifyLeaderReady() {
-    ozoneManager.getOmSnapshotManager().resetInFlightSnapshotCount();
-    final SnapshotInfo currentSnapshotInfo = ozoneManager.getTransactionInfo(raftGroupId).toSnapshotInfo();
-    LOG.trace("Latest Snapshot Info {}", currentSnapshotInfo);
-    return currentSnapshotInfo;
   }
 
   @Override
@@ -585,19 +576,6 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     return CompletableFuture.supplyAsync(
         () -> ozoneManager.installSnapshotFromLeader(raftGroupId, leaderNodeId),
         installSnapshotExecutor);
-    return future;
-  }
-
-  /**
-   * Notifies the state machine that the raft peer is no longer leader.
-   */
-  @Override
-  public void notifyNotLeader(Collection<TransactionContext> pendingEntries)
-      throws IOException {
-    ozoneManager.getSafeModeManager().onLeadershipLost(); // TODO is is necessary?
-    LOG.trace("Lost leadership for {} - {}.",
-        ozoneManager.omRatisGroupName(),
-        ozoneManager.getOMNodeId());
   }
 
   @Override
@@ -626,7 +604,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     try {
       ExecutionContext context = ExecutionContext.of(termIndex.getIndex(), termIndex);
       final OMClientResponse omClientResponse = handler.handleWriteRequest(
-          request, context, ozoneManagerDoubleBuffer);
+          request, context, getGroupId(), ozoneManagerDoubleBuffer);
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
       OMResponse omResponse = omClientResponse.getOMResponse();
       if (omLockDetails != null) {
@@ -728,11 +706,4 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     return ozoneManagerDoubleBuffer;
   }
 
-  @Override
-  public void notifyLeaderReady() {
-    LOG.trace("Leader ready for OM group {} - {}.",
-            ozoneManager.omRatisGroupName(),
-            ozoneManager.getOmRatisServer().getLeaderId(ozoneManager.omRatisGroupName())
-    );
-  }
 }

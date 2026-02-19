@@ -40,32 +40,22 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.PartKey
  */
 public abstract class AbstractS3MultipartAbortResponse extends OmKeyResponse {
 
-<<<<<<< HEAD
-  public AbstractS3MultipartAbortResponse(
-      @Nonnull OMResponse omResponse) {
-    super(omResponse);
-  }
-
-=======
-  private boolean isRatisEnabled;
   private boolean isMultiRaftEnabled;
   private long multiRaftTerm;
 
   public AbstractS3MultipartAbortResponse(
-      @Nonnull OMResponse omResponse, boolean isRatisEnabled, boolean multiRaftEnabled,
+      @Nonnull OMResponse omResponse, boolean multiRaftEnabled,
       long currentMultiRaftTerm) {
     super(omResponse);
-    this.isRatisEnabled = isRatisEnabled;
     this.isMultiRaftEnabled = multiRaftEnabled;
     this.multiRaftTerm = currentMultiRaftTerm;
   }
 
   public AbstractS3MultipartAbortResponse(
-      @Nonnull OMResponse omResponse, boolean isRatisEnabled,
+      @Nonnull OMResponse omResponse,
       BucketLayout bucketLayout, boolean multiRaftEnabled,
       long currentMultiRaftTerm) {
     super(omResponse, bucketLayout);
-    this.isRatisEnabled =  isRatisEnabled;
     this.isMultiRaftEnabled = multiRaftEnabled;
     this.multiRaftTerm = currentMultiRaftTerm;
   }
@@ -74,7 +64,6 @@ public abstract class AbstractS3MultipartAbortResponse extends OmKeyResponse {
    * For when the request is not successful.
    * For a successful request, the other constructor should be used.
    */
->>>>>>> ecfa089a32 ([SDPOZN-1708] Changing multiraft configuration)
   public AbstractS3MultipartAbortResponse(@Nonnull OMResponse omResponse,
         BucketLayout bucketLayout) {
     super(omResponse, bucketLayout);
@@ -112,15 +101,9 @@ public abstract class AbstractS3MultipartAbortResponse extends OmKeyResponse {
         // TODO: Similar to open key deletion response, we can check if the
         //  MPU part actually contains blocks, and only move the to
         //  deletedTable if it does.
-
-<<<<<<< HEAD
         RepeatedOmKeyInfo repeatedOmKeyInfo = OmUtils.prepareKeyForDelete(omBucketInfo.getObjectID(),
-            currentKeyPartInfo, omMultipartKeyInfo.getUpdateID());
-=======
-        RepeatedOmKeyInfo repeatedOmKeyInfo = OmUtils.prepareKeyForDelete(
             currentKeyPartInfo, omMultipartKeyInfo.getUpdateID(),
-            isRatisEnabled, isMultiRaftEnabled, multiRaftTerm);
->>>>>>> ecfa089a32 ([SDPOZN-1708] Changing multiraft configuration)
+            isMultiRaftEnabled, multiRaftTerm);
 
         // multi-part key format is volumeName/bucketName/keyName/uploadId
         String deleteKey = omMetadataManager.getOzoneDeletePathKey(

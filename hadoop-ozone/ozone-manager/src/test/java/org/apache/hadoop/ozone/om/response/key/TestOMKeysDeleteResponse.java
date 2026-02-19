@@ -101,11 +101,7 @@ public class TestOMKeysDeleteResponse extends TestOMKeyResponse {
   protected OMClientResponse getOmKeysDeleteResponse(OMResponse omResponse,
       OmBucketInfo omBucketInfo) {
     return new OMKeysDeleteResponse(
-<<<<<<< HEAD
-        omResponse, omKeyInfoList, omBucketInfo, Collections.emptyMap());
-=======
-        omResponse, omKeyInfoList, true, omBucketInfo, ozoneManager.isMultiRaftEnabled(), 0);
->>>>>>> ecfa089a32 ([SDPOZN-1708] Changing multiraft configuration)
+        omResponse, omKeyInfoList, omBucketInfo, Collections.emptyMap(), ozoneManager.isMultiRaftEnabled(), 0);
   }
 
   @Test

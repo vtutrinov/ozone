@@ -178,7 +178,7 @@ public class OMKeyRenameRequest extends OMKeyRequest {
 
       fromKeyValue = fromKeyValue.toBuilder()
           .setUpdateID(trxnLogIndex)
-          .setMultiraftTerm(ozoneManager.isMultiRaftEnabled())
+          .setMultiRaftTerm(ozoneManager.getCurrentMultiRaftTerm())
           .setMultiRaftEnabled(ozoneManager.isMultiRaftEnabled())
           .build();
 

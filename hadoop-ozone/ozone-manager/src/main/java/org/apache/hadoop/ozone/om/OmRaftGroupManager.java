@@ -7,7 +7,6 @@ import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.hdds.utils.db.cache.CacheKey;
 import org.apache.hadoop.hdds.utils.db.cache.CacheValue;
 import org.apache.hadoop.ozone.OmUtils;
-import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.om.helpers.OMNodeDetails;
 import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.apache.hadoop.ozone.om.protocolPB.GrpcOmTransport;
@@ -62,7 +61,7 @@ public class OmRaftGroupManager {
 
   private final AtomicBoolean bucketRaftGroupAssignmentInProgress = new AtomicBoolean(false);
 
-  private final ConcurrentMap<String, OzoneClient> omClientCache = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, org.apache.hadoop.ozone.client.OzoneClient> omClientCache = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Object> omClientInitLocks = new ConcurrentHashMap<>();
 
   private final ConcurrentMap<String, OmTransport> omTransportCache = new ConcurrentHashMap<>();
@@ -199,8 +198,8 @@ public class OmRaftGroupManager {
   private void releaseBucketRaftGroupAssignmentWriteLockByRaft() throws IOException {
     OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
 
-    RaftPeerId mainRaftGroupLeaderPeerId = omRatisServer.getServer()
-        .getDivision(omRatisServer.getCurrentRaftGroupId()).getInfo().getLeaderId();
+    RaftPeerId mainRaftGroupLeaderPeerId = omRatisServer.getServerDivision(omRatisServer.getCurrentRaftGroupId())
+        .getInfo().getLeaderId();
 
     String omServiceId = OmUtils.getOzoneManagerServiceId(ozoneManager.getConfiguration());
     OMNodeDetails omNode = OmUtils.getAllOMHAAddresses(ozoneManager.getConfiguration(), omServiceId, true).stream()
@@ -218,8 +217,8 @@ public class OmRaftGroupManager {
   private boolean acquireBucketRaftGroupAssignmentWriteLockByRaft() throws IOException {
     OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
 
-    RaftPeerId mainRaftGroupLeaderPeerId = omRatisServer.getServer()
-        .getDivision(omRatisServer.getCurrentRaftGroupId()).getInfo().getLeaderId();
+    RaftPeerId mainRaftGroupLeaderPeerId = omRatisServer.getServerDivision(omRatisServer.getCurrentRaftGroupId())
+        .getInfo().getLeaderId();
 
     String omServiceId = OmUtils.getOzoneManagerServiceId(ozoneManager.getConfiguration());
     OMNodeDetails omNode = OmUtils.getAllOMHAAddresses(ozoneManager.getConfiguration(), omServiceId, true).stream()
@@ -321,8 +320,8 @@ public class OmRaftGroupManager {
 
     OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
 
-    RaftPeerId mainRaftGroupLeaderPeerId = omRatisServer.getServer()
-        .getDivision(omRatisServer.getCurrentRaftGroupId()).getInfo().getLeaderId();
+    RaftPeerId mainRaftGroupLeaderPeerId = omRatisServer.getServerDivision(omRatisServer.getCurrentRaftGroupId())
+        .getInfo().getLeaderId();
 
     String omServiceId = OmUtils.getOzoneManagerServiceId(ozoneManager.getConfiguration());
     OMNodeDetails omNode = OmUtils.getAllOMHAAddresses(ozoneManager.getConfiguration(), omServiceId, true).stream()

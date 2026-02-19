@@ -63,10 +63,8 @@ public class OmTransportCacheTest {
     conf.setInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS, 2);
 
     MiniOzoneCluster.Builder builder = MiniOzoneCluster.newHABuilder(conf)
-        .setClusterId(clusterId)
-        .setSCMServiceId(scmServiceId)
         .setOMServiceId(omServiceId)
-        .setScmId(scmId)
+        .setSCMServiceId(scmServiceId)
         .setNumDatanodes(3)
         .setNumOfStorageContainerManagers(3)
         .setNumOfOzoneManagers(3);

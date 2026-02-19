@@ -8,9 +8,9 @@ import org.apache.hadoop.hdds.utils.db.Table;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
+import org.apache.hadoop.ozone.om.execution.flowcontrol.ExecutionContext;
 import org.apache.hadoop.ozone.om.helpers.OMRatisHelper;
 import org.apache.hadoop.ozone.om.lock.OMLockDetails;
-import org.apache.hadoop.ozone.om.ratis.metrics.OzoneManagerStateMachineMetrics;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.hadoop.ozone.om.response.DummyOMClientResponse;
 import org.apache.hadoop.ozone.om.response.OMClientResponse;
@@ -84,8 +84,6 @@ public class BucketStateMachine extends BaseStateMachine {
   private ConcurrentMap<Long, Long> ratisTransactionMap =
       new ConcurrentSkipListMap<>();
 
-  private OzoneManagerStateMachineMetrics metrics;
-
   public static final Logger LOG =
           LoggerFactory.getLogger(BucketStateMachine.class);
 
@@ -102,12 +100,11 @@ public class BucketStateMachine extends BaseStateMachine {
         .setNameFormat(threadNamePrefix +
             "OMBucketStateMachineApplyTransactionThread - %d").build();
     this.executorService = HadoopExecutors.newSingleThreadExecutor(build);
-    this.handler = new OzoneManagerRequestHandler(ozoneManager, ozoneManagerDoubleBuffer);
+    this.handler = new OzoneManagerRequestHandler(ozoneManager);
     ThreadFactory installSnapshotThreadFactory = new ThreadFactoryBuilder()
         .setNameFormat(threadNamePrefix + "-OmBucketInstallSnapshotThread").build();
     this.installSnapshotExecutor =
         HadoopExecutors.newSingleThreadExecutor(installSnapshotThreadFactory);
-    this.metrics = OzoneManagerStateMachineMetrics.create();
   }
 
   @Override
@@ -148,6 +145,7 @@ public class BucketStateMachine extends BaseStateMachine {
               : OMRatisHelper.convertByteStringToOMRequest(
               trx.getStateMachineLogEntry().getLogData());
       long trxLogIndex = trx.getLogEntry().getIndex();
+      final TermIndex termIndex = TermIndex.valueOf(trx.getLogEntry());
       // A cluster can contain several Raft groups. These groups process
       // write request for particular buckets
       // There are can be In the current approach we have one single
@@ -182,7 +180,7 @@ public class BucketStateMachine extends BaseStateMachine {
       ozoneManagerDoubleBuffer.acquireUnFlushedTransactions(1);
 
       CompletableFuture<OzoneManagerProtocolProtos.OMResponse> future = CompletableFuture.supplyAsync(
-          () -> runCommand(request, trxLogIndex), executorService);
+          () -> runCommand(request, termIndex), executorService);
       future.thenApply(omResponse -> {
         if (!omResponse.getSuccess()) {
           // When INTERNAL_ERROR or METADATA_ERROR it is considered as
@@ -226,12 +224,12 @@ public class BucketStateMachine extends BaseStateMachine {
    */
   private OzoneManagerProtocolProtos.OMResponse runCommand(
       OzoneManagerProtocolProtos.OMRequest request,
-      long trxLogIndex
+      TermIndex termIndex
   ) {
-    LOG.trace("Run command {} - {}", request.getCmdType(), trxLogIndex);
     try {
+      ExecutionContext context = ExecutionContext.of(termIndex.getIndex(), termIndex);
       final OMClientResponse omClientResponse = handler.handleWriteRequest(
-          request, trxLogIndex, getGroupId());
+          request, context, getGroupId(), ozoneManagerDoubleBuffer);
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
       OzoneManagerProtocolProtos.OMResponse omResponse = omClientResponse.getOMResponse();
       if (omLockDetails != null) {
@@ -242,7 +240,7 @@ public class BucketStateMachine extends BaseStateMachine {
       }
     } catch (IOException e) {
       LOG.warn("Failed to write, Exception occurred ", e);
-      return createErrorResponse(request, e, trxLogIndex);
+      return createErrorResponse(request, e, termIndex);
     } catch (Throwable e) {
       // For any Runtime exceptions, terminate OM.
       String errorMessage = "Request " + request + " failed with exception";
@@ -252,7 +250,7 @@ public class BucketStateMachine extends BaseStateMachine {
   }
 
   private OzoneManagerProtocolProtos.OMResponse createErrorResponse(
-      OzoneManagerProtocolProtos.OMRequest omRequest, IOException exception, long trxLogIndex) {
+      OzoneManagerProtocolProtos.OMRequest omRequest, IOException exception, TermIndex termIndex) {
     OzoneManagerProtocolProtos.OMResponse.Builder omResponseBuilder = OzoneManagerProtocolProtos.OMResponse.newBuilder()
         .setStatus(OzoneManagerRatisUtils.exceptionToResponseStatus(exception))
         .setCmdType(omRequest.getCmdType())
@@ -263,7 +261,7 @@ public class BucketStateMachine extends BaseStateMachine {
     }
     OzoneManagerProtocolProtos.OMResponse omResponse = omResponseBuilder.build();
     OMClientResponse omClientResponse = new DummyOMClientResponse(omResponse);
-    ozoneManagerDoubleBuffer.add(omClientResponse, trxLogIndex);
+    ozoneManagerDoubleBuffer.add(omClientResponse, termIndex);
     return omResponse;
   }
 
@@ -286,14 +284,13 @@ public class BucketStateMachine extends BaseStateMachine {
     final int maxUnFlushedTransactionCount = ozoneManager.getConfiguration()
         .getInt(OMConfigKeys.OZONE_OM_UNFLUSHED_TRANSACTION_MAX_COUNT,
             OMConfigKeys.OZONE_OM_UNFLUSHED_TRANSACTION_MAX_COUNT_DEFAULT);
-    return new OzoneManagerDoubleBuffer.Builder()
+    return OzoneManagerDoubleBuffer.newBuilder()
         .setOmMetadataManager(ozoneManager.getMetadataManager())
-        .setOzoneManagerRatisSnapShot(this::updateLastAppliedIndex)
-        .setmaxUnFlushedTransactionCount(maxUnFlushedTransactionCount)
-        .setIndexToTerm(this::getTermForIndex).setThreadPrefix(threadNamePrefix)
+        .setUpdateLastAppliedIndex(this::updateLastAppliedTermIndex)
+        .setMaxUnFlushedTransactionCount(maxUnFlushedTransactionCount)
+        .setThreadPrefix(threadNamePrefix)
         .setS3SecretManager(ozoneManager.getS3SecretManager())
         .setThreadPrefix(threadNamePrefix)
-        .enableRatis(true)
         .enableTracing(TracingUtil.isTracingEnabled(ozoneManager.getConfiguration()))
         .build();
   }
@@ -375,8 +372,6 @@ public class BucketStateMachine extends BaseStateMachine {
         }
       }
     }
-    this.metrics.updateApplyTransactionMapSize(applyTransactionMap.size());
-    this.metrics.updateRatisTransactionMapSize(ratisTransactionMap.size());
   }
 
   @Override
@@ -384,9 +379,7 @@ public class BucketStateMachine extends BaseStateMachine {
     LOG.info("Current Snapshot Index {}", getLastAppliedTermIndex());
     TermIndex lastTermIndex = getLastAppliedTermIndex();
     long lastAppliedIndex = lastTermIndex.getIndex();
-    TransactionInfo transactionInfo = new TransactionInfo.Builder()
-            .setTransactionIndex(lastAppliedIndex)
-            .setCurrentTerm(lastTermIndex.getTerm()).build();
+    TransactionInfo transactionInfo = TransactionInfo.valueOf(lastTermIndex.getIndex(), lastAppliedIndex);
     ozoneManager.setTransactionInfo(currentRaftGroupId, transactionInfo);
     Table<String, TransactionInfo> txnInfoTable =
             ozoneManager.getMetadataManager().getTransactionInfoTable();
@@ -517,7 +510,6 @@ public class BucketStateMachine extends BaseStateMachine {
     if (statePausedCount.decrementAndGet() == 0) {
       getLifeCycle().startAndTransition(() -> {
         this.ozoneManagerDoubleBuffer = buildDoubleBufferForRatis();
-        handler.updateDoubleBuffer(ozoneManagerDoubleBuffer);
         this.setLastAppliedTermIndex(TermIndex.valueOf(
             newLastAppliedSnapShotTermIndex, newLastAppliedSnaphsotIndex));
         LOG.info("{}: OzoneManagerStateMachine un-pause completed. " +
@@ -583,9 +575,6 @@ public class BucketStateMachine extends BaseStateMachine {
       LOG.debug("ratisTransactionMap {}",
               ratisTransactionMap.keySet().stream().map(Object::toString)
                       .collect(Collectors.joining(",")));
-    }
-    if (metrics != null) {
-      metrics.unRegister();
     }
   }
 

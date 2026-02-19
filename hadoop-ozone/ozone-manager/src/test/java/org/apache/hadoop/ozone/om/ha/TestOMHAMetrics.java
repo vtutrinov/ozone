@@ -34,6 +34,9 @@ public class TestOMHAMetrics {
   private static final String NODE_ID =
       "om" + RandomStringUtils.secure().nextNumeric(5);
 
+  private OMHAMetrics omhaMetrics;
+  private String leaderId;
+
   @AfterEach
   public void cleanUp() {
     OMHAMetrics.unRegister();

@@ -1233,6 +1233,7 @@ message BasicKeyInfo {
     optional string ownerName = 9;
     optional bool isEncrypted = 10;
     optional bool isFile = 11;
+    optional uint64 updateID = 12;
 }
 
 message DirectoryInfo {

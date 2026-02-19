@@ -19,48 +19,32 @@ package org.apache.hadoop.ozone.protocolPB;
 
 import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.LEADER_AND_READY;
 import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER;
+import static org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils.createClientRequest;
 import static org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils.createErrorResponse;
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type.PrepareStatus;
 import static org.apache.hadoop.ozone.util.MetricUtil.captureLatencyNs;
-import static org.apache.hadoop.ozone.util.OzoneMultiRaftUtils.isMultiRaftEnabled;
-import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateLimitedRaftGroupId;
-import static org.apache.hadoop.ozone.util.OzoneRaftGroupIdGenerator.generateRaftGroupId;
-import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
-
-import org.apache.hadoop.ozone.om.OMConfigKeys;
-import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
-import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus;
-import org.apache.ratis.protocol.RaftGroupId;
-
-import java.io.IOException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.ServiceException;
 import java.io.IOException;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import com.google.common.annotations.VisibleForTesting;
-import com.google.protobuf.ProtocolMessageEnum;
-import com.google.protobuf.RpcController;
-import com.google.protobuf.ServiceException;
-import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
 import org.apache.hadoop.hdds.server.OzoneProtocolMessageDispatcher;
 import org.apache.hadoop.hdds.utils.ProtocolMessageMetrics;
 import org.apache.hadoop.ipc_.ProcessingDetails.Timing;
 import org.apache.hadoop.ipc_.Server;
 import org.apache.hadoop.ozone.OmUtils;
-import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OMPerformanceMetrics;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.exceptions.OMLeaderNotReadyException;
+import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
 import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerProtocolPB;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
+import org.apache.hadoop.ozone.om.request.OMClientRequest;
 import org.apache.hadoop.ozone.om.request.validation.RequestValidations;
 import org.apache.hadoop.ozone.om.request.validation.ValidationContext;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
@@ -77,19 +61,6 @@ import org.apache.ratis.server.DivisionInfo;
 import org.apache.ratis.server.RaftServer.Division;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.util.UUID;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static org.apache.hadoop.ozone.om.OzoneManager.LOG_MULTI_RAFT;
-import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.LEADER_AND_READY;
-import static org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer.RaftServerStatus.NOT_LEADER;
-import static org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils.createClientRequest;
-import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type.PrepareStatus;
-import static org.apache.hadoop.util.MetricUtil.captureLatencyNs;
 
 /**
  * This is the server-side translator that forwards requests received
@@ -206,6 +177,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
   }
 
   private OMResponse internalProcessRequest(OMRequest request) throws ServiceException {
+    OMClientRequest omClientRequest = null;
     boolean s3Auth = false;
 
     try {
@@ -257,67 +229,13 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
       }
 
       // check retry cache
-      final OMResponse cached = omRatisServer.checkRetryCache();
+      final OMResponse cached = omRatisServer.checkRetryCache(bucketRaftGroupId);
       if (cached != null) {
         return cached;
       }
 
       this.lastRequestToSubmit = request;
-//      return ozoneManager.getOmExecutionFlow().submit(request, true);
-
-      OMRequest requestToSubmit;
-      try {
-        omClientRequest = createClientRequest(request, ozoneManager);
-        // check retry cache
-        String volumeName = omClientRequest.getWriteReqVolumeName();
-        String bucketName = omClientRequest.getWriteReqBucketName();
-
-        LOG.trace("Continue internal processing request {}, bucket {}", request.getCmdType(), bucketName);
-        // To validate credentials we have already verified leader status.
-        // This will skip of checking leader status again if request has S3Auth.
-        if (!s3Auth) {
-          if (request.hasRaftGroupId()) {
-            OzoneManagerRatisUtils.checkLeaderStatus(omClientRequest.getWriteRaftGroup(), ozoneManager);
-          } else {
-            OzoneManagerRatisUtils.checkLeaderStatus(volumeName, bucketName, ozoneManager);
-          }
-        }
-        // TODO: Note: Due to HDDS-6055, createClientRequest() could now
-        //  return null, which triggered the findbugs warning.
-        //  Added the assertion.
-        assert (omClientRequest != null);
-        requestToSubmit = preExecute(omClientRequest);
-      } catch (IOException ex) {
-        if (omClientRequest != null) {
-          omClientRequest.handleRequestFailure(ozoneManager);
-        }
-        return createErrorResponse(request, ex);
-      }
-      // TODO: Note: Due to HDDS-6055, createClientRequest() could now
-      //  return null, which triggered the findbugs warning.
-      //  Added the assertion.
-      assert (omClientRequest != null);
-      requestToSubmit = preExecute(omClientRequest);
-
-      final OMResponse response;
-      if (omClientRequest.getWriteReqBucketName() != null && ozoneManager.isMultiRaftEnabled()) {
-        try {
-          ozoneManager.getSafeModeManager().checkSafeMode();
-        } catch (OMInSafeModeException ex) {
-          LOG.error("OM is in safe mode, cannot process request: {}", request.getCmdType(), ex);
-          throw new ServiceException(ex);
-        }
-        LOG_MULTI_RAFT.debug("Handle {} request for bucket {}/{}", requestToSubmit.getCmdType(),
-            omClientRequest.getWriteReqVolumeName(), omClientRequest.getWriteReqBucketName());
-        response = omRatisServer.submitBucketWriteRequest(requestToSubmit, bucketRaftGroupId);
-      } else {
-        response = omRatisServer.submitRequest(requestToSubmit);
-      }
-
-      if (!response.getSuccess()) {
-        omClientRequest.handleRequestFailure(ozoneManager);
-      }
-      return response;
+      return ozoneManager.getOmExecutionFlow().submit(request, omClientRequest, bucketRaftGroupId, true);
     } catch (IOException ex) {
       if (omClientRequest != null) {
         omClientRequest.handleRequestFailure(ozoneManager);
@@ -343,7 +261,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
       throws ServiceException {
     // Read from leader or followers using linearizable read
     if (ozoneManager.getConfig().isFollowerReadLocalLeaseEnabled() &&
-        allowFollowerReadLocalLease(omRatisServer.getServerDivision(),
+        allowFollowerReadLocalLease(omRatisServer.getServerDivision(omRatisServer.getCurrentRaftGroupId()),
             ozoneManager.getConfig().getFollowerReadLocalLeaseLagLimit(),
             ozoneManager.getConfig().getFollowerReadLocalLeaseTimeMs())) {
       ozoneManager.getMetrics().incNumFollowerReadLocalLeaseSuccess();
@@ -354,7 +272,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
     // === 1. Follower linearizable read ===
     if (raftServerStatus == NOT_LEADER && omRatisServer.isLinearizableRead()) {
       ozoneManager.getMetrics().incNumLinearizableRead();
-      return ozoneManager.getOmExecutionFlow().submit(request, false);
+      return ozoneManager.getOmExecutionFlow().submit(request, null, omRatisServer.getCurrentRaftGroupId(), false);
     }
     // === 2. Leader local read (skip ReadIndex if allowed) ===
     if (raftServerStatus == LEADER_AND_READY || request.getCmdType().equals(PrepareStatus)) {
@@ -366,7 +284,7 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
       // otherwise use linearizable path when enabled
       if (omRatisServer.isLinearizableRead()) {
         ozoneManager.getMetrics().incNumLinearizableRead();
-        return ozoneManager.getOmExecutionFlow().submit(request, false);
+        return ozoneManager.getOmExecutionFlow().submit(request, null, omRatisServer.getCurrentRaftGroupId(), false);
       }
 
       // fallback to local read
@@ -424,26 +342,6 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
     } else {
       return createLeaderNotReadyException();
     }
-  }
-
-  private ServiceException createNotLeaderException() {
-    RaftPeerId raftPeerId = omRatisServer.getRaftPeerId();
-    RaftPeerId raftLeaderId = null;
-    String raftLeaderAddress = null;
-    RaftPeer leader = omRatisServer.getLeader();
-    if (null != leader) {
-      raftLeaderId = leader.getId();
-      raftLeaderAddress = omRatisServer.getRaftLeaderAddress(leader);
-    }
-
-    OMNotLeaderException notLeaderException =
-        raftLeaderId == null ? new OMNotLeaderException(raftPeerId, omRatisServer.getCurrentRaftGroupId()) :
-            new OMNotLeaderException(raftPeerId, raftLeaderId,
-                raftLeaderAddress, omRatisServer.getCurrentRaftGroupId());
-
-    LOG.debug(notLeaderException.getMessage());
-
-    return new ServiceException(notLeaderException);
   }
 
   private ServiceException createLeaderNotReadyException() {

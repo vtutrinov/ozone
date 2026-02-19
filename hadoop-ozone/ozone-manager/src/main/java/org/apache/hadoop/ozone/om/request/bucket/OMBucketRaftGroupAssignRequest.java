@@ -2,6 +2,7 @@ package org.apache.hadoop.ozone.om.request.bucket;
 
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
 import org.apache.hadoop.ozone.om.OzoneManager;
+import org.apache.hadoop.ozone.om.execution.flowcontrol.ExecutionContext;
 import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
 import org.apache.hadoop.ozone.om.request.util.OmResponseUtil;
@@ -30,14 +31,15 @@ public class OMBucketRaftGroupAssignRequest extends OMClientRequest {
 
   @Override
   public OMClientResponse validateAndUpdateCache(OzoneManager ozoneManager,
-                                                 long trxnLogIndex) {
+                                                 ExecutionContext context) {
     try {
       BucketRaftGroupAssignRequest assignRequest = getOmRequest().getBucketRaftGroupAssignRequest();
       String bucketPath = assignRequest.getBucketPath();
       HddsProtos.UUID raftGroupProto = assignRequest.getRaftGroupId();
       UUID raftGroupUUID = new UUID(raftGroupProto.getMostSigBits(),
           raftGroupProto.getLeastSigBits());
-      LOG.info("MULTIRAFT: assign raft group: {} to bucket: {}, trxId: {}", raftGroupUUID, bucketPath, trxnLogIndex);
+      LOG.info("MULTIRAFT: assign raft group: {} to bucket: {}, trxId: {}", raftGroupUUID, bucketPath,
+          context.getIndex());
       ozoneManager.getOmRaftGroupManager().defineAndGetRaftGroupForBucket(bucketPath, raftGroupUUID);
       OmBucketInfo bucketInfo = ozoneManager.getMetadataManager().getBucketTable().get(bucketPath);
       bucketInfo.setRaftGroup(raftGroupUUID);

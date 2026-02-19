@@ -137,10 +137,6 @@ public class MultipartUploadCleanupService extends BackgroundService {
     return !suspended.get() && ozoneManager.isLeaderReady();
   }
 
-  private boolean isRatisEnabled() {
-    return ozoneManager.isRatisEnabled();
-  }
-
   private final class MultipartUploadCleanupTask implements BackgroundTask {
 
     @Override
@@ -201,11 +197,7 @@ public class MultipartUploadCleanupService extends BackgroundService {
 
     private void submitRequest(OMRequest omRequest) {
       try {
-        if (isRatisEnabled()) {
-          OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, runCount.get());
-        } else {
-          ozoneManager.getOmServerProtocol().submitRequest(null, omRequest);
-        }
+        OzoneManagerRatisUtils.submitRequest(ozoneManager, omRequest, clientId, runCount.get());
       } catch (ServiceException e) {
         LOG.error("Expired multipart info delete request failed. " +
                 "Will retry at next run.", e);

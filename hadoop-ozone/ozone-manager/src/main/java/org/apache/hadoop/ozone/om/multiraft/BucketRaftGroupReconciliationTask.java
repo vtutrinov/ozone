@@ -1,15 +1,18 @@
 package org.apache.hadoop.ozone.om.multiraft;
 
+import org.apache.hadoop.hdds.protocol.SecretKeyProtocol;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
+import org.apache.hadoop.hdds.protocolPB.SecretKeyProtocolClientSideTranslatorPB;
 import org.apache.hadoop.hdds.ratis.RatisHelper;
 import org.apache.hadoop.hdds.scm.ScmConfigKeys;
+import org.apache.hadoop.hdds.security.symmetric.DefaultSecretKeyClient;
+import org.apache.hadoop.hdds.security.symmetric.SecretKeyClient;
 import org.apache.hadoop.hdds.utils.BackgroundTask;
 import org.apache.hadoop.hdds.utils.BackgroundTaskResult;
+import org.apache.hadoop.hdds.utils.HddsServerUtil;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.ozone.OmUtils;
-import org.apache.hadoop.ozone.client.OzoneClient;
-import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
@@ -88,7 +91,7 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
                   .filter(omNodeDetails -> omNodeDetails.getNodeId().equals(raftGroupLeaderId.toString()))
                   .findFirst().get().getHostAddress();
 
-              try (OzoneClient omClient = OzoneClientFactory.getRpcClient(omHost,
+              try (org.apache.hadoop.ozone.client.OzoneClient omClient = org.apache.hadoop.ozone.client.OzoneClientFactory.getRpcClient(omHost,
                   OmUtils.getOmRpcPort(ozoneManager.getConfiguration()), ozoneManager.getConfiguration())) {
                 UUID raftGroupUuid = groupId.getUuid();
                 OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse raftGroupHealthState;
@@ -169,7 +172,7 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
                 .setCmdType(BucketRaftGroupsStateChanged)
                 .setClientId(omRatisServer.getCurrentClientId().toString())
                 .build();
-            omRatisServer.submitRequest(omRequest);
+            omRatisServer.submitRequest(omRequest, true);
           } finally {
             RPC.Server.getCurCall().remove();
           }
@@ -183,16 +186,15 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
 
   private void deleteRaftGroup(RaftGroup raftGroup) {
     String rpcType = ozoneManager.getConfiguration()
-        .get(ScmConfigKeys.DFS_CONTAINER_RATIS_RPC_TYPE_KEY,
-            ScmConfigKeys.DFS_CONTAINER_RATIS_RPC_TYPE_DEFAULT);
+        .get(ScmConfigKeys.HDDS_CONTAINER_RATIS_RPC_TYPE_KEY,
+            ScmConfigKeys.HDDS_CONTAINER_RATIS_RPC_TYPE_DEFAULT);
     RetryPolicy retryPolicy = RatisHelper.createRetryPolicy(ozoneManager.getConfiguration());
 
     GrpcTlsConfig tlsConfig = null;
     if (ozoneManager.isSecurityEnabled()) {
       try {
-        tlsConfig =
-            new GrpcTlsConfig(ozoneManager.getCertificateClient().getClientKeyStoresFactory().getKeyManagers()[0],
-                ozoneManager.getCertificateClient().getClientKeyStoresFactory().getTrustManagers()[0], true);
+        tlsConfig = new GrpcTlsConfig(ozoneManager.getCertificateClient().getKeyManager(),
+                ozoneManager.getCertificateClient().getTrustManager(), true);
       } catch (IOException ex) {
         LOG.error("Can't retrieve cert key store factory", ex);
       }

@@ -910,20 +910,25 @@ public abstract class OMKeyRequest extends OMClientRequest {
    * Return bucket info for the specified bucket.
    */
   @Nullable
-  public static OmBucketInfo getBucketInfo(OMMetadataManager omMetadataManager,
+  public OmBucketInfo getBucketInfo(OMMetadataManager omMetadataManager,
       String volume, String bucket) {
-    String bucketKey = omMetadataManager.getBucketKey(volume, bucket);
-
-    CacheValue<OmBucketInfo> value = omMetadataManager.getBucketTable()
-        .getCacheValue(new CacheKey<>(bucketKey));
-
-    OmBucketInfo omBucketInfo = value != null ? value.getCacheValue() : null;
+    OmBucketInfo omBucketInfo = getOmBucketInfo(omMetadataManager, volume, bucket);
 
     if (omBucketInfo != null) {
       omBucketInfo.setRaftGroup(getWriteRaftGroup().getUuid());
     }
 
     return omBucketInfo;
+  }
+
+  public static OmBucketInfo getOmBucketInfo(OMMetadataManager omMetadataManager,
+                                             String volume, String bucket) {
+    String bucketKey = omMetadataManager.getBucketKey(volume, bucket);
+
+    CacheValue<OmBucketInfo> value = omMetadataManager.getBucketTable()
+        .getCacheValue(new CacheKey<>(bucketKey));
+
+    return value != null ? value.getCacheValue() : null;
   }
 
   /**
