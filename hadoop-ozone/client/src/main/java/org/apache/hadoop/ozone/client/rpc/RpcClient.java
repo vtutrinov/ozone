@@ -172,10 +172,10 @@ import org.apache.hadoop.ozone.om.protocolPB.OmTransport;
 import org.apache.hadoop.ozone.om.protocolPB.OmTransportFactory;
 import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerClientProtocol;
 import org.apache.hadoop.ozone.om.protocolPB.OzoneManagerProtocolClientSideTranslatorPB;
-import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateRateLimiterResponse;
-import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteRateLimiterResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketRaftGroupAssignRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.BucketRaftGroupAssignResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.CreateRateLimiterResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.DeleteRateLimiterResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.ListRateLimiterResponse;
@@ -1679,7 +1679,6 @@ public class RpcClient implements ClientProtocol {
     for (OmKeyLocationInfo locationInfo : keyLocationInfos) {
       Map<DatanodeDetails, OzoneInputStream> blocks = new HashMap<>();
 
-
       Pipeline pipelineBefore = locationInfo.getPipeline();
       List<DatanodeDetails> datanodes = pipelineBefore.getNodes();
 
@@ -2986,6 +2985,7 @@ public class RpcClient implements ClientProtocol {
     return ozoneManagerClient.listRateLimiter(volumeName, bucketName);
   }
 
+  @Override
   public BucketRaftGroupAssignResponse assignBucketRaftGroup(BucketRaftGroupAssignRequest request) throws IOException {
     return ozoneManagerClient.assignBucketRaftGroup(request);
   }

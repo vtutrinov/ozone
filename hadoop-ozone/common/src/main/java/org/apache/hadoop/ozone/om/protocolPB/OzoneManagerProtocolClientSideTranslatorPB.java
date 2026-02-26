@@ -2908,6 +2908,7 @@ public final class OzoneManagerProtocolClientSideTranslatorPB
     return handleError(submitRequest(omRequest)).getListRateLimiterResponse();
   }
 
+  @Override
   public BucketRaftGroupAssignResponse assignBucketRaftGroup(
       OzoneManagerProtocolProtos.BucketRaftGroupAssignRequest request) throws IOException {
     OzoneManagerProtocolProtos.OMRequest omRequest =
