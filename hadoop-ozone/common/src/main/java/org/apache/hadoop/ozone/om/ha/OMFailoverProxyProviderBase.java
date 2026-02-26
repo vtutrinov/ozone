@@ -92,7 +92,7 @@ public abstract class OMFailoverProxyProviderBase<T> implements
   private Set<String> accessControlExceptionOMs = new HashSet<>();
   private boolean performFailoverDone;
   private ThreadLocal<OMRequest> omRequest;
-  private ConcurrentMap<String, ProxyInfo<T>> bucketToProxyMap = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, ProxyInfo<T>> bucketToProxyMap = new ConcurrentHashMap<>();
 
   public OMFailoverProxyProviderBase(ConfigurationSource configuration,
                                      String omServiceId,
@@ -354,7 +354,7 @@ public abstract class OMFailoverProxyProviderBase<T> implements
   abstract ProxyInfo<T> getProxy(String omNodeId);
 
   public synchronized boolean setOmNodeToHandleRequestThroughRaftGroup(String bucket, String omNodeId) {
-    if (bucketToProxyMap != null && omProxies.containsKey(omNodeId)) {
+    if (omProxies.containsKey(omNodeId)) {
       bucketToProxyMap.put(bucket, getProxy(omNodeId));
       return true;
     }
