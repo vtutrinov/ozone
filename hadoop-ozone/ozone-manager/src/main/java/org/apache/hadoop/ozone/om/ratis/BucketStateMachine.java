@@ -292,7 +292,8 @@ public class BucketStateMachine extends BaseStateMachine {
         .setS3SecretManager(ozoneManager.getS3SecretManager())
         .setThreadPrefix(threadNamePrefix)
         .enableTracing(TracingUtil.isTracingEnabled(ozoneManager.getConfiguration()))
-        .build();
+        .build()
+        .start();
   }
 
   /**

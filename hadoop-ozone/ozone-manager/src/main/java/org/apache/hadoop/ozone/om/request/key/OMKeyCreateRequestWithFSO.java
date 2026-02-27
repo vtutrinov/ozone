@@ -137,7 +137,9 @@ public class OMKeyCreateRequestWithFSO extends OMKeyCreateRequest {
       // do open key
       OmBucketInfo bucketInfo = omMetadataManager.getBucketTable().get(
               omMetadataManager.getBucketKey(volumeName, bucketName));
-      bucketInfo.setRaftGroup(getWriteRaftGroup().getUuid());
+      if (getWriteRaftGroup() != null) {
+        bucketInfo.setRaftGroup(getWriteRaftGroup().getUuid());
+      }
 
       // add all missing parents to dir table
       missingParentInfos = getAllMissingParentDirInfo(

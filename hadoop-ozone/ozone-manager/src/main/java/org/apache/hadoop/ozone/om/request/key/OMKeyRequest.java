@@ -914,7 +914,7 @@ public abstract class OMKeyRequest extends OMClientRequest {
       String volume, String bucket) {
     OmBucketInfo omBucketInfo = getOmBucketInfo(omMetadataManager, volume, bucket);
 
-    if (omBucketInfo != null) {
+    if (omBucketInfo != null && getWriteRaftGroup() != null) {
       omBucketInfo.setRaftGroup(getWriteRaftGroup().getUuid());
     }
 
