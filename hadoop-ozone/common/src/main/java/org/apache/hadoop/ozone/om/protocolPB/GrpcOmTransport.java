@@ -239,8 +239,7 @@ public class GrpcOmTransport implements OmTransport {
       } catch (StatusRuntimeException e) {
         LOG.error("Failed to submit request", e);
         if (e.getStatus().getCode() == Status.Code.UNAVAILABLE) {
-          if (e.getCause() != null &&
-              e.getCause() instanceof javax.net.ssl.SSLHandshakeException) {
+          if (e.getCause() instanceof javax.net.ssl.SSLHandshakeException) {
             throw new OMException(SSL_CONNECTION_FAILURE);
           }
           resultCode = ResultCodes.TIMEOUT;

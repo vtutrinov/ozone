@@ -372,12 +372,10 @@ public abstract class OMFailoverProxyProviderBase<T> implements
   }
 
   public String getWriteRequestBucketPath(OMRequest request) {
-    String bucketPath = null;
     switch (request.getCmdType()) {
     case RecoverLease:
-      bucketPath = request.getRecoverLeaseRequest().getVolumeName() + "/" +
+      return request.getRecoverLeaseRequest().getVolumeName() + "/" +
           request.getRecoverLeaseRequest().getBucketName();
-      break;
     case CreateDirectory:
       OzoneManagerProtocolProtos.KeyArgs keyArgs = request.getCreateDirectoryRequest().getKeyArgs();
       return keyArgs.getVolumeName() + "/" + keyArgs.getBucketName();
@@ -416,18 +414,13 @@ public abstract class OMFailoverProxyProviderBase<T> implements
       return setTimesKeyArgs.getVolumeName() + "/" + setTimesKeyArgs.getBucketName();
     case RenameKeys:
       OzoneManagerProtocolProtos.RenameKeysArgs renameKeysArgs = request.getRenameKeysRequest().getRenameKeysArgs();
-      bucketPath = renameKeysArgs.getVolumeName() + "/" +
-          renameKeysArgs.getBucketName();
-      break;
+      return renameKeysArgs.getVolumeName() + "/" + renameKeysArgs.getBucketName();
     case DeleteKeys:
       OzoneManagerProtocolProtos.DeleteKeyArgs deleteKeysArgs = request.getDeleteKeysRequest().getDeleteKeys();
-      bucketPath = deleteKeysArgs.getVolumeName() + "/" +
-          deleteKeysArgs.getBucketName();
-      break;
+      return deleteKeysArgs.getVolumeName() + "/" + deleteKeysArgs.getBucketName();
     default:
-      bucketPath = null;
+      return null;
     }
-    return bucketPath;
   }
 
   /**
