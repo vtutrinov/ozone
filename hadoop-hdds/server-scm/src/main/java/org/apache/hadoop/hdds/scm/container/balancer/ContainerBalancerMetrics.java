@@ -35,6 +35,7 @@ public final class ContainerBalancerMetrics {
       ContainerBalancerMetrics.class.getSimpleName();
 
   private final MetricsSystem ms;
+  private final ContainerBalancer containerBalancer;
 
   @Metric(about = "Amount of Gigabytes that Container Balancer moved" +
       " in the latest iteration.")
@@ -92,21 +93,21 @@ public final class ContainerBalancerMetrics {
   @Metric(about = "Total number of container moves that were scheduled across" +
       " all iterations of Container Balancer.")
   private MutableCounterLong numContainerMovesScheduled;
-
   /**
    * Create and register metrics named {@link ContainerBalancerMetrics#NAME}
    * for {@link ContainerBalancer}.
    *
    * @return {@link ContainerBalancerMetrics}
    */
-  public static ContainerBalancerMetrics create() {
+  public static ContainerBalancerMetrics create(ContainerBalancer containerBalancer) {
     MetricsSystem ms = OzoneMetricsSystem.instance();
     return ms.register(NAME, "Container Balancer Metrics",
-        new ContainerBalancerMetrics(ms));
+        new ContainerBalancerMetrics(ms, containerBalancer));
   }
 
-  private ContainerBalancerMetrics(MetricsSystem ms) {
+  private ContainerBalancerMetrics(MetricsSystem ms, ContainerBalancer containerBalancer) {
     this.ms = ms;
+    this.containerBalancer = containerBalancer;
   }
 
   /**
@@ -355,5 +356,47 @@ public final class ContainerBalancerMetrics {
   public void resetNumContainerMovesFailedInLatestIteration() {
     numContainerMovesFailedInLatestIteration.incr(
         -getNumContainerMovesFailedInLatestIteration());
+  }
+
+  @Metric(about = "Status of the Container Balancer: 2 = Running, 1 = Stopping, 0 = Stopped")
+  public int getBalancerStatus() {
+    return (this.containerBalancer != null) ?
+            2 - containerBalancer.getBalancerStatus().ordinal() : -1;
+  }
+
+  @Metric(about = "Threshold for Container Balancer to run.")
+  public double getThreshold() {
+    return (this.containerBalancer != null && this.containerBalancer.getBalancerConfiguration() != null) ?
+            containerBalancer.getBalancerConfiguration().getThreshold() : 0;
+  }
+
+  @Metric(about = "Number of iterations for Container Balancer to run.")
+  public int getIterations() {
+    return (this.containerBalancer != null && this.containerBalancer.getBalancerConfiguration() != null) ?
+            containerBalancer.getBalancerConfiguration().getIterations() : 0;
+  }
+
+  @Metric(about = "Number of datanodes to involve per iteration.")
+  public int getMaxDatanodesPercentageToInvolvePerIteration() {
+    return (this.containerBalancer != null && this.containerBalancer.getBalancerConfiguration() != null) ?
+            containerBalancer.getBalancerConfiguration().getMaxDatanodesPercentageToInvolvePerIteration() : 0;
+  }
+
+  @Metric(about = "Max total data size allowed to be moved per iteration.")
+  public long getMaxSizeToMovePerIteration() {
+    return (this.containerBalancer != null && this.containerBalancer.getBalancerConfiguration() != null) ?
+            containerBalancer.getBalancerConfiguration().getMaxSizeToMovePerIteration() : 0L;
+  }
+
+  @Metric(about = "Max data size a single target datanode is allowed to receive per iteration.")
+  public long getMaxSizeEnteringTarget() {
+    return (this.containerBalancer != null && this.containerBalancer.getBalancerConfiguration() != null) ?
+            containerBalancer.getBalancerConfiguration().getMaxSizeEnteringTarget() : 0L;
+  }
+
+  @Metric(about = "Max data size a single source datanode is allowed to send per iteration.")
+  public long getMaxSizeLeavingSource() {
+    return (this.containerBalancer != null && this.containerBalancer.getBalancerConfiguration() != null) ?
+            containerBalancer.getBalancerConfiguration().getMaxSizeLeavingSource() : 0L;
   }
 }
