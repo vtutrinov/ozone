@@ -562,6 +562,29 @@ public final class OzoneConfigKeys {
       "ozone.https.client.need-auth";
   public static final boolean OZONE_CLIENT_HTTPS_NEED_AUTH_DEFAULT = false;
 
+  public static final String OZONE_HTTPS_CERT_VALIDATION_URL_KEY =
+      "ozone.https.cert.validation.url";
+  public static final String OZONE_HTTPS_CERT_VALIDATION_URL_DEFAULT = "";
+
+  public static final String OZONE_HTTPS_CERT_VALIDATION_ISSUER_CERT_PATH_KEY =
+      "ozone.https.cert.validation.issuer.cert.path";
+  public static final String
+      OZONE_HTTPS_CERT_VALIDATION_ISSUER_CERT_PATH_DEFAULT = "";
+
+  public static final String OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_KEY =
+      "ozone.https.cert.validation.cache.ttl";
+  public static final long OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_DEFAULT = 300;
+
+  public static final String OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_KEY =
+      "ozone.https.cert.validation.connect.timeout";
+  public static final int
+      OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_DEFAULT = 5000;
+
+  public static final String OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_KEY =
+      "ozone.https.cert.validation.read.timeout";
+  public static final int
+      OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_DEFAULT = 5000;
+
   public static final String OZONE_OM_KEYNAME_CHARACTER_CHECK_ENABLED_KEY =
       "ozone.om.keyname.character.check.enabled";
   public static final boolean OZONE_OM_KEYNAME_CHARACTER_CHECK_ENABLED_DEFAULT =

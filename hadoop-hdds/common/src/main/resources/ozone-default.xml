@@ -4456,5 +4456,54 @@
     <value>100</value>
     <tag>OM</tag>
     <description>Time to sleep before next attempt to acquire bucket raft group assignment lock</description>
+  </property>>
+  <property>
+    <name>ozone.https.cert.validation.url</name>
+    <value/>
+    <tag>OM,SCM,DATANODE,OZONE,S3GATEWAY</tag>
+    <description>
+      OCSP responder URL for client certificate revocation checking.
+      When set, the filter sends an OCSP request to verify the
+      certificate status. If empty, the URL is extracted from the
+      certificate's Authority Information Access (AIA) extension.
+      If both are unavailable, OCSP validation is skipped.
+    </description>
+  </property>
+  <property>
+    <name>ozone.https.cert.validation.issuer.cert.path</name>
+    <value/>
+    <tag>OM,SCM,DATANODE,OZONE,S3GATEWAY</tag>
+    <description>
+      Path to the issuer (CA) certificate file in PEM format, used to
+      build OCSP requests. If not set, the issuer certificate is
+      extracted from the client's TLS certificate chain.
+    </description>
+  </property>
+  <property>
+    <name>ozone.https.cert.validation.cache.ttl</name>
+    <value>300</value>
+    <tag>OM,SCM,DATANODE,OZONE,S3GATEWAY</tag>
+    <description>
+      TTL in seconds for caching certificate validation results from the
+      remote REST endpoint. Default is 300 (5 minutes).
+    </description>
+  </property>
+  <property>
+    <name>ozone.https.cert.validation.connect.timeout</name>
+    <value>5000</value>
+    <tag>OM,SCM,DATANODE,OZONE,S3GATEWAY</tag>
+    <description>
+      Connection timeout in milliseconds for the certificate validation
+      REST endpoint. Default is 5000 (5 seconds).
+    </description>
+  </property>
+  <property>
+    <name>ozone.https.cert.validation.read.timeout</name>
+    <value>5000</value>
+    <tag>OM,SCM,DATANODE,OZONE,S3GATEWAY</tag>
+    <description>
+      Read timeout in milliseconds for the certificate validation
+      REST endpoint. Default is 5000 (5 seconds).
+    </description>
   </property>
 </configuration>

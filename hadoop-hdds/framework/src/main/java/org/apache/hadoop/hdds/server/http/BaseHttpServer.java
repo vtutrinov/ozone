@@ -52,6 +52,16 @@ import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ADMINISTRATORS;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ADMINISTRATORS_GROUPS;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_CLIENT_HTTPS_NEED_AUTH_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_CLIENT_HTTPS_NEED_AUTH_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_DEFAULT;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_DEFAULT;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_ISSUER_CERT_PATH_DEFAULT;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_ISSUER_CERT_PATH_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_DEFAULT;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_URL_DEFAULT;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_URL_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_SSL_ALLOWED_CN_LIST;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_SSL_ALLOWED_CN_LIST_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTP_SECURITY_ENABLED_DEFAULT;
@@ -63,6 +73,7 @@ import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_ENABLED_KEY
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SERVER_HTTPS_KEYPASSWORD_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SERVER_HTTPS_KEYSTORE_PASSWORD_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SERVER_HTTPS_TRUSTSTORE_PASSWORD_KEY;
+import static org.apache.hadoop.security.ssl.SSLFactory.SSL_SERVER_NEED_CLIENT_AUTH;
 
 import org.eclipse.jetty.webapp.WebAppContext;
 import org.slf4j.Logger;
@@ -151,6 +162,24 @@ public abstract class BaseHttpServer {
         Map<String, String> certVerifyAgentParams = new HashMap<>();
         certVerifyAgentParams.put("cn", conf.get(OZONE_HTTPS_SSL_ALLOWED_CN_LIST,
              OZONE_HTTPS_SSL_ALLOWED_CN_LIST_DEFAULT));
+        certVerifyAgentParams.put("validationUrl",
+            conf.get(OZONE_HTTPS_CERT_VALIDATION_URL_KEY,
+                OZONE_HTTPS_CERT_VALIDATION_URL_DEFAULT));
+        certVerifyAgentParams.put("issuerCertPath",
+            conf.get(OZONE_HTTPS_CERT_VALIDATION_ISSUER_CERT_PATH_KEY,
+                OZONE_HTTPS_CERT_VALIDATION_ISSUER_CERT_PATH_DEFAULT));
+        certVerifyAgentParams.put("cacheTtl",
+            String.valueOf(conf.getLong(
+                OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_KEY,
+                OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_DEFAULT)));
+        certVerifyAgentParams.put("connectTimeout",
+            String.valueOf(conf.getInt(
+                OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_KEY,
+                OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_DEFAULT)));
+        certVerifyAgentParams.put("readTimeout",
+            String.valueOf(conf.getInt(
+                OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_KEY,
+                OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_DEFAULT)));
         httpServer.addFilter("CertVerifyAgent", CertVerifyAgentFilter.class.getName(), certVerifyAgentParams);
       }
 
@@ -389,6 +418,7 @@ public abstract class BaseHttpServer {
 
   public static HttpServer2.Builder loadSslConfToHttpServerBuilder(
       HttpServer2.Builder builder, ConfigurationSource sslConf) {
+    builder.setSSLConf(sslConf);
     return builder
         .needsClientAuth(
             sslConf.getBoolean(OZONE_CLIENT_HTTPS_NEED_AUTH_KEY,
@@ -459,6 +489,7 @@ public abstract class BaseHttpServer {
     boolean requireClientAuth = conf.getBoolean(
         OZONE_CLIENT_HTTPS_NEED_AUTH_KEY, OZONE_CLIENT_HTTPS_NEED_AUTH_DEFAULT);
     sslConf.setBoolean(OZONE_CLIENT_HTTPS_NEED_AUTH_KEY, requireClientAuth);
+    sslConf.setBoolean(SSL_SERVER_NEED_CLIENT_AUTH, requireClientAuth);
     return new LegacyHadoopConfigurationSource(sslConf);
   }
 
