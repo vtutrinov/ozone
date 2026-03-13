@@ -1,6 +1,7 @@
 package org.apache.hadoop.ozone.om;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ServiceException;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
@@ -35,6 +36,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME;
@@ -133,14 +135,18 @@ public class OmRaftGroupManager {
     );
   }
 
+  private final AtomicInteger bucketRaftGroupAssignmentCount = new AtomicInteger(0);
+
   public void reset() {
     bucketRaftGroups.clear();
     bucketsPerRaftGroupCounter.clear();
+    bucketRaftGroupAssignmentCount.set(0);
   }
 
   public void defineAndGetRaftGroupForBucket(String bucketPath, UUID raftGroupUUID) {
     bucketRaftGroupWriteLock.lock();
     try {
+      bucketRaftGroupAssignmentCount.incrementAndGet();
       bucketRaftGroups.putIfAbsent(bucketPath, raftGroupUUID);
       incrRaftGroupUsageCounter(RaftGroupId.valueOf(raftGroupUUID));
     } finally {
@@ -217,14 +223,23 @@ public class OmRaftGroupManager {
       awaitBucketRaftGroupsInitialization();
       acquireBucketRaftGroupAssignmentLock();
 
+      UUID existingAfterBarrier = bucketRaftGroups.get(bucketPath);
+      if (existingAfterBarrier != null) {
+        return RaftGroupId.valueOf(existingAfterBarrier);
+      }
+
       UUID selected = selectLessLoadedRaftGroup();
       assignRaftGroupToBucket(bucketPath, selected);
-      releaseBucketRaftGroupAssignmentWriteLockByRaft();
 
       return RaftGroupId.valueOf(selected);
     } catch (Exception e) {
       throw new RuntimeException(e);
     } finally {
+      try {
+        releaseBucketRaftGroupAssignmentWriteLockByRaft();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
       synchronized (myLock) {
         bucketAssignmentLocks.remove(bucketPath);
         myLock.notifyAll();
@@ -248,7 +263,8 @@ public class OmRaftGroupManager {
     }
   }
 
-  private void releaseBucketRaftGroupAssignmentWriteLockByRaft() throws IOException {
+  @VisibleForTesting
+  void releaseBucketRaftGroupAssignmentWriteLockByRaft() throws IOException {
     OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
 
     RaftPeerId mainRaftGroupLeaderPeerId = omRatisServer.getServer()
@@ -268,7 +284,8 @@ public class OmRaftGroupManager {
     getOrCreateOmTransport(omNode.getNodeId()).submitRequest(omRequest, omNode.getNodeId());
   }
 
-  private boolean acquireBucketRaftGroupAssignmentWriteLockByRaft() throws IOException {
+  @VisibleForTesting
+  boolean acquireBucketRaftGroupAssignmentWriteLockByRaft() throws IOException {
     OzoneManagerRatisServer omRatisServer = ozoneManager.getOmRatisServer();
 
     RaftPeerId mainRaftGroupLeaderPeerId = omRatisServer.getServer()
@@ -397,7 +414,8 @@ public class OmRaftGroupManager {
     orCreateOmTransport.submitRequest(omRequest, omNode.getNodeId());
   }
 
-  private void awaitBucketRaftGroupsInitialization() {
+  @VisibleForTesting
+  void awaitBucketRaftGroupsInitialization() {
     while (bucketsPerRaftGroupCounter.size() < omRaftGroupCount) {
       try {
         LOG.info("Waiting for group initiating {}-{}. {}", bucketsPerRaftGroupCounter.size(), omRaftGroupCount,
@@ -418,6 +436,11 @@ public class OmRaftGroupManager {
 
   public Map<String, UUID> getBucketRaftGroups() {
     return bucketRaftGroups;
+  }
+
+  @VisibleForTesting
+  ConcurrentMap<String, Object> getBucketAssignmentLocks() {
+    return bucketAssignmentLocks;
   }
 
   public int getOmRaftGroupCount() {
@@ -450,6 +473,10 @@ public class OmRaftGroupManager {
             .map(Map.Entry::getKey)
             .forEach(bucketRaftGroups::remove);
     bucketsPerRaftGroupCounter.remove(raftGroupId.getUuid());
+  }
+
+  public int getBucketRaftGroupAssignmentCount() {
+    return bucketRaftGroupAssignmentCount.get();
   }
 
   public boolean acquireBucketRaftGroupAssignmentWriteLock() {

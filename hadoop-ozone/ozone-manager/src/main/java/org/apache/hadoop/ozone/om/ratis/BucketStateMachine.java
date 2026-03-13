@@ -199,7 +199,6 @@ public class BucketStateMachine extends BaseStateMachine {
           // So, to avoid these kind of issue, we should terminate OM here.
           if (omResponse.getStatus() == INTERNAL_ERROR) {
             terminate(omResponse, OMException.ResultCodes.INTERNAL_ERROR);
-            terminate(omResponse, OMException.ResultCodes.INTERNAL_ERROR);
           } else if (omResponse.getStatus() == METADATA_ERROR) {
             terminate(omResponse, OMException.ResultCodes.METADATA_ERROR);
           }
