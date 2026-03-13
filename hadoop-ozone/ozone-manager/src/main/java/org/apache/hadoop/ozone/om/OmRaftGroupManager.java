@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.hadoop.ozone.om;
 
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME;
@@ -25,6 +24,7 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUP
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
@@ -43,6 +43,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.hadoop.hdds.HddsUtils;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
@@ -89,6 +90,8 @@ public class OmRaftGroupManager {
 
   // raft group assignments in progress on this OM, by bucket: concurrent writers of a bucket wait for the first one
   private final Map<String, CompletableFuture<RaftGroupId>> bucketAssignments = new ConcurrentHashMap<>();
+  // number of BucketRaftGroupAssign requests applied by this OM (tests)
+  private final AtomicInteger bucketRaftGroupAssignmentCount = new AtomicInteger(0);
   // the cluster wide assignment lock, set and reset through the main raft group on every OM
   private final AtomicBoolean bucketRaftGroupAssignmentInProgress = new AtomicBoolean(false);
 
@@ -138,6 +141,7 @@ public class OmRaftGroupManager {
   }
 
   public void reset() {
+    bucketRaftGroupAssignmentCount.set(0);
     bucketRaftGroups.clear();
     bucketsPerRaftGroupCounter.clear();
   }
@@ -165,6 +169,7 @@ public class OmRaftGroupManager {
    * @return the raft group of the bucket
    */
   public UUID defineRaftGroupForBucket(String bucketPath, UUID raftGroupUUID) {
+    bucketRaftGroupAssignmentCount.incrementAndGet();
     UUID existing = bucketRaftGroups.putIfAbsent(bucketPath, raftGroupUUID);
     if (existing != null) {
       return existing;
@@ -199,7 +204,7 @@ public class OmRaftGroupManager {
     if (activeAssignment != null) {
       // another handler thread is assigning this bucket
       try {
-        return activeAssignment.get(ASSIGNMENT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        return activeAssignment.get(assignmentLockMaxAwaitTime + ASSIGNMENT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         throw new IllegalStateException(e);
@@ -213,20 +218,25 @@ public class OmRaftGroupManager {
       UUID raftGroup = bucketRaftGroups.get(bucketPath);
       if (raftGroup == null) {
         awaitBucketRaftGroupsInitialization();
-        acquireBucketRaftGroupAssignmentWriteLockByRaft();
         try {
+          acquireBucketRaftGroupAssignmentLock();
           // the bucket may have been assigned by another OM while waiting for the lock
-          if (!bucketRaftGroups.containsKey(bucketPath)) {
+          raftGroup = bucketRaftGroups.get(bucketPath);
+          if (raftGroup == null) {
             UUID lessLoadedRaftGroup = selectLessLoadedRaftGroup();
             LOG.info("Raft group {} selected to handle write requests to {}", lessLoadedRaftGroup, bucketPath);
-            assignRaftGroupToBucket(bucketPath, lessLoadedRaftGroup);
+            // the main group leader returns the effective group: this OM may not have applied the assignment yet
+            raftGroup = assignRaftGroupToBucket(bucketPath, lessLoadedRaftGroup);
           }
         } finally {
-          releaseBucketRaftGroupAssignmentWriteLockByRaft();
-        }
-        raftGroup = bucketRaftGroups.get(bucketPath);
-        if (raftGroup == null) {
-          throw new IllegalStateException("Raft group assignment for bucket " + bucketPath + " is not applied yet");
+          // released even if acquiring failed: the outcome of a failed acquire request is unknown, and a lock left
+          // behind would block all assignments; the assignment itself is first-wins, so a spurious release is safe.
+          // A lock left behind by a failed release is released by the next assignment after its acquire timeout.
+          try {
+            releaseBucketRaftGroupAssignmentWriteLockByRaft();
+          } catch (IOException e) {
+            LOG.warn("Failed to release the bucket raft group assignment lock", e);
+          }
         }
       }
       RaftGroupId raftGroupId = RaftGroupId.valueOf(raftGroup);
@@ -249,12 +259,9 @@ public class OmRaftGroupManager {
     }
   }
 
-  private void acquireBucketRaftGroupAssignmentWriteLockByRaft() throws IOException, InterruptedException {
+  private void acquireBucketRaftGroupAssignmentLock() throws IOException, InterruptedException {
     long deadline = Time.monotonicNow() + assignmentLockMaxAwaitTime;
-    while (!submitToMainGroupLeader(OMRequest.newBuilder()
-        .setCmdType(Type.AcquireBucketRaftGroupAssignmentWriteLock)
-        .setClientId(ClientId.randomId().toString())
-        .build()).getSuccess()) {
+    while (!acquireBucketRaftGroupAssignmentWriteLockByRaft()) {
       if (Time.monotonicNow() > deadline) {
         throw new IOException("Timed out acquiring bucket raft group assignment lock");
       }
@@ -263,7 +270,16 @@ public class OmRaftGroupManager {
     }
   }
 
-  private void releaseBucketRaftGroupAssignmentWriteLockByRaft() throws IOException {
+  @VisibleForTesting
+  boolean acquireBucketRaftGroupAssignmentWriteLockByRaft() throws IOException {
+    return submitToMainGroupLeader(OMRequest.newBuilder()
+        .setCmdType(Type.AcquireBucketRaftGroupAssignmentWriteLock)
+        .setClientId(ClientId.randomId().toString())
+        .build()).getSuccess();
+  }
+
+  @VisibleForTesting
+  void releaseBucketRaftGroupAssignmentWriteLockByRaft() throws IOException {
     submitToMainGroupLeader(OMRequest.newBuilder()
         .setCmdType(Type.ReleaseBucketRaftGroupAssignmentWriteLock)
         .setClientId(ClientId.randomId().toString())
@@ -272,15 +288,17 @@ public class OmRaftGroupManager {
 
   /**
    * Assigns the raft group to the bucket through the main raft group, so that all OMs agree on the mapping.
+   * @return the raft group of the bucket (an earlier assignment wins)
    */
-  private void assignRaftGroupToBucket(String bucketPath, UUID raftGroupUUID) throws IOException {
-    submitToMainGroupLeader(OMRequest.newBuilder()
+  @VisibleForTesting
+  UUID assignRaftGroupToBucket(String bucketPath, UUID raftGroupUUID) throws IOException {
+    return HddsUtils.fromProtobuf(submitToMainGroupLeader(OMRequest.newBuilder()
         .setCmdType(Type.BucketRaftGroupAssign)
         .setBucketRaftGroupAssignRequest(BucketRaftGroupAssignRequest.newBuilder()
             .setBucketPath(bucketPath)
             .setRaftGroupId(HddsUtils.toProtobuf(raftGroupUUID)))
         .setClientId(ozoneManager.getOmRatisServer().getCurrentClientId().toString())
-        .build());
+        .build()).getBucketRaftGroupAssignResponse().getRaftGroupId());
   }
 
   private OMResponse submitToMainGroupLeader(OMRequest request) throws IOException {
@@ -342,7 +360,8 @@ public class OmRaftGroupManager {
     }
   }
 
-  private void awaitBucketRaftGroupsInitialization() throws InterruptedException {
+  @VisibleForTesting
+  void awaitBucketRaftGroupsInitialization() throws InterruptedException {
     while (bucketsPerRaftGroupCounter.size() < omRaftGroupCount) {
       LOG.info("Waiting for group initiating {}-{}. {}", bucketsPerRaftGroupCounter.size(), omRaftGroupCount,
           bucketsPerRaftGroupCounter);
@@ -374,6 +393,15 @@ public class OmRaftGroupManager {
 
   public void releaseBucketRaftGroupsReconstructionLock() {
     raftGroupsReconstructionLock.writeLock().unlock();
+  }
+
+  @VisibleForTesting
+  Map<String, CompletableFuture<RaftGroupId>> getBucketAssignmentLocks() {
+    return bucketAssignments;
+  }
+
+  public int getBucketRaftGroupAssignmentCount() {
+    return bucketRaftGroupAssignmentCount.get();
   }
 
   public Map<String, UUID> getBucketRaftGroups() {
