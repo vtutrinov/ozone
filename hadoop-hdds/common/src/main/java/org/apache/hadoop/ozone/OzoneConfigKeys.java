@@ -562,6 +562,15 @@ public final class OzoneConfigKeys {
       "ozone.https.client.need-auth";
   public static final boolean OZONE_CLIENT_HTTPS_NEED_AUTH_DEFAULT = false;
 
+  public static final String OZONE_CLIENT_HTTPS_WANT_AUTH_KEY =
+      "ozone.https.client.want-auth";
+  public static final boolean OZONE_CLIENT_HTTPS_WANT_AUTH_DEFAULT = false;
+
+  public static final String OZONE_HTTPS_CERT_VALIDATION_INCLUDED_PATHS_KEY =
+      "ozone.https.cert.validation.included.paths";
+  public static final String
+      OZONE_HTTPS_CERT_VALIDATION_INCLUDED_PATHS_DEFAULT = "";
+
   public static final String OZONE_HTTPS_CERT_VALIDATION_URL_KEY =
       "ozone.https.cert.validation.url";
   public static final String OZONE_HTTPS_CERT_VALIDATION_URL_DEFAULT = "";

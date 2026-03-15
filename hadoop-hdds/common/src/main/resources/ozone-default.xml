@@ -3297,6 +3297,18 @@
     </description>
   </property>
   <property>
+    <name>ozone.https.client.want-auth</name>
+    <tag>OZONE, SECURITY, MANAGEMENT</tag>
+    <value>false</value>
+    <description>
+      Whether SSL client certificate authentication is requested but not
+      required. When true, the server requests a client certificate during
+      TLS handshake but allows connections without one. Use together with
+      ozone.https.cert.validation.included.paths to protect only specific
+      endpoints with mTLS.
+    </description>
+  </property>
+  <property>
     <name>ozone.https.client.keystore.resource</name>
     <tag>OZONE, SECURITY, MANAGEMENT</tag>
     <value>ssl-client.xml</value>
@@ -4504,6 +4516,16 @@
     <description>
       Read timeout in milliseconds for the certificate validation
       REST endpoint. Default is 5000 (5 seconds).
+    </description>
+  </property>
+  <property>
+    <name>ozone.https.cert.validation.included.paths</name>
+    <value/>
+    <tag>OM,SCM,DATANODE,OZONE,S3GATEWAY</tag>
+    <description>
+      Comma-separated list of URI path prefixes on which the mTLS
+      certificate validation filter is applied. When empty (default),
+      the filter applies to all paths. Example: /conf,/prom,/jmx
     </description>
   </property>
 </configuration>

@@ -227,6 +227,7 @@ public final class HttpServer2 implements FilterContainer {
     private String usernameConfKey;
     private String keytabConfKey;
     private boolean needsClientAuth;
+    private boolean wantsClientAuth;
     private String trustStore;
     private String trustStorePassword;
     private String trustStoreType;
@@ -305,6 +306,15 @@ public final class HttpServer2 implements FilterContainer {
      */
     public Builder needsClientAuth(boolean value) {
       this.needsClientAuth = value;
+      return this;
+    }
+
+    /**
+     * Specify whether the server should request (but not require) client
+     * certificate in SSL connections.
+     */
+    public Builder wantsClientAuth(boolean value) {
+      this.wantsClientAuth = value;
       return this;
     }
 
@@ -538,6 +548,7 @@ public final class HttpServer2 implements FilterContainer {
       SslContextFactory.Server sslContextFactory =
           new SslContextFactory.Server();
       sslContextFactory.setNeedClientAuth(needsClientAuth);
+      sslContextFactory.setWantClientAuth(wantsClientAuth);
       if (keyPassword != null) {
         sslContextFactory.setKeyManagerPassword(keyPassword);
       }

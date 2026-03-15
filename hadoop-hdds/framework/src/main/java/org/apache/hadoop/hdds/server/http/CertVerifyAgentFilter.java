@@ -25,6 +25,7 @@ import javax.servlet.FilterConfig;
 import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import com.google.common.cache.CacheBuilder;
@@ -83,6 +84,7 @@ public class CertVerifyAgentFilter implements Filter {
       LoggerFactory.getLogger(CertVerifyAgentFilter.class);
 
   private List<String> allowedCNs;
+  private List<String> includedPaths;
   private String ocspResponderUrl;
   private int connectTimeout;
   private int readTimeout;
@@ -93,6 +95,15 @@ public class CertVerifyAgentFilter implements Filter {
   public void init(FilterConfig filterConfig) throws ServletException {
     this.allowedCNs = Arrays.asList(
         filterConfig.getInitParameter("cn").split(","));
+
+    String includedPathsParam =
+        filterConfig.getInitParameter("includedPaths");
+    if (includedPathsParam != null && !includedPathsParam.trim().isEmpty()) {
+      this.includedPaths = Arrays.asList(
+          includedPathsParam.split(","));
+    } else {
+      this.includedPaths = java.util.Collections.emptyList();
+    }
 
     this.ocspResponderUrl = filterConfig.getInitParameter("validationUrl");
     this.connectTimeout = parseIntParam(filterConfig, "connectTimeout", 5000);
@@ -128,15 +139,32 @@ public class CertVerifyAgentFilter implements Filter {
         });
 
     LOG.info("CertVerifyAgentFilter initialized: ocspUrl={}, cacheTtl={}s, "
-            + "connectTimeout={}ms, readTimeout={}ms, issuerCert={}",
+            + "connectTimeout={}ms, readTimeout={}ms, issuerCert={}, "
+            + "includedPaths={}",
         ocspResponderUrl, cacheTtl, connectTimeout, readTimeout,
-        configuredIssuerCert != null ? "configured" : "from chain");
+        configuredIssuerCert != null ? "configured" : "from chain",
+        includedPaths);
   }
 
   @Override
   public void doFilter(ServletRequest servletRequest,
       ServletResponse servletResponse, FilterChain filterChain)
       throws IOException, ServletException {
+    if (!includedPaths.isEmpty()
+        && servletRequest instanceof HttpServletRequest) {
+      String uri = ((HttpServletRequest) servletRequest).getRequestURI();
+      boolean matched = false;
+      for (String prefix : includedPaths) {
+        if (uri.startsWith(prefix)) {
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        filterChain.doFilter(servletRequest, servletResponse);
+        return;
+      }
+    }
     try {
       Object session = servletRequest.getAttribute(
           "org.eclipse.jetty.servlet.request.ssl_session");

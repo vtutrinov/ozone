@@ -1,0 +1,164 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+CORE-SITE.XML_fs.defaultFS=ofs://omservice
+CORE-SITE.XML_fs.trash.interval=1
+
+# ── OM HA ─────────────────────────────────────────────────────────────────────
+OZONE-SITE.XML_ozone.om.service.ids=omservice
+OZONE-SITE.XML_ozone.om.internal.service.id=omservice
+OZONE-SITE.XML_ozone.om.nodes.omservice=om1,om2,om3
+OZONE-SITE.XML_ozone.om.address.omservice.om1=om1
+OZONE-SITE.XML_ozone.om.address.omservice.om2=om2
+OZONE-SITE.XML_ozone.om.address.omservice.om3=om3
+OZONE-SITE.XML_ozone.om.http-address.omservice.om1=om1:9874
+OZONE-SITE.XML_ozone.om.http-address.omservice.om2=om2:9874
+OZONE-SITE.XML_ozone.om.http-address.omservice.om3=om3:9874
+OZONE-SITE.XML_ozone.om.https-address.omservice.om1=om1:9875
+OZONE-SITE.XML_ozone.om.https-address.omservice.om2=om2:9875
+OZONE-SITE.XML_ozone.om.https-address.omservice.om3=om3:9875
+OZONE-SITE.XML_ozone.om.ratis.enable=true
+
+# ── SCM HA ────────────────────────────────────────────────────────────────────
+OZONE-SITE.XML_ozone.scm.service.ids=scmservice
+OZONE-SITE.XML_ozone.scm.nodes.scmservice=scm1,scm2,scm3
+OZONE-SITE.XML_ozone.scm.address.scmservice.scm1=scm1.org
+OZONE-SITE.XML_ozone.scm.address.scmservice.scm2=scm2.org
+OZONE-SITE.XML_ozone.scm.address.scmservice.scm3=scm3.org
+OZONE-SITE.XML_ozone.scm.ratis.enable=true
+OZONE-SITE.XML_ozone.scm.close.container.wait.duration=5s
+
+OZONE-SITE.XML_ozone.om.volume.listall.allowed=false
+
+# ── Container / storage ──────────────────────────────────────────────────────
+OZONE-SITE.XML_ozone.scm.container.size=1GB
+OZONE-SITE.XML_ozone.scm.datanode.ratis.volume.free-space.min=10MB
+OZONE-SITE.XML_ozone.scm.pipeline.creation.interval=30s
+OZONE-SITE.XML_ozone.scm.pipeline.owner.container.count=1
+OZONE-SITE.XML_ozone.scm.datanode.id.dir=/data
+OZONE-SITE.XML_ozone.scm.block.client.address=scm
+OZONE-SITE.XML_ozone.metadata.dirs=/data/metadata
+OZONE-SITE.XML_ozone.handler.type=distributed
+OZONE-SITE.XML_ozone.scm.client.address=scm
+OZONE-SITE.XML_hdds.block.token.enabled=true
+OZONE-SITE.XML_hdds.container.token.enabled=true
+OZONE-SITE.XML_hdds.grpc.tls.enabled=true
+OZONE-SITE.XML_ozone.server.default.replication=3
+OZONE-SITE.XML_hdds.scmclient.max.retry.timeout=30s
+OZONE-SITE.XML_hdds.container.report.interval=60s
+OZONE-SITE.XML_dfs.container.ratis.datastream.enabled=true
+
+# ── Recon ─────────────────────────────────────────────────────────────────────
+OZONE-SITE.XML_ozone.recon.om.snapshot.task.interval.delay=1m
+OZONE-SITE.XML_ozone.recon.db.dir=/data/metadata/recon
+OZONE-SITE.XML_ozone.recon.om.snapshot.task.initial.delay=20s
+OZONE-SITE.XML_ozone.recon.address=recon:9891
+
+# ── Security ──────────────────────────────────────────────────────────────────
+OZONE-SITE.XML_ozone.security.enabled=true
+OZONE-SITE.XML_ozone.acl.enabled=true
+OZONE-SITE.XML_ozone.acl.authorizer.class=org.apache.hadoop.ozone.security.acl.OzoneNativeAuthorizer
+OZONE-SITE.XML_ozone.administrators="testuser,recon,om"
+OZONE-SITE.XML_ozone.s3.administrators="testuser,s3g"
+
+OZONE-SITE.XML_hdds.datanode.dir=/data/hdds
+OZONE-SITE.XML_hdds.datanode.volume.min.free.space=100MB
+HDFS-SITE.XML_dfs.datanode.address=0.0.0.0:1019
+HDFS-SITE.XML_dfs.datanode.http.address=0.0.0.0:1012
+CORE-SITE.XML_dfs.data.transfer.protection=authentication
+CORE-SITE.XML_hadoop.security.authentication=kerberos
+CORE-SITE.XML_hadoop.security.auth_to_local="DEFAULT"
+
+# ── Kerberos principals ──────────────────────────────────────────────────────
+OZONE-SITE.XML_hdds.scm.kerberos.principal=scm/scm@EXAMPLE.COM
+OZONE-SITE.XML_hdds.scm.kerberos.keytab.file=/etc/security/keytabs/scm.keytab
+OZONE-SITE.XML_ozone.om.kerberos.principal=om/om@EXAMPLE.COM
+OZONE-SITE.XML_ozone.om.kerberos.keytab.file=/etc/security/keytabs/om.keytab
+OZONE-SITE.XML_ozone.recon.kerberos.keytab.file=/etc/security/keytabs/recon.keytab
+OZONE-SITE.XML_ozone.recon.kerberos.principal=recon/recon@EXAMPLE.COM
+OZONE-SITE.XML_ozone.s3g.kerberos.keytab.file=/etc/security/keytabs/s3g.keytab
+OZONE-SITE.XML_ozone.s3g.kerberos.principal=s3g/s3g@EXAMPLE.COM
+
+HDFS-SITE.XML_dfs.datanode.kerberos.principal=dn/dn@EXAMPLE.COM
+HDFS-SITE.XML_dfs.datanode.kerberos.keytab.file=/etc/security/keytabs/dn.keytab
+HDFS-SITE.XML_dfs.web.authentication.kerberos.principal=HTTP/ozone@EXAMPLE.COM
+HDFS-SITE.XML_dfs.web.authentication.kerberos.keytab=/etc/security/keytabs/HTTP.keytab
+
+# ── HTTP auth: simple (mTLS replaces SPNEGO for HTTP endpoint auth) ──────────
+OZONE-SITE.XML_ozone.security.http.kerberos.enabled=false
+OZONE-SITE.XML_ozone.s3g.secret.http.enabled=false
+
+OZONE-SITE.XML_ozone.om.http.auth.type=simple
+OZONE-SITE.XML_hdds.scm.http.auth.type=simple
+OZONE-SITE.XML_hdds.datanode.http.auth.type=simple
+OZONE-SITE.XML_ozone.s3g.http.auth.type=simple
+OZONE-SITE.XML_ozone.s3g.secret.http.auth.type=simple
+OZONE-SITE.XML_ozone.recon.http.auth.type=simple
+
+CORE-SITE.XML_hadoop.http.authentication.simple.anonymous.allowed=true
+CORE-SITE.XML_hadoop.http.authentication.type=simple
+
+CORE-SITE.XML_hadoop.security.authorization=true
+HADOOP-POLICY.XML_ozone.om.security.client.protocol.acl=*
+HADOOP-POLICY.XML_hdds.security.client.datanode.container.protocol.acl=*
+HADOOP-POLICY.XML_hdds.security.client.scm.container.protocol.acl=*
+HADOOP-POLICY.XML_hdds.security.client.scm.block.protocol.acl=*
+HADOOP-POLICY.XML_hdds.security.client.scm.certificate.protocol.acl=*
+
+HDFS-SITE.XML_rpc.metrics.quantile.enable=true
+HDFS-SITE.XML_rpc.metrics.percentiles.intervals=60,300
+
+# ── HTTPS policy ──────────────────────────────────────────────────────────────
+OZONE-SITE.XML_ozone.http.policy=HTTPS_ONLY
+OZONE-SITE.XML_ozone.scm.https-address=scm1.org:9877
+OZONE-SITE.XML_ozone.s3g.https-address=s3g:9879
+OZONE-SITE.XML_ozone.recon.https-address=recon:9889
+OZONE-SITE.XML_hdds.datanode.https-address=0.0.0.0:9883
+
+# ── mTLS: client certificate validation ──────────────────────────────────────
+OZONE-SITE.XML_ozone.https.client.need-auth=true
+OZONE-SITE.XML_ozone.https.cert.validation.allowed.cn=ozone-client-allowed,ozone-client-revoked
+OZONE-SITE.XML_ozone.https.cert.validation.url=http://ocsp:2560
+OZONE-SITE.XML_ozone.https.cert.validation.issuer.cert.path=/etc/certs/ca.crt
+OZONE-SITE.XML_ozone.https.cert.validation.cache.ttl=30
+
+# ── SSL server keystore/truststore ───────────────────────────────────────────
+SSL-SERVER.XML_ssl.server.keystore.location=/etc/certs/server.jks
+SSL-SERVER.XML_ssl.server.keystore.password=changeit
+SSL-SERVER.XML_ssl.server.keystore.keypassword=changeit
+SSL-SERVER.XML_ssl.server.truststore.location=/etc/certs/truststore.jks
+SSL-SERVER.XML_ssl.server.truststore.password=changeit
+
+# ── SCM replication ──────────────────────────────────────────────────────────
+OZONE-SITE.XML_hdds.scm.replication.thread.interval=5s
+OZONE-SITE.XML_hdds.scm.replication.under.replicated.interval=5s
+OZONE-SITE.XML_hdds.scm.replication.over.replicated.interval=5s
+OZONE-SITE.XML_hdds.scm.wait.time.after.safemode.exit=30s
+OZONE-SITE.XML_ozone.scm.stale.node.interval=30s
+OZONE-SITE.XML_ozone.scm.dead.node.interval=45s
+
+OZONE_DATANODE_SECURE_USER=root
+JAVA_HOME=/usr/lib/jvm/jre
+JSVC_HOME=/usr/bin
+
+OZONE_CONF_DIR=/etc/hadoop
+OZONE_LOG_DIR=/var/log/hadoop
+
+no_proxy=om1,om2,om3,scm1.org,scm2.org,scm3.org,recon,s3g,kdc,ocsp,localhost,127.0.0.1
+
+OZONE-SITE.XML_hdds.secret.key.rotate.duration=5m
+OZONE-SITE.XML_hdds.secret.key.rotate.check.duration=1m
+OZONE-SITE.XML_hdds.secret.key.expiry.duration=1h
