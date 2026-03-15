@@ -35,6 +35,7 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -48,6 +49,7 @@ import javax.servlet.FilterConfig;
 import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.hadoop.hdds.security.x509.certificate.utils.CertificateCodec;
 import org.bouncycastle.asn1.DEROctetString;
@@ -95,6 +97,7 @@ public class CertVerifyAgentFilter implements Filter {
   private static final SecureRandom RANDOM = new SecureRandom();
 
   private List<String> allowedCNs;
+  private List<String> includedPaths;
   private String ocspResponderUrl;
   private int connectTimeout;
   private int readTimeout;
@@ -108,6 +111,15 @@ public class CertVerifyAgentFilter implements Filter {
         .map(String::trim)
         .filter(cn -> !cn.isEmpty())
         .collect(Collectors.toList());
+
+    // SDPOZN-2257: URI path prefixes the filter applies to, all paths if none (e.g. S3 API is authenticated by AWS
+    // signatures and is left out)
+    String includedPathsParam = filterConfig.getInitParameter("includedPaths");
+    this.includedPaths = includedPathsParam == null ? Collections.emptyList()
+        : Arrays.stream(includedPathsParam.split(","))
+            .map(String::trim)
+            .filter(p -> !p.isEmpty())
+            .collect(Collectors.toList());
 
     this.ocspResponderUrl = filterConfig.getInitParameter("validationUrl");
     this.connectTimeout = parseIntParam(filterConfig, "connectTimeout", 5000);
@@ -131,13 +143,18 @@ public class CertVerifyAgentFilter implements Filter {
         .build();
 
     LOG.info("CertVerifyAgentFilter initialized: ocspUrl={}, cacheTtl={}s, connectTimeout={}ms, readTimeout={}ms, "
-            + "issuerCert={}", ocspResponderUrl, cacheTtl, connectTimeout, readTimeout,
-        configuredIssuerCert != null ? "configured" : "from chain");
+            + "issuerCert={}, includedPaths={}", ocspResponderUrl, cacheTtl, connectTimeout, readTimeout,
+        configuredIssuerCert != null ? "configured" : "from chain", includedPaths);
   }
 
   @Override
   public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain)
       throws IOException, ServletException {
+    if (!includedPaths.isEmpty() && servletRequest instanceof HttpServletRequest
+        && !isIncluded((HttpServletRequest) servletRequest)) {
+      filterChain.doFilter(servletRequest, servletResponse);
+      return;
+    }
     final HttpServletResponse response = (HttpServletResponse) servletResponse;
     try {
       // if we check mTLS certificate from the remote peer (aka client)
@@ -216,6 +233,20 @@ public class CertVerifyAgentFilter implements Filter {
       return;
     }
     filterChain.doFilter(servletRequest, servletResponse);
+  }
+
+  /**
+   * Matches the decoded and normalized request path (as the servlet container routes it), not the raw request URI:
+   * otherwise "//jmx", "/./jmx" or "/%6Amx" would reach /jmx without the check.
+   */
+  private boolean isIncluded(HttpServletRequest request) {
+    String path = nullToEmpty(request.getContextPath()) + nullToEmpty(request.getServletPath())
+        + nullToEmpty(request.getPathInfo());
+    return includedPaths.stream().anyMatch(path::startsWith);
+  }
+
+  private static String nullToEmpty(String s) {
+    return s == null ? "" : s;
   }
 
   /**

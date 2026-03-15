@@ -26,10 +26,14 @@ import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ADMINISTRATORS;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ADMINISTRATORS_GROUPS;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_CLIENT_HTTPS_NEED_AUTH_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_CLIENT_HTTPS_NEED_AUTH_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_CLIENT_HTTPS_WANT_AUTH_DEFAULT;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_CLIENT_HTTPS_WANT_AUTH_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_INCLUDED_PATHS_DEFAULT;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_INCLUDED_PATHS_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_ISSUER_CERT_PATH_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_ISSUER_CERT_PATH_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_DEFAULT;
@@ -158,8 +162,10 @@ public abstract class BaseHttpServer implements AutoCloseable {
 
       httpServer = builder.build();
 
-      // SDP (SDPOZN-2180): validate the client certificate CN when mutual TLS is required
-      if (conf.getBoolean(OZONE_CLIENT_HTTPS_NEED_AUTH_KEY, OZONE_CLIENT_HTTPS_NEED_AUTH_DEFAULT)) {
+      // SDP (SDPOZN-2180, SDPOZN-2257): validate the client certificate when mutual TLS is required or requested
+      boolean needAuth = conf.getBoolean(OZONE_CLIENT_HTTPS_NEED_AUTH_KEY, OZONE_CLIENT_HTTPS_NEED_AUTH_DEFAULT);
+      boolean wantAuth = conf.getBoolean(OZONE_CLIENT_HTTPS_WANT_AUTH_KEY, OZONE_CLIENT_HTTPS_WANT_AUTH_DEFAULT);
+      if (needAuth || wantAuth) {
         Map<String, String> certVerifyAgentParams = new HashMap<>();
         certVerifyAgentParams.put("cn", conf.get(OZONE_HTTPS_SSL_ALLOWED_CN_LIST,
             OZONE_HTTPS_SSL_ALLOWED_CN_LIST_DEFAULT));
@@ -181,7 +187,12 @@ public abstract class BaseHttpServer implements AutoCloseable {
             String.valueOf(conf.getInt(
                 OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_KEY,
                 OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_DEFAULT)));
-        httpServer.addFilter("CertVerifyAgent", CertVerifyAgentFilter.class.getName(), certVerifyAgentParams);
+        certVerifyAgentParams.put("includedPaths",
+            conf.get(OZONE_HTTPS_CERT_VALIDATION_INCLUDED_PATHS_KEY,
+                OZONE_HTTPS_CERT_VALIDATION_INCLUDED_PATHS_DEFAULT));
+        httpServer.addFilter("CertVerifyAgent",
+            CertVerifyAgentFilter.class.getName(),
+            certVerifyAgentParams);
       }
 
       // TODO move these to HttpServer2.addDefaultApps
@@ -428,6 +439,9 @@ public abstract class BaseHttpServer implements AutoCloseable {
         .needsClientAuth(
             sslConf.getBoolean(OZONE_CLIENT_HTTPS_NEED_AUTH_KEY,
                 OZONE_CLIENT_HTTPS_NEED_AUTH_DEFAULT))
+        .wantsClientAuth(
+            sslConf.getBoolean(OZONE_CLIENT_HTTPS_WANT_AUTH_KEY,
+                OZONE_CLIENT_HTTPS_WANT_AUTH_DEFAULT))
         .keyPassword(getPassword(sslConf, OZONE_SERVER_HTTPS_KEYPASSWORD_KEY))
         .keyStore(
             sslConf.get(SSLFactory.SSL_SERVER_KEYSTORE_LOCATION),
@@ -504,6 +518,11 @@ public abstract class BaseHttpServer implements AutoCloseable {
         OZONE_CLIENT_HTTPS_NEED_AUTH_KEY, OZONE_CLIENT_HTTPS_NEED_AUTH_DEFAULT);
     sslConf.setBoolean(OZONE_CLIENT_HTTPS_NEED_AUTH_KEY, requireClientAuth);
     sslConf.setBoolean(SSL_SERVER_NEED_CLIENT_AUTH, requireClientAuth);
+
+    boolean wantClientAuth = conf.getBoolean(
+        OZONE_CLIENT_HTTPS_WANT_AUTH_KEY, OZONE_CLIENT_HTTPS_WANT_AUTH_DEFAULT);
+    sslConf.setBoolean(OZONE_CLIENT_HTTPS_WANT_AUTH_KEY, wantClientAuth);
+
     return new LegacyHadoopConfigurationSource(sslConf);
   }
 

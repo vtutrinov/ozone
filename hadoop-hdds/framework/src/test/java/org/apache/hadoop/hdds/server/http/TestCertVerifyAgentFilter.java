@@ -20,6 +20,13 @@ package org.apache.hadoop.hdds.server.http;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -29,6 +36,10 @@ import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
+import javax.servlet.FilterChain;
+import javax.servlet.FilterConfig;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import org.apache.hadoop.hdds.server.http.CertVerifyAgentFilter.CertValidationResult;
 import org.bouncycastle.asn1.DEROctetString;
 import org.bouncycastle.asn1.ocsp.OCSPObjectIdentifiers;
@@ -179,5 +190,45 @@ public class TestCertVerifyAgentFilter {
         new JcaX509CertificateHolder(caCert), BigInteger.valueOf(43));
     assertFalse(evaluate(response(caKeys, null, otherId, CertificateStatus.GOOD, new Date(), null, NONCE))
         .isValid());
+  }
+
+  private static CertVerifyAgentFilter filterFor(String includedPaths) throws Exception {
+    FilterConfig config = mock(FilterConfig.class);
+    when(config.getInitParameter("cn")).thenReturn("client");
+    when(config.getInitParameter("includedPaths")).thenReturn(includedPaths);
+    CertVerifyAgentFilter filter = new CertVerifyAgentFilter();
+    filter.init(config);
+    return filter;
+  }
+
+  private static HttpServletRequest request(String rawUri, String servletPath) {
+    HttpServletRequest request = mock(HttpServletRequest.class);
+    when(request.getRequestURI()).thenReturn(rawUri);
+    when(request.getContextPath()).thenReturn("");
+    when(request.getServletPath()).thenReturn(servletPath);
+    // no TLS session: a checked request is rejected
+    when(request.getAttribute(anyString())).thenReturn(null);
+    return request;
+  }
+
+  @Test
+  void includedPathsAreMatchedOnTheNormalizedPath() throws Exception {
+    CertVerifyAgentFilter filter = filterFor(" /jmx , /conf");
+
+    // raw URI tricks reach the /jmx servlet: the check must still run
+    for (String rawUri : new String[] {"//jmx", "/./jmx", "/%6Amx", "/jmx"}) {
+      HttpServletResponse response = mock(HttpServletResponse.class);
+      FilterChain chain = mock(FilterChain.class);
+      filter.doFilter(request(rawUri, "/jmx"), response, chain);
+      verify(response).sendError(HttpServletResponse.SC_UNAUTHORIZED);
+      verify(chain, never()).doFilter(any(), any());
+    }
+
+    // paths that are not included (e.g. the S3 API) are not checked
+    HttpServletResponse response = mock(HttpServletResponse.class);
+    FilterChain chain = mock(FilterChain.class);
+    filter.doFilter(request("/bucket/key", "/bucket/key"), response, chain);
+    verify(chain).doFilter(any(), any());
+    verify(response, never()).sendError(anyInt());
   }
 }
