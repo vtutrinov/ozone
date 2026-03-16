@@ -84,7 +84,7 @@ public class BlockScanner {
   public ScanResult scanBlock(BlockData block) {
     ContainerLayoutVersion layout = onDiskContainerData.getLayoutVersion();
 
-    boolean isFirstChunkNotEmpty = block.getChunks().get(0).getLen() > 0;
+    boolean isFirstChunkNotEmpty = !block.getChunks().isEmpty() && block.getChunks().get(0).getLen() > 0;
 
     for (ContainerProtos.ChunkInfo chunk : block.getChunks()) {
       Path chunkFile;
