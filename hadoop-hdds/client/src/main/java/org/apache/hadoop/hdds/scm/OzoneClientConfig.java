@@ -98,6 +98,18 @@ public class OzoneClientConfig {
       tags = ConfigTag.CLIENT)
   private boolean datastreamPipelineMode = true;
 
+  @Config(key = "stream.buffer.direct.size",
+      defaultValue = "0B",
+      type = ConfigType.SIZE,
+      description = "Threshold for switching between heap and direct "
+          + "stream buffers. Keys with known size at or below this "
+          + "threshold use heap buffers; keys above it (or with unknown "
+          + "size) use off-heap direct buffers from the Netty pooled "
+          + "allocator. Setting to 0 (default) disables the threshold "
+          + "and always uses direct buffers.",
+      tags = ConfigTag.CLIENT)
+  private long streamBufferDirectSize = 0;
+
   @Config(key = "stream.buffer.increment",
       defaultValue = "0B",
       type = ConfigType.SIZE,
@@ -397,6 +409,10 @@ public class OzoneClientConfig {
 
   public int getBufferIncrement() {
     return bufferIncrement;
+  }
+
+  public long getStreamBufferDirectSize() {
+    return streamBufferDirectSize;
   }
 
   public long getDataStreamBufferFlushSize() {

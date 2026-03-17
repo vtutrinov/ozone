@@ -35,20 +35,32 @@ public interface ChunkBuffer extends ChunkBufferToByteString, UncheckedAutoClose
     return allocate(capacity, 0);
   }
 
+  /** Allocate with default (direct) buffer type. */
+  static ChunkBuffer allocate(int capacity, int increment) {
+    return allocate(capacity, increment, true);
+  }
+
   /**
    * Similar to {@link ByteBuffer#allocate(int)}
-   * except that it can specify the increment.
+   * except that it can specify the increment and buffer type.
    *
    * @param increment
    *   the increment size so that this buffer is allocated incrementally.
-   *   When increment <= 0, entire buffer is allocated in the beginning.
+   *   When increment {@literal <=} 0, entire buffer is allocated
+   *   in the beginning.
+   * @param direct
+   *   when true, allocate off-heap direct buffers from the Netty pool;
+   *   when false, allocate on-heap buffers.
    */
-  static ChunkBuffer allocate(int capacity, int increment) {
+  static ChunkBuffer allocate(int capacity, int increment, boolean direct) {
     if (increment > 0 && increment < capacity) {
       return new IncrementalChunkBuffer(capacity, increment, false);
     }
-    CodecBuffer codecBuffer = CodecBuffer.allocateDirect(capacity);
-    return new ChunkBufferImplWithByteBuffer(codecBuffer.asWritableByteBuffer(), codecBuffer);
+    CodecBuffer codecBuffer = direct
+        ? CodecBuffer.allocateDirect(capacity)
+        : CodecBuffer.allocateHeap(capacity);
+    return new ChunkBufferImplWithByteBuffer(
+        codecBuffer.asWritableByteBuffer(), codecBuffer);
   }
 
   /** Wrap the given {@link ByteBuffer} as a {@link ChunkBuffer}. */

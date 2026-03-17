@@ -105,12 +105,19 @@ public class BlockOutputStreamEntryPool implements KeyMetadataAware {
     this.excludeList = createExcludeList();
 
     this.streamBufferArgs = b.getStreamBufferArgs();
+    long directThreshold = config.getStreamBufferDirectSize();
+    long dataSize = info.getDataSize();
+    boolean useDirect = directThreshold <= 0
+        || dataSize <= 0
+        || dataSize > directThreshold;
     this.bufferPool =
         new BufferPool(streamBufferArgs.getStreamBufferSize(),
             (int) (streamBufferArgs.getStreamBufferMaxSize() / streamBufferArgs
                 .getStreamBufferSize()),
             ByteStringConversion
-                .createByteBufferConversion(b.isUnsafeByteBufferConversionEnabled()));
+                .createByteBufferConversion(
+                    b.isUnsafeByteBufferConversionEnabled()),
+            useDirect);
     this.clientMetrics = b.getClientMetrics();
     this.executorServiceSupplier = b.getExecutorServiceSupplier();
   }

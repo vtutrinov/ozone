@@ -42,6 +42,7 @@ public class BufferPool {
   private int currentBufferIndex;
   private final int bufferSize;
   private final int capacity;
+  private final boolean direct;
   private final Function<ByteBuffer, ByteString> byteStringConversion;
 
   public static BufferPool empty() {
@@ -55,8 +56,15 @@ public class BufferPool {
 
   public BufferPool(int bufferSize, int capacity,
       Function<ByteBuffer, ByteString> byteStringConversion) {
+    this(bufferSize, capacity, byteStringConversion, true);
+  }
+
+  public BufferPool(int bufferSize, int capacity,
+      Function<ByteBuffer, ByteString> byteStringConversion,
+      boolean direct) {
     this.capacity = capacity;
     this.bufferSize = bufferSize;
+    this.direct = direct;
     bufferList = capacity == 0 ? emptyList() : new ArrayList<>(capacity);
     currentBufferIndex = -1;
     this.byteStringConversion = byteStringConversion;
@@ -90,7 +98,8 @@ public class BufferPool {
     if (currentBufferIndex < bufferList.size()) {
       return getBuffer(currentBufferIndex);
     } else {
-      final ChunkBuffer newBuffer = ChunkBuffer.allocate(bufferSize, increment);
+      final ChunkBuffer newBuffer = ChunkBuffer.allocate(
+          bufferSize, increment, direct);
       bufferList.add(newBuffer);
       return newBuffer;
     }
