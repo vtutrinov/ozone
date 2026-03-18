@@ -65,12 +65,17 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_DEFAULT;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_DEFAULT;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_DEFAULT;
 
 /**
  * TLS client cert validation filter.
@@ -83,6 +88,8 @@ public class CertVerifyAgentFilter implements Filter {
   private static final Logger LOG =
       LoggerFactory.getLogger(CertVerifyAgentFilter.class);
 
+  private static final long CACHE_MAX_SIZE = 10000;
+
   private List<String> allowedCNs;
   private List<String> includedPaths;
   private String ocspResponderUrl;
@@ -93,8 +100,11 @@ public class CertVerifyAgentFilter implements Filter {
 
   @Override
   public void init(FilterConfig filterConfig) throws ServletException {
-    this.allowedCNs = Arrays.asList(
-        filterConfig.getInitParameter("cn").split(","));
+    String cnParam = filterConfig.getInitParameter("cn");
+    if (cnParam == null || cnParam.trim().isEmpty()) {
+      throw new ServletException("Filter parameter 'cn' is not configured");
+    }
+    this.allowedCNs = Arrays.asList(cnParam.split(","));
 
     String includedPathsParam =
         filterConfig.getInitParameter("includedPaths");
@@ -106,9 +116,12 @@ public class CertVerifyAgentFilter implements Filter {
     }
 
     this.ocspResponderUrl = filterConfig.getInitParameter("validationUrl");
-    this.connectTimeout = parseIntParam(filterConfig, "connectTimeout", 5000);
-    this.readTimeout = parseIntParam(filterConfig, "readTimeout", 5000);
-    long cacheTtl = parseLongParam(filterConfig, "cacheTtl", 300);
+    this.connectTimeout = parseIntParam(filterConfig, "connectTimeout",
+        OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_DEFAULT);
+    this.readTimeout = parseIntParam(filterConfig, "readTimeout",
+        OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_DEFAULT);
+    long cacheTtl = parseLongParam(filterConfig, "cacheTtl",
+        OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_DEFAULT);
 
     String issuerCertPath =
         filterConfig.getInitParameter("issuerCertPath");
@@ -128,7 +141,7 @@ public class CertVerifyAgentFilter implements Filter {
 
     this.validationCache = CacheBuilder.newBuilder()
         .expireAfterWrite(cacheTtl, TimeUnit.SECONDS)
-        .maximumSize(10000)
+        .maximumSize(CACHE_MAX_SIZE)
         .build(new CacheLoader<BigInteger, CertValidationResult>() {
           @Override
           public CertValidationResult load(BigInteger serialNumber) {
@@ -311,7 +324,7 @@ public class CertVerifyAgentFilter implements Filter {
     OCSPReqBuilder reqBuilder = new OCSPReqBuilder();
     reqBuilder.addRequest(certId);
 
-    BigInteger nonce = BigInteger.valueOf(System.currentTimeMillis());
+    BigInteger nonce = BigInteger.valueOf(new SecureRandom().nextLong());
     org.bouncycastle.asn1.x509.Extensions reqExtensions =
         new org.bouncycastle.asn1.x509.Extensions(
             new Extension(
