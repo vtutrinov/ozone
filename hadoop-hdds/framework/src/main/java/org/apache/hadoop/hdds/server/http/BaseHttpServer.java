@@ -166,33 +166,7 @@ public abstract class BaseHttpServer implements AutoCloseable {
       boolean needAuth = conf.getBoolean(OZONE_CLIENT_HTTPS_NEED_AUTH_KEY, OZONE_CLIENT_HTTPS_NEED_AUTH_DEFAULT);
       boolean wantAuth = conf.getBoolean(OZONE_CLIENT_HTTPS_WANT_AUTH_KEY, OZONE_CLIENT_HTTPS_WANT_AUTH_DEFAULT);
       if (needAuth || wantAuth) {
-        Map<String, String> certVerifyAgentParams = new HashMap<>();
-        certVerifyAgentParams.put("cn", conf.get(OZONE_HTTPS_SSL_ALLOWED_CN_LIST,
-            OZONE_HTTPS_SSL_ALLOWED_CN_LIST_DEFAULT));
-        certVerifyAgentParams.put("validationUrl",
-            conf.get(OZONE_HTTPS_CERT_VALIDATION_URL_KEY,
-                OZONE_HTTPS_CERT_VALIDATION_URL_DEFAULT));
-        certVerifyAgentParams.put("issuerCertPath",
-            conf.get(OZONE_HTTPS_CERT_VALIDATION_ISSUER_CERT_PATH_KEY,
-                OZONE_HTTPS_CERT_VALIDATION_ISSUER_CERT_PATH_DEFAULT));
-        certVerifyAgentParams.put("cacheTtl",
-            String.valueOf(conf.getLong(
-                OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_KEY,
-                OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_DEFAULT)));
-        certVerifyAgentParams.put("connectTimeout",
-            String.valueOf(conf.getInt(
-                OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_KEY,
-                OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_DEFAULT)));
-        certVerifyAgentParams.put("readTimeout",
-            String.valueOf(conf.getInt(
-                OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_KEY,
-                OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_DEFAULT)));
-        certVerifyAgentParams.put("includedPaths",
-            conf.get(OZONE_HTTPS_CERT_VALIDATION_INCLUDED_PATHS_KEY,
-                OZONE_HTTPS_CERT_VALIDATION_INCLUDED_PATHS_DEFAULT));
-        httpServer.addFilter("CertVerifyAgent",
-            CertVerifyAgentFilter.class.getName(),
-            certVerifyAgentParams);
+        configureMTLSAuthenticationFilter();
       }
 
       // TODO move these to HttpServer2.addDefaultApps
@@ -256,6 +230,57 @@ public abstract class BaseHttpServer implements AutoCloseable {
       httpServer.getWebAppContext().setAttribute(JETTY_BASETMPDIR, baseDir);
       LOG.info("HTTP server of {} uses base directory {}", name, baseDir);
     }
+  }
+
+  private void configureMTLSAuthenticationFilter() {
+    Map<String, String> certVerifyAgentParams = new HashMap<>();
+    certVerifyAgentParams.put("cn", conf.get(OZONE_HTTPS_SSL_ALLOWED_CN_LIST,
+        OZONE_HTTPS_SSL_ALLOWED_CN_LIST_DEFAULT));
+    certVerifyAgentParams.put("validationUrl",
+        conf.get(OZONE_HTTPS_CERT_VALIDATION_URL_KEY,
+            OZONE_HTTPS_CERT_VALIDATION_URL_DEFAULT));
+    certVerifyAgentParams.put("issuerCertPath",
+        conf.get(OZONE_HTTPS_CERT_VALIDATION_ISSUER_CERT_PATH_KEY,
+            OZONE_HTTPS_CERT_VALIDATION_ISSUER_CERT_PATH_DEFAULT));
+
+    long certValidationCacheTTL = OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_DEFAULT;
+    try {
+      certValidationCacheTTL = conf.getLong(
+          OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_KEY,
+          OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_DEFAULT);
+    } catch (NumberFormatException ex) {
+      LOG.warn("Cert validation cache TTL conf param has an invalid number format, fallback to 300", ex);
+    }
+    certVerifyAgentParams.put("cacheTtl", String.valueOf(certValidationCacheTTL));
+
+    int certValidationConnectionTimeout = OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_DEFAULT;
+    try {
+      certValidationConnectionTimeout = conf.getInt(
+          OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_KEY,
+          OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_DEFAULT);
+    } catch (NumberFormatException ex) {
+      LOG.warn("Cert validation request connection timeout conf param has an invalid number format, fallback to 500",
+          ex);
+    }
+    certVerifyAgentParams.put("connectTimeout", String.valueOf(certValidationConnectionTimeout));
+
+    int certValidationReadTimeout = OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_DEFAULT;
+    try {
+      certValidationReadTimeout = conf.getInt(
+          OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_KEY,
+          OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_DEFAULT);
+    } catch (NumberFormatException ex) {
+      LOG.warn("Cert validation request execution timeout conf param has an invalid number format" +
+          ", fallback to 5000", ex);
+    }
+    certVerifyAgentParams.put("readTimeout", String.valueOf(certValidationReadTimeout));
+
+    certVerifyAgentParams.put("includedPaths",
+        conf.get(OZONE_HTTPS_CERT_VALIDATION_INCLUDED_PATHS_KEY,
+            OZONE_HTTPS_CERT_VALIDATION_INCLUDED_PATHS_DEFAULT));
+    httpServer.addFilter("CertVerifyAgent",
+        CertVerifyAgentFilter.class.getName(),
+        certVerifyAgentParams);
   }
 
   @VisibleForTesting
@@ -435,6 +460,12 @@ public abstract class BaseHttpServer implements AutoCloseable {
   }
 
   public static void loadSslConfToHttpServerBuilder(HttpServer2.Builder builder, ConfigurationSource sslConf) {
+    // SDP (SDPOZN-2257): let HttpServer2 take the complete ssl-server configuration (keystore / truststore types,
+    // passwords, need / want client auth); only when a keystore is configured, HTTPS cannot work without one anyway
+    String keyStoreLocation = sslConf.get(SSLFactory.SSL_SERVER_KEYSTORE_LOCATION);
+    if (keyStoreLocation != null && !keyStoreLocation.isEmpty()) {
+      builder.setSSLConf(sslConf);
+    }
     builder
         .needsClientAuth(
             sslConf.getBoolean(OZONE_CLIENT_HTTPS_NEED_AUTH_KEY,

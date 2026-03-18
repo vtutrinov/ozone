@@ -17,6 +17,10 @@
 
 package org.apache.hadoop.hdds.server.http;
 
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_DEFAULT;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_DEFAULT;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_DEFAULT;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -96,6 +100,8 @@ public class CertVerifyAgentFilter implements Filter {
 
   private static final SecureRandom RANDOM = new SecureRandom();
 
+  private static final long CACHE_MAX_SIZE = 10000;
+
   private List<String> allowedCNs;
   private List<String> includedPaths;
   private String ocspResponderUrl;
@@ -107,7 +113,11 @@ public class CertVerifyAgentFilter implements Filter {
 
   @Override
   public void init(FilterConfig filterConfig) throws ServletException {
-    this.allowedCNs = Arrays.stream(filterConfig.getInitParameter("cn").split(","))
+    String cnParam = filterConfig.getInitParameter("cn");
+    if (cnParam == null || cnParam.trim().isEmpty()) {
+      throw new ServletException("Filter parameter 'cn' is not configured");
+    }
+    this.allowedCNs = Arrays.stream(cnParam.split(","))
         .map(String::trim)
         .filter(cn -> !cn.isEmpty())
         .collect(Collectors.toList());
@@ -122,9 +132,12 @@ public class CertVerifyAgentFilter implements Filter {
             .collect(Collectors.toList());
 
     this.ocspResponderUrl = filterConfig.getInitParameter("validationUrl");
-    this.connectTimeout = parseIntParam(filterConfig, "connectTimeout", 5000);
-    this.readTimeout = parseIntParam(filterConfig, "readTimeout", 5000);
-    long cacheTtl = parseLongParam(filterConfig, "cacheTtl", 300);
+    this.connectTimeout = parseIntParam(filterConfig, "connectTimeout",
+        OZONE_HTTPS_CERT_VALIDATION_CONNECT_TIMEOUT_DEFAULT);
+    this.readTimeout = parseIntParam(filterConfig, "readTimeout",
+        OZONE_HTTPS_CERT_VALIDATION_READ_TIMEOUT_DEFAULT);
+    long cacheTtl = parseLongParam(filterConfig, "cacheTtl",
+        OZONE_HTTPS_CERT_VALIDATION_CACHE_TTL_DEFAULT);
 
     String issuerCertPath = filterConfig.getInitParameter("issuerCertPath");
     if (issuerCertPath != null && !issuerCertPath.isEmpty()) {
@@ -139,7 +152,7 @@ public class CertVerifyAgentFilter implements Filter {
 
     this.validationCache = CacheBuilder.newBuilder()
         .expireAfterWrite(cacheTtl, TimeUnit.SECONDS)
-        .maximumSize(10000)
+        .maximumSize(CACHE_MAX_SIZE)
         .build();
 
     LOG.info("CertVerifyAgentFilter initialized: ocspUrl={}, cacheTtl={}s, connectTimeout={}ms, readTimeout={}ms, "
