@@ -18,6 +18,10 @@
 
 package org.apache.hadoop.ozone.om;
 
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME_DEFAULT;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_MAX_AWAIT_TIME;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_MAX_AWAIT_TIME_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT;
 
@@ -91,6 +95,8 @@ public class OmRaftGroupManager {
   // transports to the main raft group leader, by OM node id
   private final Map<String, OmTransport> omTransportCache = new ConcurrentHashMap<>();
   private final ExecutorService transportCreationExecutor;
+  private final long assignmentLockMaxAwaitTime;
+  private final long assignmentLockRetrySleepTime;
 
   public OmRaftGroupManager(
       OzoneManager ozoneManager,
@@ -107,6 +113,11 @@ public class OmRaftGroupManager {
     this.omServiceId = omServiceId;
     this.metadataManager = metadataManager;
     this.ozoneManager = ozoneManager;
+    this.assignmentLockMaxAwaitTime = configuration.getLong(OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_MAX_AWAIT_TIME,
+        OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_MAX_AWAIT_TIME_DEFAULT);
+    this.assignmentLockRetrySleepTime = configuration.getInt(
+        OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME,
+        OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME_DEFAULT);
     // transports are created outside of the IPC handler threads
     this.transportCreationExecutor = Executors.newCachedThreadPool(new ThreadFactoryBuilder()
         .setNameFormat("OmTransport-Creator-%d")
@@ -239,16 +250,16 @@ public class OmRaftGroupManager {
   }
 
   private void acquireBucketRaftGroupAssignmentWriteLockByRaft() throws IOException, InterruptedException {
-    long deadline = Time.monotonicNow() + ASSIGNMENT_TIMEOUT_MS;
+    long deadline = Time.monotonicNow() + assignmentLockMaxAwaitTime;
     while (!submitToMainGroupLeader(OMRequest.newBuilder()
         .setCmdType(Type.AcquireBucketRaftGroupAssignmentWriteLock)
         .setClientId(ClientId.randomId().toString())
         .build()).getSuccess()) {
       if (Time.monotonicNow() > deadline) {
-        throw new IOException("Timeout waiting for the bucket raft group assignment lock");
+        throw new IOException("Timed out acquiring bucket raft group assignment lock");
       }
       LOG.debug("Waiting for bucket raft group assignment write lock to be released");
-      Thread.sleep(100);
+      Thread.sleep(assignmentLockRetrySleepTime);
     }
   }
 
