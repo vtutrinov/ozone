@@ -37,6 +37,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME_DEFAULT;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_MAX_AWAIT_TIME;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_MAX_AWAIT_TIME_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT;
 
@@ -72,6 +76,10 @@ public class OmRaftGroupManager {
 
   private final ExecutorService transportCreationExecutor;
 
+  private long bucketRaftGroupAssignmentMaxAwaitTime;
+
+  private int bucketRaftGroupAssignmentLockRetrySleepTime;
+
   public OmRaftGroupManager(
       OzoneManager ozoneManager,
       OzoneConfiguration configuration,
@@ -83,6 +91,34 @@ public class OmRaftGroupManager {
         OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
         OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT
     );
+
+    bucketRaftGroupAssignmentMaxAwaitTime = OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_MAX_AWAIT_TIME_DEFAULT;
+
+    try {
+      bucketRaftGroupAssignmentMaxAwaitTime = configuration.getLong(
+          OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_MAX_AWAIT_TIME,
+          OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_MAX_AWAIT_TIME_DEFAULT
+      );
+    } catch (NumberFormatException ex) {
+      LOG.warn("Can't parse long conf param value for {}, fallback to {}",
+          OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_MAX_AWAIT_TIME,
+          OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_MAX_AWAIT_TIME_DEFAULT, ex);
+    }
+
+    bucketRaftGroupAssignmentLockRetrySleepTime =
+        OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME_DEFAULT;
+
+    try {
+      bucketRaftGroupAssignmentLockRetrySleepTime = configuration.getInt(
+          OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME,
+          OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME_DEFAULT
+      );
+    } catch (NumberFormatException ex) {
+      LOG.warn("Can't parse int conf param value for '{}', fallback to {}",
+          OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME,
+          OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME_DEFAULT, ex);
+    }
+
     this.ozoneManager = ozoneManager;
     this.multiRaftEnabled = multiRaftEnabled;
     this.omServiceId = omServiceId;
@@ -179,9 +215,7 @@ public class OmRaftGroupManager {
 
     try {
       awaitBucketRaftGroupsInitialization();
-      while (!acquireBucketRaftGroupAssignmentWriteLockByRaft()) {
-        Thread.sleep(100);
-      }
+      acquireBucketRaftGroupAssignmentLock();
 
       UUID selected = selectLessLoadedRaftGroup();
       assignRaftGroupToBucket(bucketPath, selected);
@@ -195,6 +229,22 @@ public class OmRaftGroupManager {
         bucketAssignmentLocks.remove(bucketPath);
         myLock.notifyAll();
       }
+    }
+  }
+
+  private void acquireBucketRaftGroupAssignmentLock() throws IOException, InterruptedException {
+    boolean acquired = false;
+    long deadline = System.currentTimeMillis() + bucketRaftGroupAssignmentMaxAwaitTime;
+    while (!acquired) {
+      acquired = acquireBucketRaftGroupAssignmentWriteLockByRaft();
+      if (acquired) {
+        break;
+      }
+
+      if (System.currentTimeMillis() > deadline) {
+        throw new IOException("Timed out acquiring bucket raft group assignment lock");
+      }
+      Thread.sleep(100);
     }
   }
 

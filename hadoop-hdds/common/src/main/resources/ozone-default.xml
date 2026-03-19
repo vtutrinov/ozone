@@ -4445,4 +4445,16 @@
     <tag>OM,SCM,DATANODE,OZONE,S3GATEWAY</tag>
     <description>List of allowed CNs for client TLS certificates</description>
   </property>
+  <property>
+    <name>ozone.om.bucket.raft.group.assignment.lock.max.await.time.ms</name>
+    <value>30000</value>
+    <tag>OM</tag>
+    <description>Time reserved to acquire lock for assigning bucket to raft group</description>
+  </property>
+  <property>
+    <name>ozone.om.bucket.raft.group.assignment.lock.acquire.sleep.time.ms</name>
+    <value>100</value>
+    <tag>OM</tag>
+    <description>Time to sleep before next attempt to acquire bucket raft group assignment lock</description>
+  </property>
 </configuration>

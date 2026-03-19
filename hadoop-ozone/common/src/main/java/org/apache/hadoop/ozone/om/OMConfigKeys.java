@@ -625,6 +625,16 @@ public final class OMConfigKeys {
           "ozone.om.multi.raft.bucket.groups";
   public static final int OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT = 6;
 
+  public static final String OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_MAX_AWAIT_TIME =
+      "ozone.om.bucket.raft.group.assignment.lock.max.await.time.ms";
+
+  public static final long OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_MAX_AWAIT_TIME_DEFAULT = 30_000L;
+
+  public static final String OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME =
+      "ozone.om.bucket.raft.group.assignment.lock.acquire.sleep.time.ms";
+
+  public static final int OZONE_OM_BUCKET_RAFT_GROUP_ASSIGNMENT_LOCK_ACQUIRE_RETRY_SLEEP_TIME_DEFAULT = 100;
+
   public static final String OZONE_OM_MULTI_RAFT_BUCKET_ENABLED =
           "ozone.om.multi.raft.bucket.enabled";
   public static final boolean OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT = false;
