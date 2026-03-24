@@ -107,7 +107,8 @@ public class OzoneFsckCommand extends Handler implements SubcommandWithParent {
 
   @CommandLine.Option(names = {"--checkpoint"},
       defaultValue = "/tmp/checkpoint.txt",
-      description = "Specifies the path to the checkpoint file. Default: /tmp/checkpoint.txt")
+      description = "Specifies the path to the checkpoint file. Default: /tmp/checkpoint.txt",
+      required = true)
   private String checkpoint;
 
   @CommandLine.ParentCommand

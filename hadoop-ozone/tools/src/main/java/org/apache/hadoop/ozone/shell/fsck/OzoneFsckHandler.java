@@ -133,6 +133,7 @@ public class OzoneFsckHandler implements AutoCloseable {
       throw new IOException("Failed to create checkpoint file: " + checkpointPath, e);
     }
   }
+
   private void deleteCheckpoint() throws IOException {
     try {
       Files.delete(checkpointPath);
