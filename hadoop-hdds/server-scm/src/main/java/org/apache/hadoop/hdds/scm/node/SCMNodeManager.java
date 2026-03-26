@@ -133,6 +133,8 @@ public class SCMNodeManager implements NodeManager {
   private final NetworkTopology clusterMap;
   private final Function<String, String> nodeResolver;
   private final boolean useHostname;
+  // SDP (SDPOZN-2328): false to trust the DataNode reported address (e.g. behind an Istio sidecar)
+  private final boolean useRemoteAddress;
   private final Map<String, Set<DatanodeID>> dnsToDnIdMap = new ConcurrentHashMap<>();
   private final int numPipelinesPerMetadataVolume;
   private final int datanodePipelineLimit;
@@ -214,6 +216,9 @@ public class SCMNodeManager implements NodeManager {
     this.scmContext = scmContext;
     this.sendCommandNotifyMap = new HashMap<>();
     this.nonWritableNodeFilter = new NonWritableNodeFilter(conf);
+    this.useRemoteAddress = conf.getBoolean(
+        ScmConfigKeys.OZONE_SCM_DATANODE_REGISTRATION_USE_REMOTE_ADDRESS,
+        ScmConfigKeys.OZONE_SCM_DATANODE_REGISTRATION_USE_REMOTE_ADDRESS_DEFAULT);
   }
 
   @Override
@@ -417,7 +422,7 @@ public class SCMNodeManager implements NodeManager {
     }
 
     InetAddress dnAddress = Server.getRemoteIp();
-    if (dnAddress != null) {
+    if (dnAddress != null && useRemoteAddress) {
       // Mostly called inside an RPC, update ip
       if (!useHostname) {
         datanodeDetails.setHostName(dnAddress.getHostName());
