@@ -1653,6 +1653,18 @@
   </property>
 
   <property>
+    <name>hdds.scm.datanode.registration.use.remote.address</name>
+    <value>true</value>
+    <description>
+      When false, SCM trusts the IP address self-reported by the DataNode
+      instead of overriding it with the TCP remote address.
+      Required when Istio sidecar is injected: Envoy proxies the
+      DataNode→SCM RPC connection from 127.0.0.1, causing Server.getRemoteIp()
+      to return 127.0.0.1 which SCM then registers as the DataNode address.
+    </description>
+  </property>
+
+  <property>
     <name>hdds.container.action.max.limit</name>
     <value>20</value>
     <tag>DATANODE</tag>
@@ -4022,7 +4034,7 @@
       recon rocks DB containerKeyTable
     </description>
   </property>
-    
+
   <property>
     <name>ozone.recon.heatmap.provider</name>
     <value></value>

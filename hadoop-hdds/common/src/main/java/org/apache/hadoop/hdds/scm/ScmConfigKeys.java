@@ -162,7 +162,9 @@ public final class ScmConfigKeys {
   public static final String OZONE_SCM_DATANODE_PORT_KEY =
       "ozone.scm.datanode.port";
   public static final int OZONE_SCM_DATANODE_PORT_DEFAULT = 9861;
-
+  public static final String OZONE_SCM_DATANODE_REGISTRATION_USE_REMOTE_ADDRESS =
+      "hdds.scm.datanode.registration.use.remote.address";
+  public static final boolean OZONE_SCM_DATANODE_REGISTRATION_USE_REMOTE_ADDRESS_DEFAULT = true;
   // OZONE_OM_PORT_DEFAULT = 9862
   public static final String OZONE_SCM_BLOCK_CLIENT_PORT_KEY =
       "ozone.scm.block.client.port";
@@ -518,7 +520,7 @@ public final class ScmConfigKeys {
    */
   public static final int OZONE_SCM_EVENT_REPORT_EXEC_WAIT_THRESHOLD_DEFAULT
       = 120000;
-  public static final int OZONE_SCM_EVENT_CONTAINER_REPORT_QUEUE_SIZE_DEFAULT 
+  public static final int OZONE_SCM_EVENT_CONTAINER_REPORT_QUEUE_SIZE_DEFAULT
       = 100000;
 
   public static final String OZONE_SCM_HA_RATIS_RPC_TYPE =

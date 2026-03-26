@@ -122,6 +122,7 @@ public class SCMNodeManager implements NodeManager {
   private final NetworkTopology clusterMap;
   private final Function<String, String> nodeResolver;
   private final boolean useHostname;
+  private final boolean useRemoteAddress;
   private final Map<String, Set<UUID>> dnsToUuidMap = new ConcurrentHashMap<>();
   private final int numPipelinesPerMetadataVolume;
   private final int heavyNodeCriteria;
@@ -179,6 +180,9 @@ public class SCMNodeManager implements NodeManager {
     String dnLimit = conf.get(ScmConfigKeys.OZONE_DATANODE_PIPELINE_LIMIT);
     this.heavyNodeCriteria = dnLimit == null ? 0 : Integer.parseInt(dnLimit);
     this.scmContext = scmContext;
+    this.useRemoteAddress = conf.getBoolean(
+      ScmConfigKeys.OZONE_SCM_DATANODE_REGISTRATION_USE_REMOTE_ADDRESS,
+      ScmConfigKeys.OZONE_SCM_DATANODE_REGISTRATION_USE_REMOTE_ADDRESS_DEFAULT);
   }
 
   private void registerMXBean() {
@@ -374,7 +378,7 @@ public class SCMNodeManager implements NodeManager {
     }
 
     InetAddress dnAddress = Server.getRemoteIp();
-    if (dnAddress != null) {
+    if (dnAddress != null && useRemoteAddress) {
       // Mostly called inside an RPC, update ip
       if (!useHostname) {
         datanodeDetails.setHostName(dnAddress.getHostName());
