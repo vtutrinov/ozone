@@ -60,6 +60,7 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_DEFAULT_BUCKET_LAYOU
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_DIR_DELETING_SERVICE_INTERVAL;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_KEY_DELETING_LIMIT_PER_TASK;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_ADDRESS_KEY;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BIND_HOST_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_EDEKCACHELOADER_INITIAL_DELAY_MS_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_EDEKCACHELOADER_INITIAL_DELAY_MS_KEY;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_EDEKCACHELOADER_INTERVAL_MS_DEFAULT;
@@ -85,6 +86,7 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_RATIS_UNHEALTHY_P
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_RATIS_UNHEALTHY_PEER_TIMEOUT_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_READ_THREADPOOL_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_READ_THREADPOOL_KEY;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_RPC_BIND_HOST_KEY;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_S3_GPRC_SERVER_ENABLED;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_S3_GRPC_SERVER_ENABLED_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_SERVER_DEFAULT_REPLICATION_DEFAULT;
@@ -1743,7 +1745,12 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         ReconfigureProtocolService.newReflectiveBlockingService(
             reconfigureServerProtocol);
 
-    return startRpcServer(conf, omNodeRpcAddr, omService,
+    // SDP (SDPOZN-2317): bind to ozone.om.rpc-bind-host (default 0.0.0.0) while ozone.om.address stays the
+    // advertised address (e.g. Kubernetes with an Istio sidecar)
+    String rpcBindHost = conf.get(OZONE_OM_RPC_BIND_HOST_KEY, OZONE_OM_BIND_HOST_DEFAULT);
+    InetSocketAddress bindAddr = new InetSocketAddress(rpcBindHost, omNodeRpcAddr.getPort());
+
+    return startRpcServer(conf, bindAddr, omService,
         omInterService, omAdminService, reconfigureService);
   }
 
