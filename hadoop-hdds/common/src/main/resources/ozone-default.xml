@@ -590,6 +590,19 @@
     </description>
   </property>
   <property>
+    <name>ozone.om.rpc-bind-host</name>
+    <value>0.0.0.0</value>
+    <tag>OM, MANAGEMENT</tag>
+    <description>
+      The actual address the OM RPC server will bind to. If this optional
+      address is set, it overrides only the hostname portion of
+      ozone.om.address for binding. The ozone.om.address is still used
+      as the advertised address for client discovery. This is useful in
+      environments like Kubernetes with Istio sidecar, where the server
+      needs to bind to 0.0.0.0 while advertising a specific hostname.
+    </description>
+  </property>
+  <property>
     <name>ozone.om.handler.count.key</name>
     <value>100</value>
     <tag>OM, PERFORMANCE</tag>

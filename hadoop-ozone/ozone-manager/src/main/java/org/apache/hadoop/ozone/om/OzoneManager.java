@@ -300,6 +300,8 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_DEFAULT_BUCKET_LAYOU
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_DEFAULT_BUCKET_LAYOUT_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_KEY_DELETING_LIMIT_PER_TASK;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_ADDRESS_KEY;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_BIND_HOST_DEFAULT;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_RPC_BIND_HOST_KEY;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_ENABLE_FILESYSTEM_PATHS;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_ENABLE_FILESYSTEM_PATHS_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_HANDLER_COUNT_DEFAULT;
@@ -1506,7 +1508,14 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         ReconfigureProtocolService.newReflectiveBlockingService(
             reconfigureServerProtocol);
 
-    return startRpcServer(configuration, omNodeRpcAddr, omService,
+    // Use ozone.om.rpc-bind-host for binding if configured,
+    // otherwise fall back to OZONE_OM_BIND_HOST_DEFAULT.
+    // This allows separating the bind address (e.g. 0.0.0.0) from
+    // the advertised address used for client/service discovery.
+    String rpcBindHost = conf.get(OZONE_OM_RPC_BIND_HOST_KEY, OZONE_OM_BIND_HOST_DEFAULT);
+    InetSocketAddress bindAddr = new InetSocketAddress(rpcBindHost, omNodeRpcAddr.getPort());
+
+    return startRpcServer(configuration, bindAddr, omService,
         omInterService, omAdminService, reconfigureService, handlerCount);
   }
 

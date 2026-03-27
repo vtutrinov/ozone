@@ -81,6 +81,8 @@ public final class OMConfigKeys {
       "ozone.om.address";
   public static final String OZONE_OM_BIND_HOST_DEFAULT =
       "0.0.0.0";
+  public static final String OZONE_OM_RPC_BIND_HOST_KEY =
+      "ozone.om.rpc-bind-host";
   public static final int OZONE_OM_PORT_DEFAULT = 9862;
   public static final String OZONE_OM_GRPC_PORT_KEY =
       "ozone.om.grpc.port";
