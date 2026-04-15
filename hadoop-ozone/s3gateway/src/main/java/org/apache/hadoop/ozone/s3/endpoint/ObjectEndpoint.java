@@ -36,6 +36,7 @@ import static org.apache.hadoop.ozone.s3.util.S3Consts.COPY_SOURCE_IF_UNMODIFIED
 import static org.apache.hadoop.ozone.s3.util.S3Consts.CUSTOM_METADATA_COPY_DIRECTIVE_HEADER;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.CopyDirective;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.DECODED_CONTENT_LENGTH_HEADER;
+import static org.apache.hadoop.ozone.s3.util.S3Consts.ETAG_NOT_AVAILABLE;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.MP_PARTS_COUNT;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.RANGE_HEADER;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.RANGE_HEADER_SUPPORTED_UNIT;
@@ -586,6 +587,9 @@ public class ObjectEndpoint extends ObjectOperationHandler {
       if (partsCount != null) {
         responseBuilder.header(MP_PARTS_COUNT, partsCount);
       }
+    } else {
+      // SDP (SDPOZN-2366): keys written via other interfaces (ofs, o3fs) have no ETag
+      responseBuilder.header(HttpHeaders.ETAG, wrapInQuotes(ETAG_NOT_AVAILABLE));
     }
   }
 

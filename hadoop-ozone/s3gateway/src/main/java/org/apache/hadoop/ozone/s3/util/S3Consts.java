@@ -110,6 +110,11 @@ public final class S3Consts {
   public static final String IF_UNMODIFIED_SINCE_HEADER =
       "If-Unmodified-Since";
 
+  /**
+   * SDP (SDPOZN-2366): placeholder ETag returned for keys that were not written via S3.
+   */
+  public static final String ETAG_NOT_AVAILABLE = "NOT_A_S3_KEY";
+
   //Never Constructed
   private S3Consts() {
 
