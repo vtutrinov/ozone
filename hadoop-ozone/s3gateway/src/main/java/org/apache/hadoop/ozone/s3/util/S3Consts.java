@@ -70,4 +70,9 @@ public final class S3Consts {
   public static final String DECODED_CONTENT_LENGTH_HEADER =
       "x-amz-decoded-content-length";
 
+  /**
+   * Placeholder ETag returned for keys that were not written via S3.
+   */
+  public static final String ETAG_NOT_AVAILABLE = "NOT_A_S3_KEY";
+
 }

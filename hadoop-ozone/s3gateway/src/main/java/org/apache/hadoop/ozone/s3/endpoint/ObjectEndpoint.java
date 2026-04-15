@@ -142,6 +142,7 @@ import static org.apache.hadoop.ozone.s3.util.S3Consts.RANGE_HEADER;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.RANGE_HEADER_SUPPORTED_UNIT;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.STORAGE_CLASS_HEADER;
 import static org.apache.hadoop.ozone.s3.util.S3Consts.X_AMZ_CHECKSUM_SHA256;
+import static org.apache.hadoop.ozone.s3.util.S3Consts.ETAG_NOT_AVAILABLE;
 import static org.apache.hadoop.ozone.s3.util.S3Utils.urlDecode;
 import static org.apache.hadoop.ozone.s3.util.S3Utils.wrapWithSha256Digest;
 import static org.apache.hadoop.ozone.s3.util.S3Utils.checksumsMatches;
@@ -556,6 +557,8 @@ public class ObjectEndpoint extends EndpointBase {
 
       if (keyDetails.getMetadata().get(ETAG) != null) {
         responseBuilder.header(ETAG, wrapInQuotes(keyDetails.getMetadata().get(ETAG)));
+      } else {
+        responseBuilder.header(ETAG, wrapInQuotes(ETAG_NOT_AVAILABLE));
       }
 
       // if multiple query parameters having same name,
@@ -671,6 +674,8 @@ public class ObjectEndpoint extends EndpointBase {
       // doing so will result in "null" string being returned instead
       // which breaks some AWS SDK implementation
       response.header(ETAG, "" + wrapInQuotes(key.getMetadata().get(ETAG)));
+    } else {
+      response.header(ETAG, wrapInQuotes(ETAG_NOT_AVAILABLE));
     }
 
     addLastModifiedDate(response, key);
