@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hdds.utils.db.Table;
 import org.apache.hadoop.hdds.utils.db.TableIterator;
 import org.apache.hadoop.ozone.om.helpers.RateLimiterInfo;
@@ -44,6 +45,8 @@ public class RateLimiterManager {
   private static final Logger LOG = LoggerFactory.getLogger(RateLimiterManager.class);
 
   private final ConcurrentMap<String, BucketLimiters> limitersByBucket =
+          new ConcurrentHashMap<>();
+  private final ConcurrentMap<OmRateLimiterMetrics.LimiterKey, PeriodState> periodStates =
           new ConcurrentHashMap<>();
 
   private final OMMetadataManager metadataManager;
@@ -87,7 +90,7 @@ public class RateLimiterManager {
       return bl;
     });
 
-    rateLimiterMetrics.updateConfiguredRps(
+    rateLimiterMetrics.updateCurrentQuota(
             info.getVolumeName(),
             info.getBucketName(),
             info.getType().name(),
@@ -152,6 +155,11 @@ public class RateLimiterManager {
     return allowed;
   }
 
+  @VisibleForTesting
+  public RateLimiter getLimiter(BucketLimiters limiters, RateLimiterType type) {
+    return (type == RateLimiterType.READ) ? limiters.getReadLimiter() : limiters.getWriteLimiter();
+  }
+
   public boolean tryAcquire(String volume, String bucket, RateLimiterType type) {
     String bucketKey = metadataManager.getBucketKey(volume, bucket);
     BucketLimiters limiters = limitersByBucket.get(bucketKey);
@@ -159,7 +167,7 @@ public class RateLimiterManager {
       return true;
     }
 
-    RateLimiter limiter = (type == RateLimiterType.READ) ? limiters.getReadLimiter() : limiters.getWriteLimiter();
+    RateLimiter limiter = getLimiter(limiters, type);
 
     if (limiter == null) {
       return true;
@@ -167,11 +175,34 @@ public class RateLimiterManager {
 
     boolean allowed = limiter.tryAcquire();
 
+    long currentSecond = System.currentTimeMillis() / 1000;
+
+    PeriodState state = getOrRollPeriod(volume, bucket, type.name(), currentSecond);
+    int lastTotal;
+    int lastRejected;
+    double remainingRatio;
+
+    synchronized (state) {
+      state.currentTotal++;
+      if (!allowed) {
+        state.currentRejected++;
+      }
+
+      int quota = rateLimiterMetrics.getCurrentQuota(volume, bucket, type.name());
+      int remaining = Math.max(quota - state.currentTotal, 0);
+      remainingRatio = quota > 0 ? ((double)remaining) / quota : 0.0;
+
+      lastTotal = state.lastTotal;
+      lastRejected = state.lastRejected;
+    }
+
     if (allowed) {
       rateLimiterMetrics.incAllowedRequests(volume, bucket, type.name());
     } else {
       rateLimiterMetrics.incRejectedRequests(volume, bucket, type.name());
     }
+
+    rateLimiterMetrics.updatePeriodMetrics(volume, bucket, type.name(), lastTotal, lastRejected, remainingRatio);
 
     return allowed;
   }
@@ -188,6 +219,25 @@ public class RateLimiterManager {
     } else {
       limiters.setWriteLimiter(new LeakyBucketRateLimiter(info.getRps()));
     }
+  }
+
+  @VisibleForTesting
+  PeriodState getOrRollPeriod(String volume, String bucket, String type, long currentSecond) {
+    OmRateLimiterMetrics.LimiterKey key = new OmRateLimiterMetrics.LimiterKey(volume, bucket, type);
+    PeriodState state = periodStates.computeIfAbsent(key, k -> new PeriodState(currentSecond));
+
+    synchronized (state) {
+      if (state.periodSecond != currentSecond) {
+        state.lastTotal = state.currentTotal;
+        state.lastRejected = state.currentRejected;
+
+        state.currentTotal = 0;
+        state.currentRejected = 0;
+
+        state.periodSecond = currentSecond;
+      }
+    }
+    return state;
   }
 
   @SuppressWarnings("checkstyle:methodlength")
@@ -396,7 +446,11 @@ public class RateLimiterManager {
     }
   }
 
-  private static final class BucketLimiters {
+  /**
+   * Read or write limiters for a bucket.
+   */
+  @VisibleForTesting
+  public static final class BucketLimiters {
     private volatile RateLimiter readLimiter;
     private volatile RateLimiter writeLimiter;
 
@@ -414,6 +468,48 @@ public class RateLimiterManager {
 
     void setWriteLimiter(RateLimiter limiter) {
       this.writeLimiter = limiter;
+    }
+  }
+
+  static class PeriodState {
+    private long periodSecond;
+
+    private int currentTotal;
+    private int currentRejected;
+
+    private int lastTotal;
+    private int lastRejected;
+
+    PeriodState(long second) {
+      this.periodSecond = second;
+    }
+
+    void setCurrentTotal(int currentTotal) {
+      this.currentTotal = currentTotal;
+    }
+
+    void setCurrentRejected(int currentRejected) {
+      this.currentRejected = currentRejected;
+    }
+
+    long getPeriodSecond() {
+      return periodSecond;
+    }
+
+    int getCurrentTotal() {
+      return currentTotal;
+    }
+
+    int getCurrentRejected() {
+      return currentRejected;
+    }
+
+    int getLastTotal() {
+      return lastTotal;
+    }
+
+    int getLastRejected() {
+      return lastRejected;
     }
   }
 }
