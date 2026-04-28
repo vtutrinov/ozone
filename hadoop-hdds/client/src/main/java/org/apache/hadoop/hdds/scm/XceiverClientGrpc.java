@@ -49,6 +49,7 @@ import org.apache.hadoop.hdds.security.SecurityConfig;
 import org.apache.hadoop.hdds.security.exception.SCMSecurityException;
 import org.apache.hadoop.hdds.tracing.GrpcClientInterceptor;
 import org.apache.hadoop.hdds.tracing.TracingUtil;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.OzoneConsts;
 import java.util.concurrent.TimeoutException;
@@ -184,8 +185,13 @@ public class XceiverClientGrpc extends XceiverClientSpi {
 
   protected NettyChannelBuilder createChannel(DatanodeDetails dn, int port)
       throws IOException {
-    NettyChannelBuilder channelBuilder =
-        NettyChannelBuilder.forAddress(dn.getIpAddress(), port).usePlaintext()
+    String dnHost;
+    if (datanodeUseHostName()) {
+      dnHost = dn.getHostName();
+    } else {
+      dnHost = dn.getIpAddress();
+    }
+    NettyChannelBuilder channelBuilder = NettyChannelBuilder.forAddress(dnHost, port)
             .maxInboundMessageSize(OzoneConsts.OZONE_SCM_CHUNK_MAX_SIZE)
             .intercept(new GrpcClientInterceptor());
     if (secConfig.isSecurityEnabled() && secConfig.isGrpcTlsEnabled()) {
@@ -202,6 +208,12 @@ public class XceiverClientGrpc extends XceiverClientSpi {
       channelBuilder.usePlaintext();
     }
     return channelBuilder;
+  }
+
+  private boolean datanodeUseHostName() {
+    return config.getBoolean(
+            DFSConfigKeys.DFS_DATANODE_USE_DN_HOSTNAME,
+            DFSConfigKeys.DFS_DATANODE_USE_DN_HOSTNAME_DEFAULT);
   }
 
   /**
