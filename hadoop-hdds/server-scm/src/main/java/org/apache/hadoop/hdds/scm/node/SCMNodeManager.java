@@ -123,6 +123,7 @@ public class SCMNodeManager implements NodeManager {
   private final Function<String, String> nodeResolver;
   private final boolean useHostname;
   private final boolean useRemoteAddress;
+  private final boolean useCustomIp;
   private final Map<String, Set<UUID>> dnsToUuidMap = new ConcurrentHashMap<>();
   private final int numPipelinesPerMetadataVolume;
   private final int heavyNodeCriteria;
@@ -174,6 +175,9 @@ public class SCMNodeManager implements NodeManager {
     this.useHostname = conf.getBoolean(
         DFSConfigKeysLegacy.DFS_DATANODE_USE_DN_HOSTNAME,
         DFSConfigKeysLegacy.DFS_DATANODE_USE_DN_HOSTNAME_DEFAULT);
+    this.useCustomIp = conf.getBoolean(
+            ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED,
+            ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED_DEFAULT);
     this.numPipelinesPerMetadataVolume =
         conf.getInt(ScmConfigKeys.OZONE_SCM_PIPELINE_PER_METADATA_VOLUME,
             ScmConfigKeys.OZONE_SCM_PIPELINE_PER_METADATA_VOLUME_DEFAULT);
@@ -383,7 +387,9 @@ public class SCMNodeManager implements NodeManager {
       if (!useHostname) {
         datanodeDetails.setHostName(dnAddress.getHostName());
       }
-      datanodeDetails.setIpAddress(dnAddress.getHostAddress());
+      if (!useCustomIp) {
+        datanodeDetails.setIpAddress(dnAddress.getHostAddress());
+      }
     }
 
     final String ipAddress = datanodeDetails.getIpAddress();

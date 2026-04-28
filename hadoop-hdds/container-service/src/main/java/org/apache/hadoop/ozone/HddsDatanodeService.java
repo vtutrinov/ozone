@@ -84,6 +84,9 @@ import static org.apache.hadoop.ozone.conf.OzoneServiceConfig.DEFAULT_SHUTDOWN_H
 import static org.apache.hadoop.ozone.common.Storage.StorageState.INITIALIZED;
 import static org.apache.hadoop.security.UserGroupInformation.getCurrentUser;
 import static org.apache.hadoop.ozone.container.common.statemachine.DatanodeConfiguration.HDDS_DATANODE_BLOCK_DELETE_THREAD_MAX;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_KEY;
 import static org.apache.hadoop.util.ExitUtil.terminate;
 
 import org.slf4j.Logger;
@@ -222,7 +225,15 @@ public class HddsDatanodeService extends GenericCli implements ServicePlugin {
     HddsServerUtil.initializeMetrics(conf, "HddsDatanode");
     try {
       String hostname = HddsUtils.getHostName(conf);
-      String ip = InetAddress.getByName(hostname).getHostAddress();
+      String ip;
+      if (datanodeUseCustomIp()) {
+        ip = conf.get(OZONE_SCM_DATANODE_CUSTOM_IP_KEY);
+        if (ip == null) {
+          throw new IOException("ozone.scm.datanode.custom.ip parameter not defined");
+        }
+      } else {
+        ip = InetAddress.getByName(hostname).getHostAddress();
+      }
       datanodeDetails = initializeDatanodeDetails();
       datanodeDetails.setHostName(hostname);
       datanodeDetails.setIpAddress(ip);
@@ -343,6 +354,12 @@ public class HddsDatanodeService extends GenericCli implements ServicePlugin {
       throw new RuntimeException("Fail to authentication when starting" +
           " HDDS datanode plugin", ex);
     }
+  }
+
+  private boolean datanodeUseCustomIp() {
+    return conf.getBoolean(
+            OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED,
+            OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED_DEFAULT);
   }
 
   @VisibleForTesting

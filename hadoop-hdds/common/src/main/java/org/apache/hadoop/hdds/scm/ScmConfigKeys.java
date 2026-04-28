@@ -627,6 +627,14 @@ public final class ScmConfigKeys {
       "ozone.scm.ha.dbtransactionbuffer.flush.interval";
   public static final long
       OZONE_SCM_HA_DBTRANSACTIONBUFFER_FLUSH_INTERVAL_DEFAULT = 600 * 1000L;
+
+  public static final String OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED =
+          "ozone.scm.datanode.custom.ip.enabled";
+  public static final boolean OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED_DEFAULT = false;
+
+  public static final String OZONE_SCM_DATANODE_CUSTOM_IP_KEY =
+          "ozone.scm.datanode.custom.ip";
+
   /**
    * Never constructed.
    */
