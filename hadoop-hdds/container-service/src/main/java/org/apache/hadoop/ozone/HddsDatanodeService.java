@@ -20,6 +20,9 @@ package org.apache.hadoop.ozone;
 import static org.apache.hadoop.hdds.protocol.DatanodeDetails.Port.Name.HTTP;
 import static org.apache.hadoop.hdds.protocol.DatanodeDetails.Port.Name.HTTPS;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_ADDRESS_KEY;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_KEY;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_NODES_KEY;
 import static org.apache.hadoop.hdds.utils.HddsServerUtil.getRemoteUser;
 import static org.apache.hadoop.hdds.utils.HddsServerUtil.getScmSecurityClientWithMaxRetry;
@@ -249,7 +252,16 @@ public class HddsDatanodeService extends GenericCli implements Callable<Void>, S
       datanodeDetails.setHostName(hostname);
       serviceRuntimeInfo.setHostName(hostname);
       serviceRuntimeInfo.setDatanodeUuid(datanodeDetails.getUuidString());
-      datanodeDetails.validateDatanodeIpAddress();
+      if (datanodeUseCustomIp()) {
+        // SDP (SDPOZN-2300): register with the configured IP address
+        String ip = conf.get(OZONE_SCM_DATANODE_CUSTOM_IP_KEY);
+        if (ip == null) {
+          throw new IOException(OZONE_SCM_DATANODE_CUSTOM_IP_KEY + " parameter not defined");
+        }
+        datanodeDetails.setIpAddress(ip);
+      } else {
+        datanodeDetails.validateDatanodeIpAddress();
+      }
       datanodeDetails.setVersion(
           HddsVersionInfo.HDDS_VERSION_INFO.getVersion());
       datanodeDetails.setSetupTime(Time.now());
@@ -391,6 +403,12 @@ public class HddsDatanodeService extends GenericCli implements Callable<Void>, S
       throw new RuntimeException("Fail to authentication when starting" +
           " HDDS datanode plugin", ex);
     }
+  }
+
+  private boolean datanodeUseCustomIp() {
+    return conf.getBoolean(
+            OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED,
+            OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED_DEFAULT);
   }
 
   @VisibleForTesting

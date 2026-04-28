@@ -631,6 +631,14 @@ public final class ScmConfigKeys {
       "ozone.scm.ratis.events.max.limit";
   public static final int OZONE_SCM_RATIS_EVENTS_MAX_LIMIT_DEFAULT = 100;
 
+  // SDP (SDPOZN-2300): the DataNode registers with a configured IP address instead of the resolved one
+  public static final String OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED =
+      "ozone.scm.datanode.custom.ip.enabled";
+  public static final boolean OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED_DEFAULT = false;
+
+  public static final String OZONE_SCM_DATANODE_CUSTOM_IP_KEY =
+      "ozone.scm.datanode.custom.ip";
+
   /**
    * Never constructed.
    */

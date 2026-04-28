@@ -135,6 +135,8 @@ public class SCMNodeManager implements NodeManager {
   private final boolean useHostname;
   // SDP (SDPOZN-2328): false to trust the DataNode reported address (e.g. behind an Istio sidecar)
   private final boolean useRemoteAddress;
+  // SDP (SDPOZN-2300): keep the IP address configured on the DataNode
+  private final boolean useCustomIp;
   private final Map<String, Set<DatanodeID>> dnsToDnIdMap = new ConcurrentHashMap<>();
   private final int numPipelinesPerMetadataVolume;
   private final int datanodePipelineLimit;
@@ -204,6 +206,9 @@ public class SCMNodeManager implements NodeManager {
     this.useHostname = conf.getBoolean(
         HddsConfigKeys.HDDS_DATANODE_USE_DN_HOSTNAME,
         HddsConfigKeys.HDDS_DATANODE_USE_DN_HOSTNAME_DEFAULT);
+    this.useCustomIp = conf.getBoolean(
+        ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED,
+        ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED_DEFAULT);
     this.numPipelinesPerMetadataVolume =
         conf.getInt(ScmConfigKeys.OZONE_SCM_PIPELINE_PER_METADATA_VOLUME,
             ScmConfigKeys.OZONE_SCM_PIPELINE_PER_METADATA_VOLUME_DEFAULT);
@@ -427,7 +432,9 @@ public class SCMNodeManager implements NodeManager {
       if (!useHostname) {
         datanodeDetails.setHostName(dnAddress.getHostName());
       }
-      datanodeDetails.setIpAddress(dnAddress.getHostAddress());
+      if (!useCustomIp) {
+        datanodeDetails.setIpAddress(dnAddress.getHostAddress());
+      }
     }
 
     final String ipAddress = datanodeDetails.getIpAddress();
