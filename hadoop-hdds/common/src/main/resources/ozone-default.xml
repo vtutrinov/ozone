@@ -3778,6 +3778,21 @@
     <tag>SCM, OZONE</tag>
     <description>Wait duration for flush of buffered transaction.</description>
   </property>
+  <property>
+    <name>ozone.scm.datanode.custom.ip.enabled</name>
+    <value>false</value>
+    <tag>SCM, OZONE, DN</tag>
+    <description>Enables or disables the use of a custom IP address for DataNode registration
+      with SCM. When set to true, the DataNode will use the IP address specified
+      in "ozone.scm.datanode.custom.ip" instead of its host's default IP address.</description>
+  </property>
+  <property>
+    <name>ozone.scm.datanode.custom.ip</name>
+    <value/>
+    <tag>SCM, OZONE, DN</tag>
+    <description>If ozone.scm.datanode.custom.ip.enabled=true, the DataNode will
+      use the value of this parameter as the "ip" field during registration with SCM.</description>
+  </property>
 
 
   <property>
