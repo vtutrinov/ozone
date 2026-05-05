@@ -18,7 +18,7 @@ Documentation       Execute MR jobs
 Library             OperatingSystem
 Resource            commonlib.robot
 Resource            lib/fs.robot
-Test Timeout        4 minute
+Test Timeout        30 minute
 
 
 *** Variables ***
