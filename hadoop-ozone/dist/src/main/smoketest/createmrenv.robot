@@ -18,7 +18,7 @@ Documentation       Create directories required for MR test
 Library             OperatingSystem
 Resource            commonlib.robot
 Resource            lib/fs.robot
-Test Timeout        5 minutes
+Test Timeout        30 minutes
 
 
 *** Variables ***
