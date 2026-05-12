@@ -22,7 +22,10 @@ import static org.apache.hadoop.hdds.protocol.DatanodeDetails.Port.Name.HTTPS;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_ADDRESS_KEY;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_FILE_PATH;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_KEY;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_DEFAULT;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_NODES_KEY;
 import static org.apache.hadoop.hdds.utils.HddsServerUtil.getRemoteUser;
 import static org.apache.hadoop.hdds.utils.HddsServerUtil.getScmSecurityClientWithMaxRetry;
@@ -43,6 +46,10 @@ import com.google.common.collect.Sets;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -253,12 +260,8 @@ public class HddsDatanodeService extends GenericCli implements Callable<Void>, S
       serviceRuntimeInfo.setHostName(hostname);
       serviceRuntimeInfo.setDatanodeUuid(datanodeDetails.getUuidString());
       if (datanodeUseCustomIp()) {
-        // SDP (SDPOZN-2300): register with the configured IP address
-        String ip = conf.get(OZONE_SCM_DATANODE_CUSTOM_IP_KEY);
-        if (ip == null) {
-          throw new IOException(OZONE_SCM_DATANODE_CUSTOM_IP_KEY + " parameter not defined");
-        }
-        datanodeDetails.setIpAddress(ip);
+        // SDP (SDPOZN-2300, SDPOZN-2395): register with the configured IP address
+        datanodeDetails.setIpAddress(readCustomIP());
       } else {
         datanodeDetails.validateDatanodeIpAddress();
       }
@@ -409,6 +412,34 @@ public class HddsDatanodeService extends GenericCli implements Callable<Void>, S
     return conf.getBoolean(
             OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED,
             OZONE_SCM_DATANODE_CUSTOM_IP_ENABLED_DEFAULT);
+  }
+
+  private String readCustomIP() throws IOException {
+    String ip;
+    boolean readIpFromFile = conf.getBoolean(
+            OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE,
+            OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_DEFAULT);
+    if (readIpFromFile) {
+      String filePath = conf.get(OZONE_SCM_DATANODE_CUSTOM_IP_FILE_PATH);
+      if (filePath == null || filePath.isEmpty()) {
+        throw new IOException(OZONE_SCM_DATANODE_CUSTOM_IP_FILE_PATH + " parameter not defined");
+      }
+      Path path = Paths.get(filePath);
+      if (!Files.exists(path)) {
+        throw new IOException("Custom IP file not found: " + filePath);
+      }
+      List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+      if (lines.isEmpty()) {
+        throw new IOException("Custom IP file is empty: " + filePath);
+      }
+      ip = lines.get(0).trim();
+    } else {
+      ip = conf.get(OZONE_SCM_DATANODE_CUSTOM_IP_KEY);
+      if (ip == null) {
+        throw new IOException("ozone.scm.datanode.custom.ip parameter not defined");
+      }
+    }
+    return ip;
   }
 
   @VisibleForTesting
