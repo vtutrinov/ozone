@@ -3793,6 +3793,22 @@
     <description>If ozone.scm.datanode.custom.ip.enabled=true, the DataNode will
       use the value of this parameter as the "ip" field during registration with SCM.</description>
   </property>
+  <property>
+    <name>ozone.scm.datanode.custom.ip.read.from.file</name>
+    <value>false</value>
+    <tag>SCM, OZONE, DN</tag>
+    <description>Enables or disables reading a custom IP address for DataNode from the file
+      configured via the parameter "ozone.scm.datanode.custom.ip.file.path"</description>
+  </property>
+  <property>
+    <name>ozone.scm.datanode.custom.ip.file.path</name>
+    <value/>
+    <tag>SCM, OZONE, DN</tag>
+    <description>If ozone.scm.datanode.custom.ip.enabled=true and
+      ozone.scm.datanode.custom.ip.read.from.file=true, this parameter defines the filesystem path
+      to the file containing the custom IP address for the DataNode. The first line of the file
+      will be used as the IP address. </description>
+  </property>
 
 
   <property>
