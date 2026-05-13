@@ -1258,6 +1258,11 @@
         <version>${hdds.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.apache.ozone</groupId>
+        <artifactId>security-auth-agent</artifactId>
+        <version>${hdds.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.apache.ranger</groupId>
         <artifactId>ranger-intg</artifactId>
         <version>${ranger.version}</version>

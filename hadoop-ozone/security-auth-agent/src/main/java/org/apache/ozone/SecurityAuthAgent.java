@@ -1,44 +1,185 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.ozone;
 
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.implementation.MethodDelegation;
-import static net.bytebuddy.matcher.ElementMatchers.*;
+
+import static net.bytebuddy.matcher.ElementMatchers.named;
+import static net.bytebuddy.matcher.ElementMatchers.nameMatches;
+import static net.bytebuddy.matcher.ElementMatchers.nameStartsWith;
+import static net.bytebuddy.matcher.ElementMatchers.none;
+import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
+
+import org.apache.ozone.config.AgentArgsParser;
+import org.apache.ozone.config.AgentConfig;
+import org.apache.ozone.interceptor.DoAsInterceptor;
+import org.apache.ozone.interceptor.ConnectionContextInterceptor;
+import org.apache.ozone.interceptor.HttpAuthInterceptor;
+import org.apache.ozone.interceptor.HttpAuthTypeInterceptor;
+import org.apache.ozone.interceptor.HttpOidcInterceptor;
+import org.apache.ozone.interceptor.KerberosAuthenticatorInterceptor;
+import org.apache.ozone.interceptor.LoginInterceptor;
+import org.apache.ozone.interceptor.SaslClientInterceptor;
+import org.apache.ozone.interceptor.SaslServerInterceptor;
+import org.apache.ozone.interceptor.UgiToStringInterceptor;
+import org.apache.ozone.provider.AuthDataProvider;
 
 import java.lang.instrument.Instrumentation;
+import java.util.ServiceLoader;
 
-// Lightweight Java agent that instruments Hadoop's
-// org.apache.hadoop.security.UserGroupInformation#doAs(...) methods
-// and delegates to a DoAsInterceptor which performs an OAuth check
+/**
+ * Java agent that instruments Hadoop's
+ * {@code UserGroupInformation} to replace Kerberos authentication
+ * with OAuth token-based authentication.
+ *
+ * <p>Usage: {@code -javaagent:security-auth-agent.jar=--auth-data-provider=env}
+ */
 public class SecurityAuthAgent {
 
-    // Called when the JVM starts with -javaagent:... option
-    public static void premain(String agentArgs, Instrumentation inst) {
-        installAgent(inst);
-    }
+  private static volatile AuthDataProvider provider;
+  private static volatile AgentConfig agentConfig;
 
-    // Called when the agent is attached at runtime
-    public static void agentmain(String agentArgs, Instrumentation inst) {
-        installAgent(inst);
-    }
+  public static void premain(String agentArgs, Instrumentation inst) {
+    init(agentArgs, inst);
+  }
 
-    private static void installAgent(Instrumentation inst) {
-      try {
-        new AgentBuilder.Default()
-            .ignore(nameStartsWith("net.bytebuddy."))
-            .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
-//            .with(AgentBuilder.Listener.StreamWriting.toSystemOut())
-            .ignore(none())
-            .type(named("org.apache.hadoop.security.UserGroupInformation"))
-            .transform((builder, typeDescription, classLoader, module,
-                        protectionDomain) ->
-                builder.method(named("doAs").and(takesArguments(1)))
-                    .intercept(MethodDelegation.to(DoAsInterceptor.class))
-            ).installOn(inst);
-        System.out.println("Installed Hadoop security auth agent");
-      } catch (Throwable t) {
-        t.printStackTrace();
-        System.out.println("Failed to install agent!");
+  public static void agentmain(String agentArgs, Instrumentation inst) {
+    init(agentArgs, inst);
+  }
+
+  private static void init(String agentArgs, Instrumentation inst) {
+    try {
+      agentConfig = AgentArgsParser.parse(agentArgs);
+      System.out.println("[SecurityAuthAgent] Config: " + agentConfig);
+      resolveProvider();
+      installAgent(inst);
+    } catch (Throwable t) {
+      t.printStackTrace();
+      System.err.println("[SecurityAuthAgent] Failed to initialize!");
+    }
+  }
+
+  private static void resolveProvider() {
+    String name = agentConfig.getProviderName();
+    ServiceLoader<AuthDataProvider> loader =
+        ServiceLoader.load(AuthDataProvider.class);
+    for (AuthDataProvider candidate : loader) {
+      if (candidate.getName().equals(name)) {
+        candidate.init(agentConfig);
+        provider = candidate;
+        System.out.println("[SecurityAuthAgent] Using provider: " + name);
+        return;
       }
     }
+    System.err.println("[SecurityAuthAgent] No provider found for: "
+        + name);
+  }
 
+  private static void installAgent(Instrumentation inst) {
+    new AgentBuilder.Default()
+        .ignore(nameStartsWith("net.bytebuddy."))
+        .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
+        .ignore(none())
+        .type(named(
+            "org.apache.hadoop.security.UserGroupInformation"))
+        .transform((builder, typeDescription, classLoader, module,
+                    protectionDomain) ->
+            builder
+                .method(named("doAs").and(takesArguments(1)))
+                .intercept(MethodDelegation.to(DoAsInterceptor.class))
+                .method(named("loginUserFromKeytab")
+                    .and(takesArguments(2)))
+                .intercept(
+                    MethodDelegation.to(LoginInterceptor.class))
+                .method(named("loginUserFromKeytabAndReturnUGI")
+                    .and(takesArguments(2)))
+                .intercept(
+                    MethodDelegation.to(LoginInterceptor.class))
+                .method(named("toString").and(takesArguments(0)))
+                .intercept(
+                    MethodDelegation.to(UgiToStringInterceptor.class))
+        )
+        // Match both the standard Hadoop classes (used by YARN) and
+        // Ozone's relocated copies in the *_ packages.
+        .type(nameMatches(
+            "org\\.apache\\.hadoop\\.security_?\\.SaslRpcClient"))
+        .transform((builder, typeDescription, classLoader, module,
+                    protectionDomain) ->
+            builder
+                .method(named("createSaslClient")
+                    .and(takesArguments(1)))
+                .intercept(
+                    MethodDelegation.to(SaslClientInterceptor.class))
+        )
+        .type(nameMatches(
+            "org\\.apache\\.hadoop\\.security_?\\.SaslRpcServer"))
+        .transform((builder, typeDescription, classLoader, module,
+                    protectionDomain) ->
+            builder
+                .method(named("create")
+                    .and(takesArguments(3)))
+                .intercept(
+                    MethodDelegation.to(SaslServerInterceptor.class))
+        )
+        .type(named("org.apache.hadoop.security.authentication.server"
+            + ".KerberosAuthenticationHandler"))
+        .transform((builder, typeDescription, classLoader, module,
+                    protectionDomain) ->
+            builder
+                .method(named("init").and(takesArguments(1)))
+                .intercept(
+                    MethodDelegation.to(HttpAuthInterceptor.class))
+                .method(named("getType").and(takesArguments(0)))
+                .intercept(
+                    MethodDelegation.to(HttpAuthTypeInterceptor.class))
+                .method(named("authenticate").and(takesArguments(2)))
+                .intercept(
+                    MethodDelegation.to(HttpOidcInterceptor.class))
+        )
+        .type(named("org.apache.hadoop.security.authentication.client"
+            + ".KerberosAuthenticator"))
+        .transform((builder, typeDescription, classLoader, module,
+                    protectionDomain) ->
+            builder
+                .method(named("authenticate").and(takesArguments(2)))
+                .intercept(MethodDelegation.to(
+                    KerberosAuthenticatorInterceptor.class))
+        )
+        .type(nameMatches(
+            "org\\.apache\\.hadoop\\.ipc_?\\.Client\\$ConnectionId"))
+        .transform((builder, typeDescription, classLoader, module,
+                    protectionDomain) ->
+            builder
+                .method(named("getTicket").and(takesArguments(0)))
+                .intercept(MethodDelegation.to(
+                    ConnectionContextInterceptor.class))
+        )
+        .installOn(inst);
+    System.out.println("[SecurityAuthAgent] Installed Hadoop security"
+        + " auth agent");
+  }
+
+  public static AuthDataProvider getProvider() {
+    return provider;
+  }
+
+  public static AgentConfig getAgentConfig() {
+    return agentConfig;
+  }
 }

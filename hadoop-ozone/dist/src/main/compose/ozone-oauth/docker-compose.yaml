@@ -1,0 +1,154 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ============================================================
+# Secure Ozone cluster with OAuth (via Keycloak) instead of KDC.
+#
+# Security is fully enabled (ozone.security.enabled=true,
+# Kerberos principals configured, block/container tokens, etc.)
+# but there is NO KDC and NO keytab files. The security-auth-agent
+# intercepts all loginUserFromKeytab() calls and replaces them
+# with OAuth token acquisition from Keycloak.
+#
+# If the agent fails to intercept, Kerberos login fails
+# (no KDC reachable) — proving the agent works correctly.
+# ============================================================
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    hostname: keycloak
+    dns_search: .
+    ports:
+      - 8080:8080
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./keycloak-realm.json:/opt/keycloak/data/import/ozone-realm.json
+    command: ["start-dev", "--import-realm", "--health-enabled=true"]
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+  scm:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: scm
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+    ports:
+      - 9002:5005
+#      - 9876:9876
+#      - 9860:9860
+    env_file:
+      - docker-config
+    environment:
+      ENSURE_SCM_INITIALIZED: /data/metadata/scm/current/VERSION
+      OZONE-SITE.XML_hdds.scm.safemode.min.datanode: "${OZONE_SAFEMODE_MIN_DATANODES:-1}"
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005
+      AUTH_SERVER_URL: http://keycloak:8080/realms/ozone/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: scm
+      AUTH_PASSWORD: scm
+    command: ["/opt/hadoop/bin/ozone","scm"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+  om:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: om
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+#    ports:
+#      - 9874:9874
+#      - 9862:9862
+    env_file:
+      - docker-config
+    environment:
+      ENSURE_OM_INITIALIZED: /data/metadata/om/current/VERSION
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none
+      AUTH_SERVER_URL: http://keycloak:8080/realms/ozone/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: om
+      AUTH_PASSWORD: om
+    command: ["/opt/hadoop/bin/ozone","om"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+  datanode:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: dn
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+#    ports:
+#      - 19864
+    env_file:
+      - docker-config
+    environment:
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none
+      AUTH_SERVER_URL: http://keycloak:8080/realms/ozone/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: dn
+      AUTH_PASSWORD: dn
+    command: ["/opt/hadoop/bin/ozone","datanode"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+  s3g:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: s3g
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+    ports:
+      - 9878:9878
+    env_file:
+      - docker-config
+    environment:
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none
+      AUTH_SERVER_URL: http://keycloak:8080/realms/ozone/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: s3g
+      AUTH_PASSWORD: s3g
+    command: ["/opt/hadoop/bin/ozone","s3g"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+  recon:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: recon
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+    ports:
+      - 9888:9888
+    env_file:
+      - docker-config
+    environment:
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none
+      AUTH_SERVER_URL: http://keycloak:8080/realms/ozone/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: recon
+      AUTH_PASSWORD: recon
+    command: ["/opt/hadoop/bin/ozone","recon"]
+    depends_on:
+      keycloak:
+        condition: service_healthy

@@ -25,6 +25,27 @@
       <artifactId>byte-buddy</artifactId>
       <version>1.17.7</version>
     </dependency>
+    <!--
+      hadoop-common is provided-scope: compile-time access to TokenIdentifier,
+      TokenRenewer, Token, UserGroupInformation, Credentials, etc.
+      Not bundled into the shaded JAR — comes from the application classloader
+      at runtime when the agent runs inside a Hadoop service.
+    -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-common</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -67,6 +88,7 @@
                 </relocation>
               </relocations>
               <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
                 <!-- Ensure the shaded jar contains the agent manifest entries -->
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                   <manifestEntries>

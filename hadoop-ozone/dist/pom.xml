@@ -132,6 +132,11 @@
       <artifactId>ozone-tools</artifactId>
       <scope>runtime</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.ozone</groupId>
+      <artifactId>security-auth-agent</artifactId>
+      <scope>runtime</scope>
+    </dependency>
   </dependencies>
 
   <build>

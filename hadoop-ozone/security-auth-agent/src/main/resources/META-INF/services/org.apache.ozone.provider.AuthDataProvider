@@ -1,0 +1,5 @@
+org.apache.ozone.provider.DefaultAuthDataProvider
+org.apache.ozone.provider.FileAuthDataProvider
+org.apache.ozone.provider.EnvAuthDataProvider
+org.apache.ozone.provider.JksAuthDataProvider
+org.apache.ozone.provider.InteractiveAuthDataProvider
