@@ -31,6 +31,18 @@ public class NoneTokenValidator implements TokenValidator {
 
   @Override
   public String validate(String accessToken) throws IOException {
+    Map<String, String> claims = parseClaims(accessToken);
+    String username = claims.get("preferred_username");
+    return username != null ? username : requireUser(claims);
+  }
+
+  /**
+   * Decode the JWT payload claims without signature verification.
+   * Exposed so callers (e.g. {@link OAuthPrincipalBuilder}) can read
+   * additional claims like {@code iss} for realm derivation.
+   */
+  public static Map<String, String> parseClaims(String accessToken)
+      throws IOException {
     if (accessToken == null || accessToken.isEmpty()) {
       throw new IOException("Empty access token");
     }
@@ -40,14 +52,15 @@ public class NoneTokenValidator implements TokenValidator {
     }
     String payloadJson = new String(
         Base64.getUrlDecoder().decode(parts[1]), "UTF-8");
-    Map<String, String> claims = SimpleJsonParser.parse(payloadJson);
-    String username = claims.get("preferred_username");
-    if (username == null) {
-      username = claims.get("sub");
-    }
+    return SimpleJsonParser.parse(payloadJson);
+  }
+
+  private static String requireUser(Map<String, String> claims)
+      throws IOException {
+    String username = claims.get("sub");
     if (username == null) {
       throw new IOException(
-          "No username found in JWT payload: " + payloadJson);
+          "No preferred_username or sub claim in JWT");
     }
     return username;
   }

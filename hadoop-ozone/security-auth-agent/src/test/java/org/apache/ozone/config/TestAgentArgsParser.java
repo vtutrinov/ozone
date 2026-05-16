@@ -125,4 +125,26 @@ class TestAgentArgsParser {
     AgentConfig config = AgentArgsParser.parse("auth-offline-access");
     assertTrue(config.isOfflineAccess());
   }
+
+  @Test
+  void kerberosRealmOverride() {
+    AgentConfig config = AgentArgsParser.parse(
+        "auth-data-provider=env,auth-kerberos-realm=PROD.LOCAL");
+    assertEquals("PROD.LOCAL", config.getKerberosRealm());
+  }
+
+  @Test
+  void kerberosHostOverride() {
+    AgentConfig config = AgentArgsParser.parse(
+        "auth-data-provider=env,auth-kerberos-host=om.example.com");
+    assertEquals("om.example.com", config.getKerberosHost());
+  }
+
+  @Test
+  void kerberosRealmAndHostDefaultNull() {
+    AgentConfig config = AgentArgsParser.parse(
+        "auth-data-provider=env");
+    assertNull(config.getKerberosRealm());
+    assertNull(config.getKerberosHost());
+  }
 }

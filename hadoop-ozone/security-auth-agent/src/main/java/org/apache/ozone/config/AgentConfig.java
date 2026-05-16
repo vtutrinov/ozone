@@ -45,6 +45,18 @@ public class AgentConfig {
    * where the user's session may go idle while the job is running.
    */
   private boolean offlineAccess;
+  /**
+   * Override for the realm component when synthesizing a
+   * Kerberos-shaped principal from JWT claims (Option 2).
+   * {@code null} means derive from the {@code iss} claim.
+   */
+  private String kerberosRealm;
+  /**
+   * Override for the host component when synthesizing a
+   * Kerberos-shaped principal. {@code null} means use the local
+   * canonical hostname.
+   */
+  private String kerberosHost;
 
   public String getProviderName() {
     return providerName;
@@ -118,6 +130,22 @@ public class AgentConfig {
     this.offlineAccess = offlineAccess;
   }
 
+  public String getKerberosRealm() {
+    return kerberosRealm;
+  }
+
+  public void setKerberosRealm(String kerberosRealm) {
+    this.kerberosRealm = kerberosRealm;
+  }
+
+  public String getKerberosHost() {
+    return kerberosHost;
+  }
+
+  public void setKerberosHost(String kerberosHost) {
+    this.kerberosHost = kerberosHost;
+  }
+
   @Override
   public String toString() {
     return "AgentConfig{"
@@ -129,6 +157,8 @@ public class AgentConfig {
         + ", qrEnabled=" + qrEnabled
         + ", bundleCreds=" + bundleCreds
         + ", offlineAccess=" + offlineAccess
+        + ", kerberosRealm='" + kerberosRealm + '\''
+        + ", kerberosHost='" + kerberosHost + '\''
         + '}';
   }
 }

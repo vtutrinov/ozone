@@ -77,6 +77,8 @@ treated as boolean flags (set to true).
 | `auth-qr` | `false` | print ASCII QR for device-flow URI |
 | `auth-bundle-creds` | `false` | bundle OAuth token into UGI credentials (YARN propagation) |
 | `auth-offline-access` | `false` | request `scope=openid offline_access` in device flow |
+| `auth-kerberos-realm` | derived from JWT `iss` | realm component of the synthesized `user/host@REALM` principal |
+| `auth-kerberos-host` | local canonical hostname | host component of the synthesized principal |
 
 Example:
 
@@ -183,6 +185,31 @@ timeout.
 
 In bundled mode you also need to add `-javaagent` to the YARN container
 JVM opts (see commented-out lines in `compose/ozone-oauth/docker-config`).
+
+## Identity shape: Kerberos-style principals from JWT
+
+For seamless migration from Kerberos, the UGIs the agent installs use
+the canonical `service/host@REALM` shape (`OAuthPrincipalBuilder`):
+
+- **`service`** — JWT `preferred_username`, falling back to `sub`.
+- **`host`** — `auth-kerberos-host=…` if set, else the local
+  canonical hostname.
+- **`REALM`** — `auth-kerberos-realm=…` if set, else derived from the
+  JWT `iss` claim (last URL path segment, uppercased; e.g.,
+  `http://keycloak:8080/realms/ozone` → `OZONE`), falling back to
+  `OAUTH`.
+
+This means downstream Hadoop code that parses the UGI's username
+(`KerberosName`, `auth_to_local` rules, log lines) sees a name with
+all three components and behaves as it would under real Kerberos.
+
+As defense-in-depth, the agent also intercepts
+`KerberosName.getHostName()` to return a non-null fallback when a
+parsed principal lacks a host part (see
+`KerberosNameHostInterceptor`). That guard catches the YARN AM
+case — where NM injects a short `HADOOP_USER_NAME` and our
+login-time principal synthesis can't reach the AM's UGI
+construction.
 
 ## Token validators
 

@@ -86,6 +86,12 @@ public final class AgentArgsParser {
     case "auth-offline-access":
       config.setOfflineAccess(Boolean.parseBoolean(value));
       break;
+    case "auth-kerberos-realm":
+      config.setKerberosRealm(value);
+      break;
+    case "auth-kerberos-host":
+      config.setKerberosHost(value);
+      break;
     default:
       System.err.println("[SecurityAuthAgent] Unknown arg: " + key);
       break;

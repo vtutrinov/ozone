@@ -209,10 +209,11 @@ public final class OAuthTokenManager {
   @SuppressWarnings({"unchecked", "rawtypes"})
   private static void replaceLoginUser(String accessToken) {
     try {
-      String jwtUser = new NoneTokenValidator().validate(accessToken);
-      if (jwtUser == null || jwtUser.isEmpty()) {
-        return;
-      }
+      AgentConfig config = SecurityAuthAgent.getAgentConfig();
+      String principal = OAuthPrincipalBuilder.build(
+          accessToken,
+          config != null ? config.getKerberosHost() : null,
+          config != null ? config.getKerberosRealm() : null);
       // Prefer the UGI class captured by DoAsInterceptor — its
       // classloader is guaranteed to be the application classloader
       // where Hadoop classes live. Fall back to thread context CL.
@@ -237,7 +238,7 @@ public final class OAuthTokenManager {
 
       java.lang.reflect.Method create = resolvedUgiClass.getMethod(
           "createRemoteUser", String.class, authMethodClass);
-      Object ugi = create.invoke(null, jwtUser, kerberos);
+      Object ugi = create.invoke(null, principal, kerberos);
 
       java.lang.reflect.Method setLoginUser =
           resolvedUgiClass.getDeclaredMethod("setLoginUser",
@@ -251,7 +252,7 @@ public final class OAuthTokenManager {
 
       System.out.println(
           "[SecurityAuthAgent] Replaced login UGI with OAuth user: "
-              + jwtUser);
+              + principal);
     } catch (Exception e) {
       System.err.println(
           "[SecurityAuthAgent] Failed to replace login UGI: "
