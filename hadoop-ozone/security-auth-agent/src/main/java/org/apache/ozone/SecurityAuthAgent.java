@@ -34,6 +34,7 @@ import org.apache.ozone.interceptor.HttpAuthInterceptor;
 import org.apache.ozone.interceptor.HttpAuthTypeInterceptor;
 import org.apache.ozone.interceptor.HttpOidcInterceptor;
 import org.apache.ozone.interceptor.KerberosAuthenticatorInterceptor;
+import org.apache.ozone.interceptor.KerberosNameHostInterceptor;
 import org.apache.ozone.interceptor.LoginInterceptor;
 import org.apache.ozone.interceptor.SaslClientInterceptor;
 import org.apache.ozone.interceptor.SaslServerInterceptor;
@@ -69,9 +70,33 @@ public class SecurityAuthAgent {
       System.out.println("[SecurityAuthAgent] Config: " + agentConfig);
       resolveProvider();
       installAgent(inst);
+      prewarmAuth();
     } catch (Throwable t) {
       t.printStackTrace();
       System.err.println("[SecurityAuthAgent] Failed to initialize!");
+    }
+  }
+
+  /**
+   * Obtain an OAuth token at premain time so {@code loginUser} is
+   * replaced with the OAuth-authenticated UGI before any application
+   * code runs. Without this, classes like {@code Job} capture
+   * {@code UGI.getCurrentUser()} (still the OS user) in their
+   * constructor, and later {@code job.submit()} runs inside a
+   * {@code doAs} of that captured user — staging dir gets resolved
+   * as {@code /user/$OS_USER/.staging} instead of
+   * {@code /user/$OAUTH_USER/.staging}.
+   */
+  private static void prewarmAuth() {
+    if (provider == null) {
+      return;
+    }
+    try {
+      org.apache.ozone.oauth.OAuthTokenManager.getToken("default");
+    } catch (Throwable t) {
+      System.err.println(
+          "[SecurityAuthAgent] Pre-warm auth failed: " + t.getMessage()
+              + " (lazy path will retry)");
     }
   }
 
@@ -160,6 +185,20 @@ public class SecurityAuthAgent {
                 .method(named("authenticate").and(takesArguments(2)))
                 .intercept(MethodDelegation.to(
                     KerberosAuthenticatorInterceptor.class))
+        )
+        // KerberosName.getHostName() returns null when the principal
+        // has no host part (e.g. an AM whose login UGI is just
+        // "hadoop"). SaslRpcServer's KERBEROS constructor throws on
+        // that, aborting SASL before our SaslServerInterceptor can
+        // swap in the OAuth server. Return a fallback host instead.
+        .type(named("org.apache.hadoop.security.authentication.util"
+            + ".KerberosName"))
+        .transform((builder, typeDescription, classLoader, module,
+                    protectionDomain) ->
+            builder
+                .method(named("getHostName").and(takesArguments(0)))
+                .intercept(MethodDelegation.to(
+                    KerberosNameHostInterceptor.class))
         )
         .type(nameMatches(
             "org\\.apache\\.hadoop\\.ipc_?\\.Client\\$ConnectionId"))

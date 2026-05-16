@@ -96,7 +96,17 @@
                     <Agent-Class>${agent.class}</Agent-Class>
                     <Can-Redefine-Classes>true</Can-Redefine-Classes>
                     <Can-Retransform-Classes>true</Can-Retransform-Classes>
-                    <Boot-Class-Path>${project.build.finalName}.jar</Boot-Class-Path>
+                    <!--
+                      Intentionally NO Boot-Class-Path entry. Putting the
+                      agent jar on the bootstrap classloader means our
+                      OAuthTokenRenewer (extends hadoop's TokenRenewer)
+                      gets loaded by the bootstrap CL, which cannot see
+                      hadoop-common -> NoClassDefFoundError when
+                      Token.getRenewer() runs ServiceLoader on RM.
+                      Letting -javaagent put the jar on the system
+                      classloader is sufficient for ByteBuddy
+                      interception of Hadoop classes.
+                    -->
                   </manifestEntries>
                 </transformer>
               </transformers>

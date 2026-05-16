@@ -139,17 +139,22 @@ OZONE_LOG_DIR=/var/log/hadoop
 no_proxy=om,scm,recon,s3g,keycloak,localhost,127.0.0.1
 
 # --- YARN container JVM opts ---
-# In the DEFAULT mode (standard Hadoop delegation token flow), AM and
-# task containers DON'T need the agent: they receive Ozone's
-# OzoneToken in their credentials file and authenticate to OM via
-# SASL TOKEN auth (DIGEST-MD5), which doesn't go through our agent.
+# Load the agent inside the AM (and map/reduce tasks) so it can:
+#   1. Replace SaslRpcServer KERBEROS handling on the AM's client port
+#      (otherwise MR clients can't get job status — the AM throws
+#      AccessControlException because its UGI lacks a /host@REALM
+#      principal shape).
+#   2. Authenticate outbound RPCs from the AM to OM via OAuth SASL
+#      when no OzoneToken is in scope.
 #
-# Enable the lines below ONLY if you also set
-# auth-bundle-creds=true on the client agent. In that mode the user's
-# OAuth access/refresh token is bundled into UGI credentials and
-# propagated to AM/task containers, which then need the agent
-# loaded to read and use it.
+# Provider is "env" so the agent loads without an interactive flow;
+# the AM doesn't need its own OAuth credentials (it has the
+# OzoneToken propagated from the submitter via UGI credentials).
 #
-# MAPRED-SITE.XML_yarn.app.mapreduce.am.command-opts=-Xmx1024m -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-2.2.0-SNAPSHOT.jar=auth-data-provider=env,auth-bundle-creds=true
-# MAPRED-SITE.XML_mapreduce.map.java.opts=-javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-2.2.0-SNAPSHOT.jar=auth-data-provider=env,auth-bundle-creds=true
-# MAPRED-SITE.XML_mapreduce.reduce.java.opts=-javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-2.2.0-SNAPSHOT.jar=auth-data-provider=env,auth-bundle-creds=true
+# Optional: append `,auth-bundle-creds=true` if you want the
+# client's OAuth access+refresh token bundled into UGI credentials
+# and propagated to the AM (e.g. for long-running jobs that outlive
+# the OzoneToken).
+MAPRED-SITE.XML_yarn.app.mapreduce.am.command-opts=-Xmx1024m -javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-2.2.0-SNAPSHOT.jar=auth-data-provider=env
+MAPRED-SITE.XML_mapreduce.map.java.opts=-javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-2.2.0-SNAPSHOT.jar=auth-data-provider=env
+MAPRED-SITE.XML_mapreduce.reduce.java.opts=-javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-2.2.0-SNAPSHOT.jar=auth-data-provider=env
