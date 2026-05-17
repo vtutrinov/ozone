@@ -637,6 +637,12 @@ public final class ScmConfigKeys {
   public static final boolean OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_DEFAULT = false;
   public static final String OZONE_SCM_DATANODE_CUSTOM_IP_FILE_PATH =
           "ozone.scm.datanode.custom.ip.file.path";
+  public static final String OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_REPROCESS_COUNT =
+          "ozone.scm.datanode.custom.ip.read.from.file.reprocess.count";
+  public static final int OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_REPROCESS_COUNT_DEFAULT = 1;
+  public static final String OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_REPROCESS_SLEEP_MS =
+          "ozone.scm.datanode.custom.ip.read.from.file.reprocess.sleep.ms";
+  public static final int OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_REPROCESS_SLEEP_MS_DEFAULT = 0;
 
   public static final String OZONE_SCM_DATANODE_CUSTOM_IP_KEY =
           "ozone.scm.datanode.custom.ip";

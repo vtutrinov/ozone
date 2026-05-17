@@ -3809,7 +3809,18 @@
       to the file containing the custom IP address for the DataNode. The first line of the file
       will be used as the IP address. </description>
   </property>
-
+  <property>
+    <name>ozone.scm.datanode.custom.ip.read.from.file.reprocess.count</name>
+    <value>1</value>
+    <tag>SCM, OZONE, DN</tag>
+    <description>number of attempts to read the Custom IP address of the datanode from a file</description>
+  </property>
+  <property>
+    <name>ozone.scm.datanode.custom.ip.read.from.file.reprocess.sleep.ms</name>
+    <value>0</value>
+    <tag>SCM, OZONE, DN</tag>
+    <description>Timeout between attempts to read a Custom IP datanode address from a file</description>
+  </property>
 
   <property>
     <name>ozone.s3g.kerberos.keytab.file</name>
