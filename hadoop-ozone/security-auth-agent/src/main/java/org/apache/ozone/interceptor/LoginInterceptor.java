@@ -24,6 +24,8 @@ import org.apache.ozone.oauth.OAuthToken;
 import org.apache.ozone.oauth.OAuthTokenManager;
 
 import java.lang.reflect.Method;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 /**
  * Intercepts {@code UserGroupInformation.loginUserFromKeytab()} and
@@ -39,11 +41,12 @@ public class LoginInterceptor {
   private static volatile Method createRemoteUserMethod;
   private static volatile Method setLoginUserMethod;
   private static volatile Object kerberosAuthMethod;
+  private static volatile String cachedLocalHost;
 
   @RuntimeType
   public static Object intercept(@AllArguments Object[] args,
       @Origin Method method) throws Exception {
-    String principal = (String) args[0];
+    String principal = substituteHostToken((String) args[0]);
     System.out.println(
         "[SecurityAuthAgent] Intercepted " + method.getName()
             + " for principal: " + principal);
@@ -75,17 +78,39 @@ public class LoginInterceptor {
     return ugi;
   }
 
-  private static String extractSimpleName(String principal) {
-    // Kerberos principal format: name/host@REALM -> extract name
-    int slashIdx = principal.indexOf('/');
-    int atIdx = principal.indexOf('@');
-    if (slashIdx > 0) {
-      return principal.substring(0, slashIdx);
+  /**
+   * Defensive substitution of Hadoop's {@code _HOST} placeholder in
+   * principal strings. Hadoop's services normally resolve
+   * {@code _HOST} via {@code SecurityUtil.getServerPrincipal} before
+   * calling {@code loginUserFromKeytab}, so the principal arriving
+   * here is already substituted. This catches the rare path where
+   * raw config values flow straight to {@code loginUserFromKeytab}
+   * (some third-party Hadoop code, custom services), which would
+   * otherwise leave a literal {@code _HOST} in the UGI's username
+   * and break SASL principal matching.
+   *
+   * <p>No-op for principals that don't contain {@code _HOST}, so it
+   * stays free on the hot path.
+   */
+  static String substituteHostToken(String principal) {
+    if (principal == null || !principal.contains("/_HOST@")) {
+      return principal;
     }
-    if (atIdx > 0) {
-      return principal.substring(0, atIdx);
+    return principal.replace("_HOST", localCanonicalHost());
+  }
+
+  private static String localCanonicalHost() {
+    String cached = cachedLocalHost;
+    if (cached != null) {
+      return cached;
     }
-    return principal;
+    try {
+      cached = InetAddress.getLocalHost().getCanonicalHostName();
+    } catch (UnknownHostException e) {
+      cached = "localhost";
+    }
+    cachedLocalHost = cached;
+    return cached;
   }
 
   @SuppressWarnings({"unchecked", "rawtypes"})
