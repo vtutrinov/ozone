@@ -26,6 +26,10 @@ import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_KEY;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_DEFAULT;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_REPROCESS_COUNT;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_REPROCESS_COUNT_DEFAULT;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_REPROCESS_SLEEP_MS;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_REPROCESS_SLEEP_MS_DEFAULT;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_NODES_KEY;
 import static org.apache.hadoop.hdds.utils.HddsServerUtil.getRemoteUser;
 import static org.apache.hadoop.hdds.utils.HddsServerUtil.getScmSecurityClientWithMaxRetry;
@@ -424,15 +428,7 @@ public class HddsDatanodeService extends GenericCli implements Callable<Void>, S
       if (filePath == null || filePath.isEmpty()) {
         throw new IOException(OZONE_SCM_DATANODE_CUSTOM_IP_FILE_PATH + " parameter not defined");
       }
-      Path path = Paths.get(filePath);
-      if (!Files.exists(path)) {
-        throw new IOException("Custom IP file not found: " + filePath);
-      }
-      List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
-      if (lines.isEmpty()) {
-        throw new IOException("Custom IP file is empty: " + filePath);
-      }
-      ip = lines.get(0).trim();
+      ip = readFileWithReprocess(filePath);
     } else {
       ip = conf.get(OZONE_SCM_DATANODE_CUSTOM_IP_KEY);
       if (ip == null) {
@@ -440,6 +436,57 @@ public class HddsDatanodeService extends GenericCli implements Callable<Void>, S
       }
     }
     return ip;
+  }
+
+  private String readFileWithReprocess(String filePath) throws IOException {
+    String ip = null;
+    Path path = Paths.get(filePath);
+    int sleepTime = conf.getInt(
+            OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_REPROCESS_SLEEP_MS,
+            OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_REPROCESS_SLEEP_MS_DEFAULT);
+    int maxAttempts = conf.getInt(
+            OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_REPROCESS_COUNT,
+            OZONE_SCM_DATANODE_CUSTOM_IP_READ_FROM_FILE_REPROCESS_COUNT_DEFAULT);
+    int attempts = 0;
+    while (attempts < maxAttempts) {
+      try {
+        if (!Files.exists(path)) {
+          throw new IOException("Custom IP file not found: " + filePath);
+        }
+        List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+        if (lines.isEmpty()) {
+          throw new IOException("Custom IP file is empty: " + filePath);
+        }
+        String firstLine = lines.get(0).trim();
+        if (firstLine.isEmpty()) {
+          throw new IOException("Custom IP file has an empty first line: " + filePath);
+        }
+        ip = firstLine;
+        break;
+      } catch (Exception ex) {
+        attempts++;
+        LOG.debug("Error reading custom IP address. Attempt number {}. {}", attempts, ex.getMessage());
+        if (!sleepWithInterrupt(sleepTime)) {
+          break;
+        }
+      }
+    }
+
+    if (ip == null) {
+      throw new IOException("Error reading custom IP address");
+    }
+    return ip;
+  }
+
+  /** @return false if interrupted */
+  private static boolean sleepWithInterrupt(int millis) {
+    try {
+      Thread.sleep(millis);
+      return true;
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      return false;
+    }
   }
 
   @VisibleForTesting
