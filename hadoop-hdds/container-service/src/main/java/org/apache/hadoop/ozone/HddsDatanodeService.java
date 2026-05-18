@@ -411,7 +411,7 @@ public class HddsDatanodeService extends GenericCli implements ServicePlugin {
       } catch (Exception ex) {
         attempts++;
         LOG.debug("Error reading custom IP address. Attempt number {}. {}", attempts, ex.getMessage());
-        SleepWithInterrupt(sleepTime);
+        sleepWithInterrupt(sleepTime);
       }
     }
 
@@ -421,7 +421,7 @@ public class HddsDatanodeService extends GenericCli implements ServicePlugin {
     return ip;
   }
 
-  private void SleepWithInterrupt(int millis) {
+  private void sleepWithInterrupt(int millis) {
     try {
       Thread.sleep(millis);
     } catch (InterruptedException e) {
