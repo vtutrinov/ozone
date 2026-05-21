@@ -58,6 +58,7 @@ import org.apache.hadoop.ozone.s3.exception.S3ErrorTable;
 import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.hadoop.ozone.s3.metrics.S3GatewayMetrics;
+import org.apache.hadoop.ozone.s3.metrics.S3GatewayXidMetrics;
 import org.apache.hadoop.ozone.s3.signature.SignatureInfo;
 import org.apache.hadoop.ozone.s3.util.AuditUtils;
 import org.apache.hadoop.util.Time;
@@ -387,6 +388,10 @@ public abstract class EndpointBase implements Auditor {
   @VisibleForTesting
   public S3GatewayMetrics getMetrics() {
     return S3GatewayMetrics.create();
+  }
+
+  public S3GatewayXidMetrics getXidMetrics() {
+    return S3GatewayXidMetrics.getInstance();
   }
 
   protected Map<String, String> getAuditParameters() {
