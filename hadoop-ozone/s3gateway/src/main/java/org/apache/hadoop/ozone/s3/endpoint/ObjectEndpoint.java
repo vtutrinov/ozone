@@ -86,6 +86,7 @@ import javax.xml.bind.DatatypeConverter;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdds.client.ECReplicationConfig;
@@ -180,6 +181,26 @@ public class ObjectEndpoint extends ObjectOperationHandler {
       @PathParam(PATH) String keyPath,
       final InputStream body
   ) throws IOException, OS3Exception {
+    // SDP (SDPOZN-2371): per-xid request metrics
+    final long startNanos = Time.monotonicNowNanos();
+    int httpCode = HttpStatus.SC_INTERNAL_SERVER_ERROR;
+    long bytes = 0;
+    try {
+      Response response = putObject(bucketName, keyPath, body);
+      httpCode = response.getStatus();
+      if (getHeaders().getHeaderString(COPY_SOURCE_HEADER) == null) {
+        bytes = getUploadLength();
+      }
+      return response;
+    } catch (OS3Exception ex) {
+      httpCode = ex.getHttpCode();
+      throw ex;
+    } finally {
+      recordXidMetrics(getXid(), "PUT", httpCode, bytes, startNanos);
+    }
+  }
+
+  private Response putObject(String bucketName, String keyPath, InputStream body) throws IOException, OS3Exception {
     ObjectRequestContext context = new ObjectRequestContext(S3GAction.CREATE_KEY, bucketName);
     try {
       return handler.handlePutRequest(context, keyPath, body);
@@ -394,12 +415,42 @@ public class ObjectEndpoint extends ObjectOperationHandler {
       @PathParam(BUCKET) String bucketName,
       @PathParam(PATH) String keyPath
   ) throws IOException, OS3Exception {
+    // SDP (SDPOZN-2371): per-xid request metrics, recorded when the content has been streamed
+    final long startNanos = Time.monotonicNowNanos();
+    final String xid = getXid();
     ObjectRequestContext context = new ObjectRequestContext(S3GAction.GET_KEY, bucketName);
+    Response response;
     try {
-      return handler.handleGetRequest(context, keyPath);
+      response = handler.handleGetRequest(context, keyPath);
     } catch (OMException ex) {
-      throw newError(bucketName, keyPath, ex);
+      OS3Exception os3Exception = newError(bucketName, keyPath, ex);
+      recordXidMetrics(xid, "GET", os3Exception.getHttpCode(), 0, startNanos);
+      throw os3Exception;
+    } catch (OS3Exception ex) {
+      recordXidMetrics(xid, "GET", ex.getHttpCode(), 0, startNanos);
+      throw ex;
+    } catch (IOException | RuntimeException ex) {
+      recordXidMetrics(xid, "GET", HttpStatus.SC_INTERNAL_SERVER_ERROR, 0, startNanos);
+      throw ex;
     }
+    if (!(response.getEntity() instanceof StreamingOutput)) {
+      recordXidMetrics(xid, "GET", response.getStatus(), 0, startNanos);
+      return response;
+    }
+    final StreamingOutput content = (StreamingOutput) response.getEntity();
+    final int httpCode = response.getStatus();
+    StreamingOutput recordingContent = dest -> {
+      CountingOutputStream counting = new CountingOutputStream(dest);
+      boolean success = false;
+      try {
+        content.write(counting);
+        success = true;
+      } finally {
+        recordXidMetrics(xid, "GET", success ? httpCode : HttpStatus.SC_INTERNAL_SERVER_ERROR,
+            counting.getByteCount(), startNanos);
+      }
+    };
+    return Response.fromResponse(response).entity(recordingContent).build();
   }
 
   @Override

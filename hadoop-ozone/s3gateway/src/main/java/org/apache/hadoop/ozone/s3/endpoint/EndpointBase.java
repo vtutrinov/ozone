@@ -62,6 +62,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -103,9 +104,12 @@ import org.apache.hadoop.ozone.s3.commontypes.RequestParameters;
 import org.apache.hadoop.ozone.s3.exception.OS3Exception;
 import org.apache.hadoop.ozone.s3.exception.S3ErrorTable;
 import org.apache.hadoop.ozone.s3.metrics.S3GatewayMetrics;
+import org.apache.hadoop.ozone.s3.metrics.S3GatewayXidMetrics;
 import org.apache.hadoop.ozone.s3.signature.SignatureInfo;
 import org.apache.hadoop.ozone.s3.util.AuditUtils;
+import org.apache.hadoop.ozone.s3.util.S3Consts;
 import org.apache.hadoop.ozone.s3.util.S3Utils;
+import org.apache.hadoop.util.Time;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.ratis.util.function.CheckedRunnable;
@@ -550,6 +554,47 @@ public abstract class EndpointBase {
   @VisibleForTesting
   public S3GatewayMetrics getMetrics() {
     return S3GatewayMetrics.getMetrics();
+  }
+
+  public S3GatewayXidMetrics getXidMetrics() {
+    return S3GatewayXidMetrics.getInstance();
+  }
+
+  /**
+   * SDP (SDPOZN-2371): the client transaction id of the request ({@code x-amz-meta-xid} or {@code xid} header).
+   */
+  protected String getXid() {
+    String xid = getHeaders().getHeaderString("x-amz-meta-xid");
+    if (xid == null) {
+      xid = getHeaders().getHeaderString("xid");
+    }
+    if (xid != null) {
+      LOG.debug("xid={}", xid);
+    }
+    return xid;
+  }
+
+  /** SDP (SDPOZN-2371): records a request in the per-xid metrics; never fails the request. */
+  protected void recordXidMetrics(String xid, String requestType, int httpCode, long bytes, long startNanos) {
+    try {
+      long latencyMs = TimeUnit.NANOSECONDS.toMillis(Time.monotonicNowNanos() - startNanos);
+      getXidMetrics().recordRequest(xid, requestType, httpCode, bytes, latencyMs);
+    } catch (RuntimeException e) {
+      LOG.warn("Failed to record S3 xid metrics", e);
+    }
+  }
+
+  /** @return the payload length of an upload request: the decoded length for aws-chunked uploads */
+  protected long getUploadLength() {
+    String length = getHeaders().getHeaderString(S3Consts.DECODED_CONTENT_LENGTH_HEADER);
+    if (length == null) {
+      length = getHeaders().getHeaderString(HttpHeaders.CONTENT_LENGTH);
+    }
+    try {
+      return length == null ? 0 : Long.parseLong(length.trim());
+    } catch (NumberFormatException e) {
+      return 0;
+    }
   }
 
   protected Map<String, String> getAuditParameters() {
