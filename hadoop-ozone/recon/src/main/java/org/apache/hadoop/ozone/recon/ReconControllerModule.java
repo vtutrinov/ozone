@@ -169,12 +169,15 @@ public class ReconControllerModule extends AbstractModule {
       ClientId clientId = ClientId.randomId();
       UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
       String serviceId = getOzoneManagerServiceId(ozoneConfiguration);
-      OmTransport transport =
-          OmTransportFactory.create(ozoneConfiguration, ugi, serviceId);
+      // Recon is an inter-service caller of OM; route to the dedicated
+      // service-RPC port when the cluster runs in split-Kerberos mode.
+      OmTransport transport = OmTransportFactory.create(
+          ozoneConfiguration, ugi, serviceId, true);
       ozoneManagerClient = new OzoneManagerProtocolClientSideTranslatorPB(
           transport, clientId.toString(), ozoneConfiguration, () -> {
         try {
-          return OmTransportFactory.create(ozoneConfiguration, ugi, serviceId);
+          return OmTransportFactory.create(
+              ozoneConfiguration, ugi, serviceId, true);
         } catch (IOException e) {
           throw new RuntimeException(e);
         }
@@ -188,9 +191,7 @@ public class ReconControllerModule extends AbstractModule {
   @Provides
   StorageContainerLocationProtocol getSCMProtocol(
       final OzoneConfiguration configuration) {
-    StorageContainerLocationProtocol storageContainerLocationProtocol = null;
-    storageContainerLocationProtocol = newContainerRpcClient(configuration);
-    return storageContainerLocationProtocol;
+    return newContainerRpcClient(configuration);
   }
 
   @Provides

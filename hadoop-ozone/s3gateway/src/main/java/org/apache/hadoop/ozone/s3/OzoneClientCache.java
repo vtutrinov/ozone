@@ -24,6 +24,7 @@ import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.om.protocol.S3Auth;
 import org.apache.hadoop.ozone.om.helpers.ServiceInfoEx;
+import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.protocolPB.GrpcOmTransport;
 import org.apache.hadoop.ozone.OzoneSecurityUtil;
 import org.slf4j.Logger;
@@ -63,9 +64,17 @@ public final class OzoneClientCache {
     String omServiceID = OmUtils.getOzoneManagerServiceId(ozoneConfiguration);
     secConfig = new SecurityConfig(ozoneConfiguration);
     client = null;
+
+    // S3G is an inter-service caller of OM. When the OM advertises a
+    // dedicated service-RPC port (split-Kerberos mode), prefer that
+    // address so the RPC rides the SIMPLE-auth port and forwards the
+    // user's S3 sigv4 identity via the per-request S3Auth header.
+    OzoneConfiguration clientConf =
+        withOmServicePortAddressIfConfigured(ozoneConfiguration);
+
     try {
       if (secConfig.isGrpcTlsEnabled()) {
-        if (ozoneConfiguration
+        if (clientConf
             .get(OZONE_OM_TRANSPORT_CLASS,
                 OZONE_OM_TRANSPORT_CLASS_DEFAULT) !=
             OZONE_OM_TRANSPORT_CLASS_DEFAULT) {
@@ -73,15 +82,15 @@ public final class OzoneClientCache {
           // need to get certificate for TLS through
           // hadoop rpc first via ServiceInfo
           setCertificate(omServiceID,
-              ozoneConfiguration);
+              clientConf);
         }
       }
       if (omServiceID == null) {
-        client = OzoneClientFactory.getRpcClient(ozoneConfiguration);
+        client = OzoneClientFactory.getRpcClient(clientConf);
       } else {
         // As in HA case, we need to pass om service ID.
         client = OzoneClientFactory.getRpcClient(omServiceID,
-            ozoneConfiguration);
+            clientConf);
       }
     } catch (IOException e) {
       LOG.warn("cannot create OzoneClient", e);
@@ -89,6 +98,24 @@ public final class OzoneClientCache {
     }
     // S3 Gateway should always set the S3 Auth.
     ozoneConfiguration.setBoolean(S3Auth.S3_AUTH_CHECK, true);
+  }
+
+  /**
+   * Returns a copy of {@code base} with {@code ozone.om.address} rewritten to
+   * {@code ozone.om.service.rpc-address} when that key is set, leaving the
+   * original untouched. When the service-RPC key is not configured this
+   * returns {@code base} unchanged, preserving today's single-port behaviour.
+   */
+  private static OzoneConfiguration withOmServicePortAddressIfConfigured(
+      OzoneConfiguration base) {
+    String servicePortAddr = base.get(
+        OMConfigKeys.OZONE_OM_SERVICE_RPC_ADDRESS_KEY);
+    if (servicePortAddr == null || servicePortAddr.isEmpty()) {
+      return base;
+    }
+    OzoneConfiguration internal = new OzoneConfiguration(base);
+    internal.set(OMConfigKeys.OZONE_OM_ADDRESS_KEY, servicePortAddr);
+    return internal;
   }
 
   public static OzoneClient getOzoneClientInstance(OzoneConfiguration ozoneConfiguration)

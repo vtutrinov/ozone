@@ -22,6 +22,8 @@ import java.util.Iterator;
 import java.util.ServiceLoader;
 
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
+import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.security.UserGroupInformation;
 
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_TRANSPORT_CLASS;
@@ -35,11 +37,60 @@ public interface OmTransportFactory {
   OmTransport createOmTransport(ConfigurationSource source,
       UserGroupInformation ugi, String omServiceId) throws IOException;
 
+  /**
+   * Variant for inter-service callers (S3G, Recon) that should route to OM's
+   * dedicated service-RPC port — see
+   * {@link OMConfigKeys#OZONE_OM_SERVICE_RPC_ADDRESS_KEY}. Existing factories
+   * inherit the default implementation, which ignores {@code internalCaller}
+   * and falls back to the legacy single-port path; address routing for the
+   * service port is applied centrally by
+   * {@link #create(ConfigurationSource, UserGroupInformation, String, boolean)}.
+   */
+  default OmTransport createOmTransport(ConfigurationSource source,
+      UserGroupInformation ugi, String omServiceId, boolean internalCaller)
+      throws IOException {
+    return createOmTransport(source, ugi, omServiceId);
+  }
+
   static OmTransport create(ConfigurationSource conf,
       UserGroupInformation ugi, String omServiceId) throws IOException {
     OmTransportFactory factory = createFactory(conf);
 
     return factory.createOmTransport(conf, ugi, omServiceId);
+  }
+
+  /**
+   * Builds an OM transport whose target address depends on the caller's
+   * locality. When {@code internalCaller} is {@code true} and OM exposes a
+   * dedicated service-RPC address via
+   * {@link OMConfigKeys#OZONE_OM_SERVICE_RPC_ADDRESS_KEY}, the configuration
+   * handed to the underlying factory has {@link OMConfigKeys#OZONE_OM_ADDRESS_KEY}
+   * rewritten to that service address. This is the seam through which the
+   * split-Kerberos deployment mode routes S3G/Recon traffic over the
+   * SIMPLE-auth port while ofs/o3fs continues to reach the Kerberos-protected
+   * client port.
+   *
+   * <p>Note: this overload assumes a single-OM topology. HA support requires
+   * a per-node service-RPC address mapping — see HddsXxx HA proxy provider —
+   * and is intentionally deferred.
+   */
+  static OmTransport create(ConfigurationSource conf,
+      UserGroupInformation ugi, String omServiceId,
+      boolean internalCaller) throws IOException {
+    ConfigurationSource effectiveConf = conf;
+    if (internalCaller) {
+      String servicePortAddr = conf.get(
+          OMConfigKeys.OZONE_OM_SERVICE_RPC_ADDRESS_KEY);
+      if (servicePortAddr != null && !servicePortAddr.isEmpty()) {
+        OzoneConfiguration internalConf = new OzoneConfiguration(
+            OzoneConfiguration.of(conf));
+        internalConf.set(OMConfigKeys.OZONE_OM_ADDRESS_KEY, servicePortAddr);
+        effectiveConf = internalConf;
+      }
+    }
+    OmTransportFactory factory = createFactory(effectiveConf);
+    return factory.createOmTransport(effectiveConf, ugi, omServiceId,
+        internalCaller);
   }
 
   static OmTransportFactory createFactory(ConfigurationSource conf)
