@@ -84,6 +84,24 @@ public final class OMConfigKeys {
   public static final String OZONE_OM_RPC_BIND_HOST_KEY =
       "ozone.om.rpc-bind-host";
   public static final int OZONE_OM_PORT_DEFAULT = 9862;
+
+  /**
+   * Address of the optional OM "service" RPC port — a sibling of
+   * {@link #OZONE_OM_ADDRESS_KEY} dedicated to inter-service callers
+   * (S3G→OM, Recon→OM). When set, OM binds a second {@code RPC.Server} that
+   * carries the same protocols as the main client port but may use a
+   * different SASL profile (typically SIMPLE auth) per
+   * {@code ozone.security.kerberos.interservice.enabled}. When unset, OM
+   * exposes only the single client port (legacy behaviour).
+   */
+  public static final String OZONE_OM_SERVICE_RPC_ADDRESS_KEY =
+      "ozone.om.service.rpc-address";
+  public static final String OZONE_OM_SERVICE_RPC_BIND_HOST_KEY =
+      "ozone.om.service.rpc-bind-host";
+  // 9864: adjacent to OZONE_OM_PORT_DEFAULT (9862, client RPC) and clear of
+  // OZONE_OM_RATIS_PORT_DEFAULT (9872) and OZONE_OM_HTTP_BIND_PORT_DEFAULT
+  // (9874). 9863 is SCM block client port; 9864 was previously unassigned.
+  public static final int OZONE_OM_SERVICE_RPC_PORT_DEFAULT = 9864;
   public static final String OZONE_OM_GRPC_PORT_KEY =
       "ozone.om.grpc.port";
 
