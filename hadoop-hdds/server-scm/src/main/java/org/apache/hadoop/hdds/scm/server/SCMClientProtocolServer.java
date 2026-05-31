@@ -29,6 +29,11 @@ import com.google.protobuf.BlockingService;
 import com.google.protobuf.ProtocolMessageEnum;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.ozone.OzoneSecurityUtil;
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+
+import java.util.Locale;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.conf.ReconfigurationHandler;
@@ -164,9 +169,21 @@ public class SCMClientProtocolServer implements
 
     final InetSocketAddress scmAddress =
         scm.getScmNodeDetails().getClientProtocolServerAddress();
+
+    // Same SASL split as SCMBlockProtocolServer: when inter-service Kerberos
+    // is off this port serves OM with SIMPLE. External admin clients are
+    // expected to ride the dedicated security/admin protocol; this port is
+    // primarily inter-service.
+    OzoneConfiguration rpcConf = conf;
+    if (!OzoneSecurityUtil.isInterServiceKerberosEnabled(conf)) {
+      rpcConf = new OzoneConfiguration(conf);
+      rpcConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
+          AuthenticationMethod.SIMPLE.name().toLowerCase(Locale.ROOT));
+    }
+
     clientRpcServer =
         startRpcServer(
-            conf,
+            rpcConf,
             scmAddress,
             StorageContainerLocationProtocolPB.class,
             storageProtoPbService,

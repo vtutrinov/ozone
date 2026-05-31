@@ -37,6 +37,10 @@ import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.ozone.OzoneSecurityUtil;
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+
+import java.util.Locale;
 import org.apache.hadoop.hdds.annotation.InterfaceAudience;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.protocol.SecretKeyProtocolScm;
@@ -162,22 +166,32 @@ public class SCMSecurityProtocolServer implements SCMSecurityProtocol,
                 new SecretKeyProtocolServerSideTranslatorPB(
                     this, scm, secretKeyMetrics)
         );
+    // OM/DN reach this port for cert + secret-key operations; in the
+    // split-Kerberos mode they connect over SIMPLE. Admin tooling that
+    // requires Kerberos is expected to consume a separate admin surface.
+    OzoneConfiguration rpcConf = conf;
+    if (!OzoneSecurityUtil.isInterServiceKerberosEnabled(conf)) {
+      rpcConf = new OzoneConfiguration(conf);
+      rpcConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
+          AuthenticationMethod.SIMPLE.name().toLowerCase(Locale.ROOT));
+    }
+
     this.rpcServer =
         StorageContainerManager.startRpcServer(
-            conf,
+            rpcConf,
             rpcAddress,
             SCMSecurityProtocolPB.class,
             secureProtoPbService,
             handlerCount);
-    HddsServerUtil.addPBProtocol(conf, SecretKeyProtocolDatanodePB.class,
+    HddsServerUtil.addPBProtocol(rpcConf, SecretKeyProtocolDatanodePB.class,
         secretKeyService, rpcServer);
-    HddsServerUtil.addPBProtocol(conf, SecretKeyProtocolOmPB.class,
+    HddsServerUtil.addPBProtocol(rpcConf, SecretKeyProtocolOmPB.class,
         secretKeyService, rpcServer);
-    HddsServerUtil.addPBProtocol(conf, SecretKeyProtocolScmPB.class,
+    HddsServerUtil.addPBProtocol(rpcConf, SecretKeyProtocolScmPB.class,
         secretKeyService, rpcServer);
-    if (conf.getBoolean(
+    if (rpcConf.getBoolean(
         CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHORIZATION, false)) {
-      rpcServer.refreshServiceAcl(conf, SCMPolicyProvider.getInstance());
+      rpcServer.refreshServiceAcl(rpcConf, SCMPolicyProvider.getInstance());
     }
 
     this.grpcUpdateServer = new SCMUpdateServiceGrpcServer(

@@ -422,7 +422,12 @@ public final class StorageContainerManager extends ServiceRuntimeInfoImpl
 
     // Authenticate SCM if security is enabled, this initialization can only
     // be done after the metadata store is initialized.
-    if (OzoneSecurityUtil.isSecurityEnabled(conf)) {
+    // The SCM security protocol server hosts CA-issuance APIs used by both
+    // external admin tooling and inter-service mTLS (OM/DN cert clients). It
+    // needs to come up whenever either Kerberos surface is enabled — in
+    // particular, the split-Kerberos mode (external=true, interservice=false)
+    // still relies on it to mint certs for the external HTTPS endpoints.
+    if (OzoneSecurityUtil.requiresDaemonKerberosLogin(conf)) {
       initializeCAnSecurityProtocol(conf, configurator);
     } else {
       // if no Security, we do not create a Certificate Server at all.
