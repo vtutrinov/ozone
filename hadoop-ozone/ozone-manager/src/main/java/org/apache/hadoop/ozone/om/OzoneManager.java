@@ -1596,8 +1596,14 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    */
   private static void loginOMUserIfSecurityEnabled(OzoneConfiguration conf)
       throws IOException, AuthenticationException {
+    OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
     securityEnabled = OzoneSecurityUtil.isSecurityEnabled(conf);
-    if (securityEnabled && testUgi == null) {
+    // The keytab login is needed whenever either RPC surface (external client
+    // or inter-service) is configured with Kerberos. In the split-Kerberos
+    // mode (external=true, interservice=false) the keytab still backs the
+    // external client port even though the inter-service port is SIMPLE.
+    if (OzoneSecurityUtil.requiresDaemonKerberosLogin(conf)
+        && testUgi == null) {
       // Checking certificate duration validity by using
       // validateCertificateValidityConfig() in SecurityConfig constructor.
       new SecurityConfig(conf);

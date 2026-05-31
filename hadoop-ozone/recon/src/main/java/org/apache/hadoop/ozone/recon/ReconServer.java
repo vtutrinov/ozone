@@ -300,7 +300,8 @@ public class ReconServer extends GenericCli {
   private static void loginReconUserIfSecurityEnabled(
       OzoneConfiguration  conf) {
     try {
-      if (OzoneSecurityUtil.isSecurityEnabled(conf)) {
+      OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+      if (OzoneSecurityUtil.requiresDaemonKerberosLogin(conf)) {
         loginReconUser(conf);
       }
     } catch (Exception ex) {

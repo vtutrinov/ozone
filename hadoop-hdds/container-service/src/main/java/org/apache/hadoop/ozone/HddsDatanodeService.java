@@ -256,8 +256,12 @@ public class HddsDatanodeService extends GenericCli implements ServicePlugin {
           "HddsDatanodeService." + datanodeDetails.getUuidString()
               .substring(0, 8), conf);
       LOG.info("HddsDatanodeService host:{} ip:{}", hostname, ip);
-      // Authenticate Hdds Datanode service if security is enabled
-      if (OzoneSecurityUtil.isSecurityEnabled(conf)) {
+      // Authenticate Hdds Datanode service if security is enabled.
+      // The keytab is loaded whenever any Kerberos-served surface is active;
+      // see OzoneSecurityUtil#requiresDaemonKerberosLogin for the contract
+      // under the split-Kerberos (external-only) deployment mode.
+      OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+      if (OzoneSecurityUtil.requiresDaemonKerberosLogin(conf)) {
         component = "dn-" + datanodeDetails.getUuidString();
         secConf = new SecurityConfig(conf);
 

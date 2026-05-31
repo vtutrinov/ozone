@@ -1043,7 +1043,8 @@ public final class StorageContainerManager extends ServiceRuntimeInfoImpl
   private static void loginAsSCMUserIfSecurityEnabled(
       SCMHANodeDetails scmhaNodeDetails, ConfigurationSource conf)
       throws IOException, AuthenticationException {
-    if (OzoneSecurityUtil.isSecurityEnabled(conf)) {
+    OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+    if (OzoneSecurityUtil.requiresDaemonKerberosLogin(conf)) {
       if (LOG.isDebugEnabled()) {
         ScmConfig scmConfig = conf.getObject(ScmConfig.class);
         LOG.debug("Ozone security is enabled. Attempting login for SCM user. "

@@ -113,7 +113,8 @@ public class Gateway extends GenericCli {
 
   private static void loginS3GUser(OzoneConfiguration conf)
       throws IOException, AuthenticationException {
-    if (OzoneSecurityUtil.isSecurityEnabled(conf)) {
+    OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+    if (OzoneSecurityUtil.requiresDaemonKerberosLogin(conf)) {
       if (SecurityUtil.getAuthenticationMethod(conf).equals(
           UserGroupInformation.AuthenticationMethod.KERBEROS)) {
         if (LOG.isDebugEnabled()) {
