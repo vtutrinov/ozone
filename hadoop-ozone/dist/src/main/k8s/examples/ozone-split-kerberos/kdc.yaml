@@ -1,0 +1,60 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Minimal in-cluster KDC for the split-Kerberos test. Uses the same testkrb5
+# image as the docker-compose smoketest. Seeded principals are kept small —
+# enough for the daemons' external SPNs, SPNEGO HTTP/*, and one human test
+# identity. Pod-FQDN principals (om-0.om.default.svc.cluster.local etc) are
+# intentionally NOT created; that's the constraint the deployment mode
+# accommodates.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: kdc
+spec:
+  ports:
+  - port: 88
+    name: kerberos
+    protocol: TCP
+  - port: 88
+    name: kerberos-udp
+    protocol: UDP
+  selector:
+    app: ozone
+    component: kdc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kdc
+  labels:
+    app.kubernetes.io/component: ozone
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ozone
+      component: kdc
+  template:
+    metadata:
+      labels:
+        app: ozone
+        component: kdc
+    spec:
+      containers:
+      - name: kdc
+        image: apache/ozone-testkrb5:20230318-1
+        command: ["krb5kdc", "-n"]
+        ports:
+        - containerPort: 88
+          protocol: TCP
+        - containerPort: 88
+          protocol: UDP

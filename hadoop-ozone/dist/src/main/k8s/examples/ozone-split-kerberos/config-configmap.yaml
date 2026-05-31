@@ -1,0 +1,110 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config
+data:
+  # Cluster topology.
+  OZONE-SITE.XML_ozone.om.address: om-0.om
+  OZONE-SITE.XML_ozone.scm.names: scm-0.scm
+  OZONE-SITE.XML_ozone.scm.block.client.address: scm-0.scm
+  OZONE-SITE.XML_ozone.scm.client.address: scm-0.scm
+  OZONE-SITE.XML_hdds.datanode.dir: /data/storage
+  OZONE-SITE.XML_ozone.scm.datanode.id.dir: /data
+  OZONE-SITE.XML_ozone.metadata.dirs: /data/metadata
+  OZONE-SITE.XML_hdds.scm.safemode.min.datanode: "1"
+  OZONE-SITE.XML_ozone.datanode.pipeline.limit: "1"
+  OZONE-SITE.XML_dfs.datanode.use.datanode.hostname: "true"
+
+  # === Split-Kerberos configuration ===
+  OZONE-SITE.XML_ozone.security.enabled: "true"
+  OZONE-SITE.XML_ozone.security.kerberos.external.enabled: "true"
+  OZONE-SITE.XML_ozone.security.kerberos.interservice.enabled: "false"
+  # Sibling RPC port on OM: SIMPLE auth, addressed by S3G/Recon.
+  OZONE-SITE.XML_ozone.om.service.rpc-address: om-0.om:9864
+
+  # Tokens stay HMAC-verified end-to-end.
+  OZONE-SITE.XML_hdds.block.token.enabled: "true"
+  OZONE-SITE.XML_hdds.container.token.enabled: "true"
+  # Disable Ratis-level TLS — mesh mTLS (Istio etc.) handles inter-service
+  # authenticity in this deployment. Required for split-Kerberos: with
+  # interservice=false but hdds.grpc.tls.enabled=true the Ratis peers
+  # mismatch on the TLS preface and the pipeline cannot form.
+  OZONE-SITE.XML_hdds.grpc.tls.enabled: "false"
+
+  # ACLs.
+  OZONE-SITE.XML_ozone.acl.enabled: "true"
+  OZONE-SITE.XML_ozone.acl.authorizer.class: org.apache.hadoop.ozone.security.acl.OzoneNativeAuthorizer
+  OZONE-SITE.XML_ozone.administrators: "testuser,om"
+  OZONE-SITE.XML_ozone.s3.administrators: "testuser,s3g"
+
+  # Daemon principals + keytabs (mounted via the keytabs Secret).
+  OZONE-SITE.XML_ozone.om.kerberos.principal: om/om-0.om@EXAMPLE.COM
+  OZONE-SITE.XML_ozone.om.kerberos.keytab.file: /etc/security/keytabs/om.keytab
+  OZONE-SITE.XML_hdds.scm.kerberos.principal: scm/scm-0.scm@EXAMPLE.COM
+  OZONE-SITE.XML_hdds.scm.kerberos.keytab.file: /etc/security/keytabs/scm.keytab
+  OZONE-SITE.XML_ozone.s3g.kerberos.principal: s3g/s3g-0.s3g@EXAMPLE.COM
+  OZONE-SITE.XML_ozone.s3g.kerberos.keytab.file: /etc/security/keytabs/s3g.keytab
+  HDFS-SITE.XML_dfs.datanode.kerberos.principal: dn/_HOST@EXAMPLE.COM
+  HDFS-SITE.XML_dfs.datanode.kerberos.keytab.file: /etc/security/keytabs/dn.keytab
+
+  # SPNEGO principals for the HTTP UIs (HTTP/* SPNs are pod-FQDN-agnostic).
+  OZONE-SITE.XML_ozone.security.http.kerberos.enabled: "true"
+  OZONE-SITE.XML_ozone.om.http.auth.type: kerberos
+  OZONE-SITE.XML_ozone.om.http.auth.kerberos.principal: HTTP/_HOST@EXAMPLE.COM
+  OZONE-SITE.XML_ozone.om.http.auth.kerberos.keytab: /etc/security/keytabs/HTTP.keytab
+  OZONE-SITE.XML_hdds.scm.http.auth.type: kerberos
+  OZONE-SITE.XML_hdds.scm.http.auth.kerberos.principal: HTTP/_HOST@EXAMPLE.COM
+  OZONE-SITE.XML_hdds.scm.http.auth.kerberos.keytab: /etc/security/keytabs/HTTP.keytab
+  OZONE-SITE.XML_ozone.s3g.http.auth.type: kerberos
+  OZONE-SITE.XML_ozone.s3g.http.auth.kerberos.principal: HTTP/_HOST@EXAMPLE.COM
+  OZONE-SITE.XML_ozone.s3g.http.auth.kerberos.keytab: /etc/security/keytabs/HTTP.keytab
+
+  CORE-SITE.XML_hadoop.security.authentication: kerberos
+  CORE-SITE.XML_hadoop.security.authorization: "true"
+  CORE-SITE.XML_hadoop.security.auth_to_local: "DEFAULT"
+  # Split-Kerberos client downgrade: required cluster-wide so daemons + CLI
+  # tools accept SCM's "I want SIMPLE" response. Daemons additionally
+  # auto-set this in OzoneSecurityUtil.validateKerberosFlags as a safety net.
+  CORE-SITE.XML_ipc.client.fallback-to-simple-auth-allowed: "true"
+
+  # Logging.
+  LOG4J.PROPERTIES_log4j.rootLogger: INFO, stdout
+  LOG4J.PROPERTIES_log4j.appender.stdout: org.apache.log4j.ConsoleAppender
+  LOG4J.PROPERTIES_log4j.appender.stdout.layout: org.apache.log4j.PatternLayout
+  LOG4J.PROPERTIES_log4j.appender.stdout.layout.ConversionPattern: '%d{yyyy-MM-dd HH:mm:ss} %-5p %c{1}:%L - %m%n'
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: krb5
+data:
+  krb5.conf: |
+    [logging]
+      default = FILE:/var/log/krb5libs.log
+      kdc     = FILE:/var/log/krb5kdc.log
+    [libdefaults]
+      dns_canonicalize_hostname = false
+      dns_lookup_realm  = false
+      ticket_lifetime   = 24h
+      renew_lifetime    = 7d
+      forwardable       = true
+      rdns              = false
+      default_realm     = EXAMPLE.COM
+    [realms]
+      EXAMPLE.COM = {
+        kdc          = kdc.default.svc.cluster.local
+        admin_server = kdc.default.svc.cluster.local
+      }
+    [domain_realm]
+      .svc.cluster.local = EXAMPLE.COM
+      svc.cluster.local  = EXAMPLE.COM
