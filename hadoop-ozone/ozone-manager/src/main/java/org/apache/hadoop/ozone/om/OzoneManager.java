@@ -2802,11 +2802,19 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   }
 
   /**
-   * @return true if delegation token operation is allowed
+   * @return true if delegation token operation is allowed.
+   *
+   * <p>Delegation tokens are only meaningful when external Kerberos is
+   * configured (they are bootstrapped from a Kerberos identity and validated
+   * via HMAC on subsequent RPCs). In the split-Kerberos mode the OM's
+   * service-RPC port runs SIMPLE auth even though external Kerberos is on;
+   * we therefore key the decision off the deployment-level external-Kerberos
+   * flag rather than the JVM-global {@link UserGroupInformation#isSecurityEnabled()},
+   * which only reflects the inter-service UGI configuration.
    */
   private boolean isAllowedDelegationTokenOp() throws IOException {
     AuthenticationMethod authMethod = getConnectionAuthenticationMethod();
-    return !UserGroupInformation.isSecurityEnabled()
+    return !secConfig.isExternalKerberosEnabled()
         || (authMethod == AuthenticationMethod.KERBEROS)
         || (authMethod == AuthenticationMethod.KERBEROS_SSL)
         || (authMethod == AuthenticationMethod.CERTIFICATE);
