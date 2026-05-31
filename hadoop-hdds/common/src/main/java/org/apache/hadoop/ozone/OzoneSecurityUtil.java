@@ -31,9 +31,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.hdds.annotation.InterfaceAudience;
 import org.apache.hadoop.hdds.annotation.InterfaceStability;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
+import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 
 import org.apache.commons.validator.routines.InetAddressValidator;
 
@@ -41,6 +43,8 @@ import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTP_SECURITY_ENABLE
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_HTTP_SECURITY_ENABLED_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_ENABLED_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_ENABLED_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY;
 
 import org.apache.hadoop.hdds.security.x509.certificate.utils.CertificateCodec;
 import org.slf4j.Logger;
@@ -65,6 +69,97 @@ public final class OzoneSecurityUtil {
   public static boolean isSecurityEnabled(ConfigurationSource conf) {
     return conf.getBoolean(OZONE_SECURITY_ENABLED_KEY,
         OZONE_SECURITY_ENABLED_DEFAULT);
+  }
+
+  /**
+   * Whether Kerberos is required on the external surfaces: OM client RPC
+   * (ofs/o3fs and {@code ozone s3 getsecret}) and the S3 Gateway HTTP listener
+   * (SPNEGO and AWS Sig V4). Falls back to {@link #isSecurityEnabled} when the
+   * dedicated key is not set, so existing single-flag deployments behave
+   * unchanged.
+   */
+  public static boolean isExternalKerberosEnabled(ConfigurationSource conf) {
+    return conf.getBoolean(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY,
+        isSecurityEnabled(conf));
+  }
+
+  /**
+   * Whether Kerberos is required on inter-service RPCs and the daemon keytab
+   * login of OM/SCM/DN/Recon. Falls back to {@link #isSecurityEnabled} when
+   * the dedicated key is not set.
+   */
+  public static boolean isInterServiceKerberosEnabled(
+      ConfigurationSource conf) {
+    return conf.getBoolean(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY,
+        isSecurityEnabled(conf));
+  }
+
+  /**
+   * True when the daemon must perform a keytab Kerberos login at startup —
+   * i.e. when at least one of its RPC surfaces (external client or
+   * inter-service) is configured to use Kerberos. The single keytab loaded
+   * here covers whichever surface(s) are Kerberos-enabled; for example, in
+   * the {@code external=true, interservice=false} split-Kerberos deployment
+   * the daemon still needs its external-facing SPN to accept Sig V4/SPNEGO
+   * and ofs Kerberos handshakes, but does not require an inter-service SPN.
+   */
+  public static boolean requiresDaemonKerberosLogin(
+      ConfigurationSource conf) {
+    return isExternalKerberosEnabled(conf)
+        || isInterServiceKerberosEnabled(conf);
+  }
+
+  /**
+   * Validates the combination of the three Kerberos flags and emits an
+   * advisory WARN when the cluster is running in the split-Kerberos mode
+   * (external != interservice). Rejects the {@code external=false,
+   * interservice=true} combination outright — block-token and delegation-token
+   * issuance to ofs/o3fs clients would silently break, since DT issuance
+   * requires a Kerberos-authenticated caller on the external port.
+   *
+   * <p>When inter-service Kerberos is off, also auto-sets
+   * {@code ipc.client.fallback-to-simple-auth-allowed=true} on {@code conf}.
+   * This is the load-bearing flag that lets OM/DN/Recon's outbound RPCs to
+   * SCM downgrade to SIMPLE: the JVM-global UGI stays in KERBEROS mode (it
+   * has to, to power the external surface), so every outbound RPC begins
+   * with a Kerberos negotiate; without this flag the IPC client refuses to
+   * accept SCM's "I want SIMPLE" response and the connection dies with
+   * "this client is configured to only allow secure connections". Setting it
+   * here means operators don't need to remember it in their {@code core-site}.
+   *
+   * @throws IllegalArgumentException when the unsupported combo is set.
+   */
+  public static void validateKerberosFlags(ConfigurationSource conf,
+      Logger daemonLog) {
+    boolean external = isExternalKerberosEnabled(conf);
+    boolean inter = isInterServiceKerberosEnabled(conf);
+    if (!external && inter) {
+      throw new IllegalArgumentException(
+          OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY + "=false combined "
+              + "with " + OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY
+              + "=true is not supported: ofs/o3fs clients would be unable to "
+              + "bootstrap a delegation token because the external RPC port "
+              + "would run without Kerberos. Either enable external Kerberos "
+              + "or disable both layers.");
+    }
+    if (external != inter) {
+      daemonLog.warn("Ozone is running in split-Kerberos mode "
+          + "(external={}, interservice={}); inter-service authenticity must "
+          + "be provided by the deployment (e.g. an Istio service mesh) "
+          + "because the inter-service RPC port will not enforce Kerberos.",
+          external, inter);
+    }
+    if (!inter && conf instanceof OzoneConfiguration) {
+      OzoneConfiguration ozoneConf = (OzoneConfiguration) conf;
+      String key = CommonConfigurationKeys
+          .IPC_CLIENT_FALLBACK_TO_SIMPLE_AUTH_ALLOWED_KEY;
+      if (!ozoneConf.getBoolean(key, false)) {
+        daemonLog.info("Auto-setting {}=true so this daemon's outbound RPCs "
+            + "can downgrade to SIMPLE against SCM ports running in the "
+            + "split-Kerberos mode.", key);
+        ozoneConf.setBoolean(key, true);
+      }
+    }
   }
 
   public static boolean isHttpSecurityEnabled(ConfigurationSource conf) {

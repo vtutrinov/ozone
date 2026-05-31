@@ -1929,6 +1929,30 @@
     </description>
   </property>
   <property>
+    <name>ozone.security.kerberos.external.enabled</name>
+    <value/>
+    <tag>OZONE, SECURITY, KERBEROS</tag>
+    <description>Enables Kerberos on the external surfaces: OM client RPC
+      (ofs/o3fs and "ozone s3 getsecret"), the S3 Gateway HTTP listener
+      (SPNEGO and AWS Sig V4), and the S3G keytab login. When unset,
+      inherits ozone.security.enabled. Set together with
+      ozone.security.kerberos.interservice.enabled to control external and
+      inter-service authentication independently — the target deployment is
+      Kubernetes with Istio mTLS handling inter-service authenticity.
+    </description>
+  </property>
+  <property>
+    <name>ozone.security.kerberos.interservice.enabled</name>
+    <value/>
+    <tag>OZONE, SECURITY, KERBEROS</tag>
+    <description>Enables Kerberos on inter-service RPCs (OM↔SCM, SCM↔DN,
+      DN↔DN, S3G→OM internal, Recon→OM/SCM) and the daemon keytab login on
+      OM/SCM/DN/Recon. When unset, inherits ozone.security.enabled. Set to
+      false together with ozone.security.kerberos.external.enabled=true to
+      run the cluster with Kerberos only on the external surfaces.
+    </description>
+  </property>
+  <property>
     <name>ozone.security.http.kerberos.enabled</name>
     <value>false</value>
     <tag>OZONE, SECURITY, KERBEROS</tag>
