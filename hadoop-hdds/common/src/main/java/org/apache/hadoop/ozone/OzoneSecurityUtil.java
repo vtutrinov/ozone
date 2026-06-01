@@ -110,6 +110,23 @@ public final class OzoneSecurityUtil {
   }
 
   /**
+   * True when a daemon that has *no external Kerberos surface* of its own
+   * (SCM, DN, Recon, and S3G when HTTP SPNEGO is off) needs to perform the
+   * keytab login at startup. In split-Kerberos mode these daemons only speak
+   * SIMPLE inter-service traffic, so the only reason for them to load a
+   * keytab is when inter-service Kerberos itself is configured on.
+   *
+   * <p>Use this instead of {@link #requiresDaemonKerberosLogin} on daemons
+   * whose Kerberos identity is never advertised to external clients. This is
+   * the gate that lets operators deploy split-Kerberos without distributing
+   * keytabs to every Ozone pod — only OM (and S3G if SPNEGO is on) need one.
+   */
+  public static boolean requiresInterServiceKerberosLogin(
+      ConfigurationSource conf) {
+    return isInterServiceKerberosEnabled(conf);
+  }
+
+  /**
    * Validates the combination of the three Kerberos flags and emits an
    * advisory WARN when the cluster is running in the split-Kerberos mode
    * (external != interservice). Rejects the {@code external=false,

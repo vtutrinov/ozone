@@ -1049,7 +1049,11 @@ public final class StorageContainerManager extends ServiceRuntimeInfoImpl
       SCMHANodeDetails scmhaNodeDetails, ConfigurationSource conf)
       throws IOException, AuthenticationException {
     OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
-    if (OzoneSecurityUtil.requiresDaemonKerberosLogin(conf)) {
+    // SCM only speaks SIMPLE inter-service in split-Kerberos mode (every RPC
+    // port is cloned with hadoop.security.authentication=simple by Step D).
+    // Gate the keytab login on the inter-service flag only — operators can
+    // run an external-only deployment without distributing an scm keytab.
+    if (OzoneSecurityUtil.requiresInterServiceKerberosLogin(conf)) {
       if (LOG.isDebugEnabled()) {
         ScmConfig scmConfig = conf.getObject(ScmConfig.class);
         LOG.debug("Ozone security is enabled. Attempting login for SCM user. "

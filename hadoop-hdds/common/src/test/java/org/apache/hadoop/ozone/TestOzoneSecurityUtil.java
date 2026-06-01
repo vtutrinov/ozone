@@ -88,6 +88,28 @@ public class TestOzoneSecurityUtil {
   }
 
   @Test
+  public void requiresInterServiceKerberosLoginTracksInterserviceFlag() {
+    OzoneConfiguration conf = new OzoneConfiguration();
+    // External-only deployment: SCM/DN/Recon/S3G need no daemon keytab.
+    conf.setBoolean(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY, true);
+    conf.setBoolean(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY, false);
+    assertFalse(OzoneSecurityUtil.requiresInterServiceKerberosLogin(conf));
+
+    // Inter-service Kerberos on: daemons must log in.
+    conf.setBoolean(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY, true);
+    assertTrue(OzoneSecurityUtil.requiresInterServiceKerberosLogin(conf));
+
+    // Master flag only — inter-service inherits to true.
+    OzoneConfiguration legacy = new OzoneConfiguration();
+    legacy.setBoolean(OZONE_SECURITY_ENABLED_KEY, true);
+    assertTrue(OzoneSecurityUtil.requiresInterServiceKerberosLogin(legacy));
+
+    // Defaults: everything off.
+    assertFalse(OzoneSecurityUtil.requiresInterServiceKerberosLogin(
+        new OzoneConfiguration()));
+  }
+
+  @Test
   public void validateRejectsExternalOffWithInterserviceOn() {
     OzoneConfiguration conf = new OzoneConfiguration();
     conf.setBoolean(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY, false);

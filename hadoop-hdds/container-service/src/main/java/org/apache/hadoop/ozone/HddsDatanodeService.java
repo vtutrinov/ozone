@@ -256,12 +256,13 @@ public class HddsDatanodeService extends GenericCli implements ServicePlugin {
           "HddsDatanodeService." + datanodeDetails.getUuidString()
               .substring(0, 8), conf);
       LOG.info("HddsDatanodeService host:{} ip:{}", hostname, ip);
-      // Authenticate Hdds Datanode service if security is enabled.
-      // The keytab is loaded whenever any Kerberos-served surface is active;
-      // see OzoneSecurityUtil#requiresDaemonKerberosLogin for the contract
-      // under the split-Kerberos (external-only) deployment mode.
+      // Authenticate Hdds Datanode service if security is enabled. DN has
+      // no external Kerberos surface — its inbound traffic from SCM/OM is
+      // SIMPLE in split-Kerberos mode (Step D server-side clones; Step C-2
+      // client-side rewrites). So gate on the inter-service flag only:
+      // external-only deployments can run without a dn keytab at all.
       OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
-      if (OzoneSecurityUtil.requiresDaemonKerberosLogin(conf)) {
+      if (OzoneSecurityUtil.requiresInterServiceKerberosLogin(conf)) {
         component = "dn-" + datanodeDetails.getUuidString();
         secConf = new SecurityConfig(conf);
 
