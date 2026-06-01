@@ -92,7 +92,14 @@ data:
 
   # Core security.
   CORE-SITE.XML_hadoop.security.authentication: kerberos
-  CORE-SITE.XML_hadoop.security.authorization: "true"
+  # In split-Kerberos mode with no daemon keytabs, Hadoop's service-level
+  # authorization (hadoop.security.authorization) trips on @KerberosInfo
+  # clientPrincipal expectations: a daemon running without a Kerberos UGI
+  # (auth:SIMPLE) does not match the configured client principal (e.g.
+  # dfs.datanode.kerberos.principal=dn/dn@EXAMPLE.COM) and the SCM
+  # SecretKeyProtocolDatanode rejects the call. Network-layer auth (Istio
+  # mTLS / NetworkPolicy) is the substitute when interservice=false.
+  CORE-SITE.XML_hadoop.security.authorization: "false"
   CORE-SITE.XML_hadoop.security.auth_to_local: "DEFAULT"
   # Required cluster-wide so daemons + CLI tools accept SCM's "I want SIMPLE"
   # response. Daemons also auto-set this (validateKerberosFlags); explicit

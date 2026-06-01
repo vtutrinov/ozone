@@ -107,6 +107,24 @@ spec:
           echo "=== Step 4: ozone fs -ls (bucket-level listing via OM Kerberos port)"
           ozone fs -ls ofs://om-public.ozone-extkdc-cluster.svc.cluster.local/testvol/
 
+          echo "=== Step 4b: ozone admin scm roles (SCM port is SIMPLE, TGT still held)"
+          # Kerberos-mode UGI must transparently downgrade to SIMPLE against
+          # SCM because every SCM RPC port is cloned with auth=simple by
+          # Step D. ipc.client.fallback-to-simple-auth-allowed=true is wired
+          # into the configmap; the fact that this command succeeds proves
+          # the fallback path engaged.
+          ozone admin scm roles
+          # The test asserts the COMMAND works (Kerberos→SIMPLE downgrade engaged),
+          # not the cluster's safemode state — DN registration timing makes the
+          # latter flaky right after a roll.
+          ozone admin safemode status | tee /tmp/safe.out
+          grep -qE "safe mode" /tmp/safe.out \
+            || { echo "FAIL: safemode status returned unexpected output" >&2; cat /tmp/safe.out >&2; exit 1; }
+          ozone admin datanode list >/tmp/dn.out 2>&1
+          grep -qE "Datanode|datanode" /tmp/dn.out \
+            || { echo "FAIL: ozone admin datanode list returned no Datanode entries" >&2; cat /tmp/dn.out >&2; exit 1; }
+          echo "PASS: SCM admin chain via SIMPLE downgrade"
+
           # PutObject would land in the multi-raft write path which currently
           # throws NoClassDefFoundError: java/lang/constant/Constable in the
           # Java-11 runner image. That's a pre-existing Sber-fork build issue
@@ -132,6 +150,18 @@ spec:
           grep -qE "AccessControl|Client cannot authenticate|GSS|SASL" /tmp/oz.out \
             || { echo "FAIL: ozone sh failed for non-auth reason:" >&2; cat /tmp/oz.out >&2; exit 1; }
           echo "PASS: ozone sh rejected without TGT (auth-shaped error)"
+
+          echo "=== Step 7b: ozone admin scm/safemode/datanode WITHOUT TGT must still succeed"
+          # SCM serves SIMPLE in split-Kerberos mode; no client credential
+          # required. This is the property that lets non-Kerberos operators
+          # (or service-mesh-only callers) talk to SCM at all.
+          ozone admin scm roles | grep -q scm \
+            || { echo "FAIL: ozone admin scm roles failed without TGT" >&2; exit 1; }
+          ozone admin safemode status | grep -qE "safe mode" \
+            || { echo "FAIL: ozone admin safemode status failed without TGT" >&2; exit 1; }
+          ozone admin datanode list | grep -qE "Datanode|datanode" \
+            || { echo "FAIL: ozone admin datanode list failed without TGT" >&2; exit 1; }
+          echo "PASS: SCM admin chain works without TGT (SIMPLE end-to-end)"
 
           # Sig V4 / getsecret / PutObject all go through the OM multi-raft
           # write path which is currently blocked by the pre-existing

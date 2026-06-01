@@ -140,7 +140,13 @@ CORE-SITE.XML_hadoop.http.authentication.kerberos.principal=HTTP/ozone@EXAMPLE.C
 CORE-SITE.XML_hadoop.http.authentication.kerberos.keytab=/etc/security/keytabs/HTTP.keytab
 
 
-CORE-SITE.XML_hadoop.security.authorization=true
+# Disabled in split-Kerberos mode: when daemons run without keytabs (Step J)
+# the Hadoop ServiceAuthorizationManager rejects SIMPLE-auth inter-service
+# calls against @KerberosInfo.clientPrincipal expectations (e.g. DN→SCM
+# SecretKeyProtocolDatanode fires "this service is only accessible by
+# dn/dn@EXAMPLE.COM"). The substitute is network-layer authorization
+# (service mesh mTLS / NetworkPolicy).
+CORE-SITE.XML_hadoop.security.authorization=false
 HADOOP-POLICY.XML_ozone.om.security.client.protocol.acl=*
 HADOOP-POLICY.XML_hdds.security.client.datanode.container.protocol.acl=*
 HADOOP-POLICY.XML_hdds.security.client.scm.container.protocol.acl=*

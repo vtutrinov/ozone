@@ -194,6 +194,42 @@ ofs write without TGT is rejected
     Should Match Regexp     ${out}      AccessControlException|Client cannot authenticate
     [Teardown]          Remove File    ${OFS_LOCAL_PAYLOAD}
 
+SCM admin commands work via SIMPLE downgrade with TGT held
+    [Documentation]    In split-Kerberos mode every SCM RPC port answers
+    ...                SIMPLE (Step D); a kinit'd client must therefore see
+    ...                ipc.client.fallback-to-simple-auth-allowed=true engage
+    ...                and downgrade the outbound call. The three flagship
+    ...                admin commands hit SCM's container-client (9860),
+    ...                block-client (9863), and security (9961) ports — a
+    ...                clean run proves every gate is consistent.
+    Run Keyword     Kinit test user     ${SPLIT_KRB_USER}     ${SPLIT_KRB_KEYTAB}
+    ${klist_rc}    ${klist_out}=    Run And Return Rc And Output    klist -s
+    Should Be Equal As Integers     ${klist_rc}     0
+    ${roles}=        Execute    ozone admin scm roles
+    Should Contain   ${roles}    scm
+    ${safe}=         Execute    ozone admin safemode status
+    Should Match Regexp     ${safe}     out of safe mode|is OFF|exited
+    ${dns}=          Execute    ozone admin datanode list
+    Should Contain   ${dns}     Datanode
+
+SCM admin commands work without TGT
+    [Documentation]    In split-Kerberos mode SCM ports are SIMPLE, so the
+    ...                same admin commands must work without any Kerberos
+    ...                credential at all — that is the load-bearing property
+    ...                we lean on when an inter-namespace operator or a
+    ...                service-mesh-only client touches SCM. This case
+    ...                exists as a regression guard against accidentally
+    ...                gating SCM RPC ports back on Kerberos.
+    Clean ticket cache
+    ${klist_rc}     ${klist_out}=    Run And Return Rc And Output    klist -s
+    Should Not Be Equal As Integers     ${klist_rc}     0
+    ${roles}=        Execute    ozone admin scm roles
+    Should Contain   ${roles}    scm
+    ${safe}=         Execute    ozone admin safemode status
+    Should Match Regexp     ${safe}     out of safe mode|is OFF|exited
+    ${dns}=          Execute    ozone admin datanode list
+    Should Contain   ${dns}     Datanode
+
 *** Test Cases ***
 External ofs succeeds with TGT, fails without
     Authenticated ofs ls succeeds
@@ -214,3 +250,9 @@ External AWS S3 sigv4 succeeds without TGT
 
 OM rejects forged S3 signatures
     AWS S3 sigv4 with a forged secret is rejected
+
+SCM admin works with a Kerberos client (downgrades to SIMPLE)
+    SCM admin commands work via SIMPLE downgrade with TGT held
+
+SCM admin works with no Kerberos credential at all
+    SCM admin commands work without TGT
