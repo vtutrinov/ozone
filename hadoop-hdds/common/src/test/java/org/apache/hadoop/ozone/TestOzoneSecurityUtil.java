@@ -187,4 +187,58 @@ public class TestOzoneSecurityUtil {
       }
     }
   }
+
+  @Test
+  public void acceptorOnlyModeFlipsIsInitiatorOnlyInSplitMode() throws Exception {
+    org.slf4j.Logger log = LoggerFactory.getLogger(TestOzoneSecurityUtil.class);
+    // Reach into Hadoop UGI's inner HadoopConfiguration class to inspect
+    // its BASIC_JAAS_OPTIONS map — the same map the production helper
+    // mutates. JVM-global state, so we snapshot + restore around each
+    // case.
+    Class<?> hadoopConf = Class.forName(
+        "org.apache.hadoop.security.UserGroupInformation$HadoopConfiguration");
+    java.lang.reflect.Field optionsField =
+        hadoopConf.getDeclaredField("BASIC_JAAS_OPTIONS");
+    optionsField.setAccessible(true);
+    @SuppressWarnings("unchecked")
+    java.util.Map<String, String> options =
+        (java.util.Map<String, String>) optionsField.get(null);
+    String originalInitiator = options.get("isInitiator");
+    try {
+      // (1) Split-Kerberos mode — should flip to false.
+      options.put("isInitiator", "true");
+      OzoneConfiguration split = new OzoneConfiguration();
+      split.setBoolean(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY, true);
+      split.setBoolean(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY,
+          false);
+      OzoneSecurityUtil.useKerberosAcceptorOnlyMode(split, log);
+      assertEquals("false", options.get("isInitiator"),
+          "Split-Kerberos mode must flip isInitiator=false");
+
+      // (2) Inter-service Kerberos on — must NOT flip (outbound needed).
+      options.put("isInitiator", "true");
+      OzoneConfiguration legacy = new OzoneConfiguration();
+      legacy.setBoolean(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY, true);
+      legacy.setBoolean(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY,
+          true);
+      OzoneSecurityUtil.useKerberosAcceptorOnlyMode(legacy, log);
+      assertEquals("true", options.get("isInitiator"),
+          "Inter-service Kerberos mode must keep isInitiator=true");
+
+      // (3) Insecure — must NOT flip (the helper is a no-op).
+      options.put("isInitiator", "true");
+      OzoneSecurityUtil.useKerberosAcceptorOnlyMode(
+          new OzoneConfiguration(), log);
+      assertEquals("true", options.get("isInitiator"),
+          "Insecure mode must leave isInitiator unchanged");
+    } finally {
+      // Restore baseline so this test doesn't poison sibling tests in the
+      // same JVM.
+      if (originalInitiator == null) {
+        options.remove("isInitiator");
+      } else {
+        options.put("isInitiator", originalInitiator);
+      }
+    }
+  }
 }

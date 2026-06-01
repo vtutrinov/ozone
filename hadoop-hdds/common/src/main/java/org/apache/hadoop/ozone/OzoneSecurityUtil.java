@@ -20,6 +20,7 @@ package org.apache.hadoop.ozone;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.nio.file.Path;
@@ -29,6 +30,7 @@ import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.fs.CommonConfigurationKeys;
@@ -124,6 +126,75 @@ public final class OzoneSecurityUtil {
   public static boolean requiresInterServiceKerberosLogin(
       ConfigurationSource conf) {
     return isInterServiceKerberosEnabled(conf);
+  }
+
+  /**
+   * Switches Hadoop's keytab login into "acceptor-only" mode so the daemon
+   * reads its long-term key from the keytab WITHOUT contacting the KDC at
+   * startup. Safe only when the daemon will not initiate outbound Kerberos
+   * calls — i.e. in the split-Kerberos mode where inter-service traffic is
+   * SIMPLE end-to-end (Step C-2, Step D). In that mode the daemon is a pure
+   * Kerberos acceptor on its external port: it decrypts the client's service
+   * ticket using its own keytab key (no KDC), and never needs a TGT to talk
+   * to anything else.
+   *
+   * <p>Mechanism: Hadoop's {@code UserGroupInformation} builds its
+   * Krb5LoginModule options from a private static map with
+   * {@code isInitiator=true} hardcoded. We reflect into that map and flip
+   * {@code isInitiator=false} before the daemon's first call to
+   * {@code loginUserFromKeytab}. With {@code isInitiator=false}, the JAAS
+   * login still reads the keytab into the Subject but does not perform an
+   * AS-REQ to acquire a TGT — and without a TGT the UGI auto-renewer thread
+   * never spawns, so the daemon's KDC traffic over its entire lifetime is
+   * exactly zero packets.
+   *
+   * <p>No-op if either of:
+   * <ul>
+   *   <li>External Kerberos is off — the daemon won't run a Kerberos login
+   *       at all, the optimisation is moot.</li>
+   *   <li>Inter-service Kerberos is on — the daemon does need outbound
+   *       Kerberos calls and therefore a TGT; leave the default initiator
+   *       login alone.</li>
+   * </ul>
+   *
+   * <p>Reflection failure (Hadoop UGI internals change) downgrades to a
+   * WARN — the daemon falls back to the default (one AS-REQ at startup).
+   */
+  public static void useKerberosAcceptorOnlyMode(
+      ConfigurationSource conf, Logger daemonLog) {
+    if (!isExternalKerberosEnabled(conf)) {
+      return;
+    }
+    if (isInterServiceKerberosEnabled(conf)) {
+      return;
+    }
+    try {
+      // Hadoop UGI builds the Krb5 login options dynamically inside the
+      // private inner class HadoopConfiguration#getKerberosEntry() by
+      // copying a private-static "BASIC_JAAS_OPTIONS" HashMap and adding
+      // entries on top. Krb5LoginModule's own default for isInitiator is
+      // true; the dynamic builder never explicitly sets it, so anything
+      // we add to BASIC_JAAS_OPTIONS propagates into every subsequent
+      // login. Putting "isInitiator=false" there is the smallest possible
+      // intervention that gives us a no-KDC keytab login.
+      Class<?> hadoopConf = Class.forName(
+          "org.apache.hadoop.security.UserGroupInformation$HadoopConfiguration");
+      Field optionsField = hadoopConf.getDeclaredField("BASIC_JAAS_OPTIONS");
+      optionsField.setAccessible(true);
+      @SuppressWarnings("unchecked")
+      Map<String, String> options =
+          (Map<String, String>) optionsField.get(null);
+      String previous = options.put("isInitiator", "false");
+      daemonLog.info("Krb5LoginModule isInitiator switched: {} -> false. "
+              + "Daemon will load its keytab without contacting the KDC; "
+              + "no AS-REQ at startup, no TGT renewer.",
+          previous);
+    } catch (ReflectiveOperationException e) {
+      daemonLog.warn("Could not switch Krb5LoginModule into acceptor-only "
+              + "mode: {}. The daemon will perform a normal AS-REQ at "
+              + "startup. Hadoop UGI internals may have changed.",
+          e.toString());
+    }
   }
 
   /**

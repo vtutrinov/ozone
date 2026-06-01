@@ -1700,6 +1700,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private static void loginOMUserIfSecurityEnabled(OzoneConfiguration conf)
       throws IOException, AuthenticationException {
     OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+    // In split-Kerberos mode OM never initiates outbound Kerberos calls
+    // (all inter-service traffic is SIMPLE via Step C-2 / IPC fallback).
+    // Flip Krb5LoginModule to acceptor-only so the keytab login doesn't
+    // emit an AS-REQ; zero KDC packets for this pod's lifetime.
+    OzoneSecurityUtil.useKerberosAcceptorOnlyMode(conf, LOG);
     securityEnabled = OzoneSecurityUtil.isSecurityEnabled(conf);
     // The keytab login is needed whenever either RPC surface (external client
     // or inter-service) is configured with Kerberos. In the split-Kerberos

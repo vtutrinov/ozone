@@ -1049,6 +1049,10 @@ public final class StorageContainerManager extends ServiceRuntimeInfoImpl
       SCMHANodeDetails scmhaNodeDetails, ConfigurationSource conf)
       throws IOException, AuthenticationException {
     OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+    // Same acceptor-only optimisation as OM (see Step L): SCM is a pure
+    // Kerberos acceptor on its external admin port (Step K) and never
+    // initiates outbound Kerberos calls in split mode. Skip the AS-REQ.
+    OzoneSecurityUtil.useKerberosAcceptorOnlyMode(conf, LOG);
     // SCM has an external Kerberos surface in split mode after Step K:
     // SCMClientProtocolServer (port 9860, behind `ozone admin scm/safemode/
     // datanode`) stays Kerberos-served whenever external Kerberos is on, so
