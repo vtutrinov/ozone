@@ -1,0 +1,121 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Two Services for OM:
+#   om         — headless, for pod-FQDN DNS used by inter-service traffic.
+#                The OM pod gets om-0.om.<ns>.svc as its stable FQDN; OM's
+#                own ozone.om.address points at this so its bind/advertise
+#                target resolves locally.
+#   om-public  — regular ClusterIP, for external clients. They reach OM via
+#                om-public.<ns>.svc.cluster.local:9862 and compute the SPN
+#                from that name. The KDC has the matching principal.
+apiVersion: v1
+kind: Service
+metadata:
+  name: om
+  namespace: ozone-extkdc-cluster
+spec:
+  clusterIP: None
+  ports:
+  - port: 9862
+    name: client-rpc
+  - port: 9864
+    name: service-rpc
+  - port: 9874
+    name: ui
+  selector:
+    app: ozone-extkdc
+    component: om
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: om-public
+  namespace: ozone-extkdc-cluster
+spec:
+  ports:
+  - port: 9862
+    name: client-rpc
+  selector:
+    app: ozone-extkdc
+    component: om
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: om
+  namespace: ozone-extkdc-cluster
+spec:
+  selector:
+    matchLabels:
+      app: ozone-extkdc
+      component: om
+  serviceName: om
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ozone-extkdc
+        component: om
+    spec:
+      hostname: om-0
+      subdomain: om
+      securityContext:
+        fsGroup: 1000
+      containers:
+      - name: om
+        image: ozone-split-kerberos:dev
+        imagePullPolicy: IfNotPresent
+        args: [ozone, om]
+        env:
+        - name: WAITFOR
+          value: scm-0.scm.ozone-extkdc-cluster.svc.cluster.local:9876
+        - name: ENSURE_OM_INITIALIZED
+          value: /data/metadata/om/current/VERSION
+        ports:
+        - containerPort: 9862
+          name: client-rpc
+        - containerPort: 9864
+          name: service-rpc
+        - containerPort: 9874
+          name: ui
+        livenessProbe:
+          tcpSocket:
+            port: 9862
+          initialDelaySeconds: 60
+        envFrom:
+        - configMapRef:
+            name: config
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: keytabs
+          mountPath: /etc/security/keytabs
+          readOnly: true
+        - name: krb5
+          mountPath: /etc/krb5.conf
+          subPath: krb5.conf
+          readOnly: true
+      volumes:
+      - name: keytabs
+        secret:
+          secretName: keytabs
+      - name: krb5
+        configMap:
+          name: krb5
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi

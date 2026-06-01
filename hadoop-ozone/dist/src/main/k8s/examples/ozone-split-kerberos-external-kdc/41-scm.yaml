@@ -1,0 +1,101 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# SCM is fully internal in split-Kerberos mode: every RPC port answers
+# SIMPLE (per Step D). No external Service is needed; the headless Service
+# provides pod-FQDN DNS for OM and DN to reach scm-0.
+apiVersion: v1
+kind: Service
+metadata:
+  name: scm
+  namespace: ozone-extkdc-cluster
+spec:
+  clusterIP: None
+  ports:
+  - port: 9876
+    name: client-rpc
+  - port: 9860
+    name: cont-client
+  - port: 9863
+    name: block-client
+  - port: 9861
+    name: datanode
+  selector:
+    app: ozone-extkdc
+    component: scm
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: scm
+  namespace: ozone-extkdc-cluster
+spec:
+  selector:
+    matchLabels:
+      app: ozone-extkdc
+      component: scm
+  serviceName: scm
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ozone-extkdc
+        component: scm
+    spec:
+      hostname: scm-0
+      subdomain: scm
+      securityContext:
+        fsGroup: 1000
+      containers:
+      - name: scm
+        image: ozone-split-kerberos:dev
+        imagePullPolicy: IfNotPresent
+        args: [ozone, scm]
+        env:
+        - name: ENSURE_SCM_INITIALIZED
+          value: /data/metadata/scm/current/VERSION
+        ports:
+        - containerPort: 9876
+          name: client-rpc
+        - containerPort: 9860
+          name: cont-client
+        - containerPort: 9863
+          name: block-client
+        - containerPort: 9861
+          name: datanode
+        envFrom:
+        - configMapRef:
+            name: config
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: keytabs
+          mountPath: /etc/security/keytabs
+          readOnly: true
+        - name: krb5
+          mountPath: /etc/krb5.conf
+          subPath: krb5.conf
+          readOnly: true
+      volumes:
+      - name: keytabs
+        secret:
+          secretName: keytabs
+      - name: krb5
+        configMap:
+          name: krb5
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi

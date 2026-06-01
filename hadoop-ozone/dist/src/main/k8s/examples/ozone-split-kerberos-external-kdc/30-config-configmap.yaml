@@ -1,0 +1,105 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Ozone daemon config for the external-KDC variant of split-Kerberos.
+# Key property tested here: the KDC has NO per-pod-FQDN principals; only
+# stable Service-name principals (om-public, s3g-public) plus shared
+# daemon identities. interservice=false means SCM/DN/Recon never speak
+# Kerberos to each other, so their "login" principals are no-ops that
+# only need to exist in the KDC for the keytab loginUserFromKeytab call
+# to succeed.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config
+  namespace: ozone-extkdc-cluster
+data:
+  # Cluster topology — pod-headless DNS names, used for inter-service traffic
+  # which runs SIMPLE in split mode.
+  OZONE-SITE.XML_ozone.om.address: om-0.om.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.scm.names: scm-0.scm.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.scm.block.client.address: scm-0.scm.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.scm.client.address: scm-0.scm.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_hdds.datanode.dir: /data/storage
+  OZONE-SITE.XML_ozone.scm.datanode.id.dir: /data
+  OZONE-SITE.XML_ozone.metadata.dirs: /data/metadata
+  OZONE-SITE.XML_hdds.scm.safemode.min.datanode: "1"
+  OZONE-SITE.XML_ozone.datanode.pipeline.limit: "1"
+  OZONE-SITE.XML_dfs.datanode.use.datanode.hostname: "true"
+
+  # === Split-Kerberos ===
+  OZONE-SITE.XML_ozone.security.enabled: "true"
+  OZONE-SITE.XML_ozone.security.kerberos.external.enabled: "true"
+  OZONE-SITE.XML_ozone.security.kerberos.interservice.enabled: "false"
+
+  # SIMPLE-auth sibling RPC port on OM, used by S3G and any internal caller.
+  OZONE-SITE.XML_ozone.om.service.rpc-address: om-0.om.ozone-extkdc-cluster.svc.cluster.local:9864
+
+  # HMAC tokens stay enforced regardless of Kerberos surface.
+  OZONE-SITE.XML_hdds.block.token.enabled: "true"
+  OZONE-SITE.XML_hdds.container.token.enabled: "true"
+  # No Ratis-level TLS — split mode + TLS gates are not fully aligned
+  # (see plan.md follow-up), and a service mesh is the intended substitute.
+  OZONE-SITE.XML_hdds.grpc.tls.enabled: "false"
+
+  # ACLs.
+  OZONE-SITE.XML_ozone.acl.enabled: "true"
+  OZONE-SITE.XML_ozone.acl.authorizer.class: org.apache.hadoop.ozone.security.acl.OzoneNativeAuthorizer
+  OZONE-SITE.XML_ozone.administrators: "testuser,om,scm,dn,s3g,root"
+  OZONE-SITE.XML_ozone.s3.administrators: "testuser,s3g,root"
+
+  # === Principals ===
+  # Stable, short names — no FQDN, no pod-host substitution. The literal
+  # principal flows straight through Hadoop without any _HOST replacement,
+  # so it doesn't matter what hostname OM binds to or how clients address
+  # it: the SPN both sides compute is the literal one from this config.
+  # That's the load-bearing property for an external KDC that doesn't know
+  # the cluster's pod-FQDN topology.
+  OZONE-SITE.XML_ozone.om.kerberos.principal: om/om@EXAMPLE.COM
+  OZONE-SITE.XML_ozone.om.kerberos.keytab.file: /etc/security/keytabs/om.keytab
+
+  # SCM has NO Kerberos-served surface in split mode (all four RPC ports
+  # answer SIMPLE — see Step D). The startup keytab login is a leftover
+  # contract from Step B; it just has to succeed.
+  OZONE-SITE.XML_hdds.scm.kerberos.principal: scm/scm@EXAMPLE.COM
+  OZONE-SITE.XML_hdds.scm.kerberos.keytab.file: /etc/security/keytabs/scm.keytab
+
+  # Same story for the datanode — its inbound traffic is SIMPLE inter-service.
+  HDFS-SITE.XML_dfs.datanode.kerberos.principal: dn/dn@EXAMPLE.COM
+  HDFS-SITE.XML_dfs.datanode.kerberos.keytab.file: /etc/security/keytabs/dn.keytab
+
+  # S3G's external HTTP surface uses Sig V4 (HMAC, no Kerberos). It needs
+  # the keytab login only so the daemon UGI exists — the principal name
+  # is operationally a no-op, just has to match the keytab.
+  OZONE-SITE.XML_ozone.s3g.kerberos.principal: s3g/s3g@EXAMPLE.COM
+  OZONE-SITE.XML_ozone.s3g.kerberos.keytab.file: /etc/security/keytabs/s3g.keytab
+
+  # HTTP SPNEGO is intentionally disabled. Enabling it would force the KDC
+  # to mint HTTP/<pod-FQDN> principals for every daemon — exactly the
+  # constraint the external-KDC mode is designed to escape.
+  OZONE-SITE.XML_ozone.security.http.kerberos.enabled: "false"
+  OZONE-SITE.XML_ozone.om.http.auth.type: simple
+  OZONE-SITE.XML_hdds.scm.http.auth.type: simple
+  OZONE-SITE.XML_ozone.s3g.http.auth.type: simple
+
+  # Core security.
+  CORE-SITE.XML_hadoop.security.authentication: kerberos
+  CORE-SITE.XML_hadoop.security.authorization: "true"
+  CORE-SITE.XML_hadoop.security.auth_to_local: "DEFAULT"
+  # Required cluster-wide so daemons + CLI tools accept SCM's "I want SIMPLE"
+  # response. Daemons also auto-set this (validateKerberosFlags); explicit
+  # here for the CLI tools that don't go through the daemon entry points.
+  CORE-SITE.XML_ipc.client.fallback-to-simple-auth-allowed: "true"
+
+  LOG4J.PROPERTIES_log4j.rootLogger: INFO, stdout
+  LOG4J.PROPERTIES_log4j.appender.stdout: org.apache.log4j.ConsoleAppender
+  LOG4J.PROPERTIES_log4j.appender.stdout.layout: org.apache.log4j.PatternLayout
+  LOG4J.PROPERTIES_log4j.appender.stdout.layout.ConversionPattern: '%d{yyyy-MM-dd HH:mm:ss} %-5p %c{1}:%L - %m%n'

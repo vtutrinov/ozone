@@ -1,0 +1,88 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Datanodes have no external surface; the headless Service provides
+# pod-FQDN DNS for SCM heartbeats. interservice=false keeps SCM↔DN traffic
+# on SIMPLE auth.
+apiVersion: v1
+kind: Service
+metadata:
+  name: datanode
+  namespace: ozone-extkdc-cluster
+spec:
+  clusterIP: None
+  ports:
+  - port: 9870
+    name: rpc
+  selector:
+    app: ozone-extkdc
+    component: datanode
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: datanode
+  namespace: ozone-extkdc-cluster
+spec:
+  selector:
+    matchLabels:
+      app: ozone-extkdc
+      component: datanode
+  serviceName: datanode
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: ozone-extkdc
+        component: datanode
+    spec:
+      subdomain: datanode
+      securityContext:
+        fsGroup: 1000
+      containers:
+      - name: datanode
+        image: ozone-split-kerberos:dev
+        imagePullPolicy: IfNotPresent
+        args: [ozone, datanode]
+        env:
+        - name: WAITFOR
+          value: scm-0.scm.ozone-extkdc-cluster.svc.cluster.local:9876
+        ports:
+        - containerPort: 9870
+          name: rpc
+        envFrom:
+        - configMapRef:
+            name: config
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: keytabs
+          mountPath: /etc/security/keytabs
+          readOnly: true
+        - name: krb5
+          mountPath: /etc/krb5.conf
+          subPath: krb5.conf
+          readOnly: true
+      volumes:
+      - name: keytabs
+        secret:
+          secretName: keytabs
+      - name: krb5
+        configMap:
+          name: krb5
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi
