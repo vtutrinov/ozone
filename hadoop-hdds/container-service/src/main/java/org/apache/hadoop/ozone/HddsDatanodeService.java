@@ -262,10 +262,17 @@ public class HddsDatanodeService extends GenericCli implements ServicePlugin {
       // client-side rewrites). So gate on the inter-service flag only:
       // external-only deployments can run without a dn keytab at all.
       OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
-      if (OzoneSecurityUtil.requiresInterServiceKerberosLogin(conf)) {
+      // SecurityConfig is needed by the cert client even when no keytab login
+      // happens (external=true, interservice=false): the cert client still
+      // talks to SCM's cert service over SIMPLE to fetch/rotate the DN cert.
+      // Initialize it unconditionally when security is enabled at the master
+      // level, and only gate the actual Kerberos loginUserFromKeytab call
+      // on requiresInterServiceKerberosLogin.
+      if (OzoneSecurityUtil.isSecurityEnabled(conf)) {
         component = "dn-" + datanodeDetails.getUuidString();
         secConf = new SecurityConfig(conf);
-
+      }
+      if (OzoneSecurityUtil.requiresInterServiceKerberosLogin(conf)) {
         if (SecurityUtil.getAuthenticationMethod(conf).equals(
             UserGroupInformation.AuthenticationMethod.KERBEROS)) {
           LOG.info("Ozone security is enabled. Attempting login for Hdds " +
