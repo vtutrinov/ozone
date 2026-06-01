@@ -9,12 +9,18 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-# Variant of deploy.sh that pushes the keytab-minimization further: the KDC
-# is seeded with **only the principals that are actually authenticated to**
-# (testuser@ + om/om@), and the cluster-side `keytabs` Secret contains ONLY
-# om.keytab. SCM, DN, and S3G mount the same Secret but find no scm/dn/s3g
-# keytab in it — that's fine, because after Step J they don't attempt the
-# keytab login at all when interservice=false.
+# Variant of deploy.sh that pushes the keytab-minimization further: the
+# KDC is seeded with **only the principals that are actually authenticated
+# to** (testuser@, om/om@, scm/scm@), and the cluster-side `keytabs` Secret
+# contains only om.keytab and scm.keytab. DN and S3G mount the same Secret
+# but find no dn/s3g keytab in it — that's fine, because after Step J they
+# don't attempt the keytab login at all when interservice=false.
+#
+# SCM is NOT keyless: per Step K it serves Kerberos on its external admin
+# port (StorageContainerLocationProtocol, 9860), so it needs its long-term
+# key in the keytab to decrypt client tickets. Operators who want keyless
+# SCM must also disable external Kerberos (then `ozone admin scm` no longer
+# requires a TGT and SCM truly needs no Kerberos identity).
 #
 # What this proves end-to-end:
 #   - The KDC sees only ONE service principal from the cluster (om/om).
@@ -50,10 +56,10 @@ kubectl -n "$EDGE_NS" exec "$KDC_POD" -- bash -c "
   kadmin.local -q 'listprincs' | grep -q '^testuser@${REALM}\$' \
     || kadmin.local -q 'addprinc -randkey testuser@${REALM}'
   echo '--- principals matching identities used by this test:'
-  kadmin.local -q 'listprincs' | grep -E '^(testuser@|om/om@)' | sort
+  kadmin.local -q 'listprincs' | grep -E '^(testuser@|om/om@|scm/scm@)' | sort
 "
 
-log "3/8 export only testuser + om keytabs"
+log "3/8 export testuser + om + scm keytabs"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
@@ -62,16 +68,20 @@ kubectl -n "$EDGE_NS" exec "$KDC_POD" -- bash -c "
   rm -f /tmp/*.keytab
   kadmin.local -q 'ktadd -norandkey -k /tmp/testuser.keytab testuser@${REALM}'
   kadmin.local -q 'ktadd -norandkey -k /tmp/om.keytab       om/om@${REALM}'
+  kadmin.local -q 'ktadd -norandkey -k /tmp/scm.keytab      scm/scm@${REALM}'
   ls -la /tmp/*.keytab
 "
 kubectl -n "$EDGE_NS" cp "$KDC_POD:/tmp/testuser.keytab" "$WORK/testuser.keytab"
 kubectl -n "$EDGE_NS" cp "$KDC_POD:/tmp/om.keytab"       "$WORK/om.keytab"
+kubectl -n "$EDGE_NS" cp "$KDC_POD:/tmp/scm.keytab"      "$WORK/scm.keytab"
 
 log "4/8 create Secrets"
-# Cluster side: ONLY the OM keytab. SCM/DN/S3G mount this Secret but find
+# Cluster side: OM + SCM keytabs. DN and S3G mount this Secret but find
 # no key file for themselves; Step J keeps them from trying to load one.
+# SCM has a keytab because Step K serves Kerberos on its admin port.
 kubectl -n "$CLUSTER_NS" create secret generic keytabs \
   --from-file=om.keytab="$WORK/om.keytab" \
+  --from-file=scm.keytab="$WORK/scm.keytab" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl -n "$EDGE_NS" create secret generic testuser-keytab \

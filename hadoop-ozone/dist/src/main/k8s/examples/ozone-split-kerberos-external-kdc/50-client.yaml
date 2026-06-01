@@ -107,12 +107,13 @@ spec:
           echo "=== Step 4: ozone fs -ls (bucket-level listing via OM Kerberos port)"
           ozone fs -ls ofs://om-public.ozone-extkdc-cluster.svc.cluster.local/testvol/
 
-          echo "=== Step 4b: ozone admin scm roles (SCM port is SIMPLE, TGT still held)"
-          # Kerberos-mode UGI must transparently downgrade to SIMPLE against
-          # SCM because every SCM RPC port is cloned with auth=simple by
-          # Step D. ipc.client.fallback-to-simple-auth-allowed=true is wired
-          # into the configmap; the fact that this command succeeds proves
-          # the fallback path engaged.
+          echo "=== Step 4b: ozone admin scm roles (Kerberos against SCM external admin port)"
+          # Per Step K SCMClientProtocolServer (port 9860) stays Kerberos-served
+          # when external Kerberos is enabled — so a TGT-bearing client must
+          # authenticate via Kerberos against scm/scm@EXAMPLE.COM. The chain
+          # below exercises three of SCM's RPC ports: ClientProtocol (Kerberos,
+          # 9860) for `scm roles`, the same for `safemode status` and
+          # `datanode list` which both go through StorageContainerLocation.
           ozone admin scm roles
           # The test asserts the COMMAND works (Kerberos→SIMPLE downgrade engaged),
           # not the cluster's safemode state — DN registration timing makes the
@@ -151,17 +152,19 @@ spec:
             || { echo "FAIL: ozone sh failed for non-auth reason:" >&2; cat /tmp/oz.out >&2; exit 1; }
           echo "PASS: ozone sh rejected without TGT (auth-shaped error)"
 
-          echo "=== Step 7b: ozone admin scm/safemode/datanode WITHOUT TGT must still succeed"
-          # SCM serves SIMPLE in split-Kerberos mode; no client credential
-          # required. This is the property that lets non-Kerberos operators
-          # (or service-mesh-only callers) talk to SCM at all.
-          ozone admin scm roles | grep -q scm \
-            || { echo "FAIL: ozone admin scm roles failed without TGT" >&2; exit 1; }
-          ozone admin safemode status | grep -qE "safe mode" \
-            || { echo "FAIL: ozone admin safemode status failed without TGT" >&2; exit 1; }
-          ozone admin datanode list | grep -qE "Datanode|datanode" \
-            || { echo "FAIL: ozone admin datanode list failed without TGT" >&2; exit 1; }
-          echo "PASS: SCM admin chain works without TGT (SIMPLE end-to-end)"
+          echo "=== Step 7b: ozone admin scm WITHOUT TGT must be REJECTED"
+          # Per Step K the SCM external admin port (StorageContainerLocationProtocol
+          # on 9860) stays Kerberos-served when external=true, regardless of
+          # interservice. A client without a TGT must therefore be rejected with
+          # a Kerberos-shaped auth error, not silently succeed via SIMPLE.
+          if ozone admin scm roles >/tmp/scm.out 2>&1 ; then
+            echo "FAIL: ozone admin scm roles succeeded without TGT" >&2
+            cat /tmp/scm.out >&2
+            exit 1
+          fi
+          grep -qE "AccessControl|Client cannot authenticate|GSS|SASL|Kerberos" /tmp/scm.out \
+            || { echo "FAIL: ozone admin scm rejected for non-Kerberos reason:" >&2; cat /tmp/scm.out >&2; exit 1; }
+          echo "PASS: ozone admin scm rejected without TGT (Kerberos-shaped error)"
 
           # Sig V4 / getsecret / PutObject all go through the OM multi-raft
           # write path which is currently blocked by the pre-existing

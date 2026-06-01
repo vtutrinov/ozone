@@ -170,12 +170,18 @@ public class SCMClientProtocolServer implements
     final InetSocketAddress scmAddress =
         scm.getScmNodeDetails().getClientProtocolServerAddress();
 
-    // Same SASL split as SCMBlockProtocolServer: when inter-service Kerberos
-    // is off this port serves OM with SIMPLE. External admin clients are
-    // expected to ride the dedicated security/admin protocol; this port is
-    // primarily inter-service.
+    // SCMClientProtocolServer hosts StorageContainerLocationProtocol — the
+    // protocol behind `ozone admin scm`, `ozone admin safemode`, `ozone admin
+    // datanode`, etc. That's an EXTERNAL admin surface, not an inter-service
+    // one (no other Ozone daemon calls into this port; OM uses the dedicated
+    // block protocol on 9863 for block allocation). So in split-Kerberos mode
+    // this port must stay Kerberos-served whenever external Kerberos is on,
+    // even if inter-service Kerberos is off. Only when external Kerberos is
+    // disabled AND inter-service is disabled do we downgrade to SIMPLE — and
+    // that case is just legacy insecure mode, which the conf already reflects.
     OzoneConfiguration rpcConf = conf;
-    if (!OzoneSecurityUtil.isInterServiceKerberosEnabled(conf)) {
+    if (!OzoneSecurityUtil.isExternalKerberosEnabled(conf)
+        && !OzoneSecurityUtil.isInterServiceKerberosEnabled(conf)) {
       rpcConf = new OzoneConfiguration(conf);
       rpcConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
           AuthenticationMethod.SIMPLE.name().toLowerCase(Locale.ROOT));
