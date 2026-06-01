@@ -28,8 +28,7 @@ on SIMPLE auth).
 
 ## Principals seeded in the KDC
 
-The KDC's `EXAMPLE.COM` realm carries only these identities (apart from
-the `apache/ozone-testkrb5` image's own bookkeeping):
+With `deploy.sh` (baseline), the realm carries:
 
 ```
 testuser@EXAMPLE.COM
@@ -39,7 +38,15 @@ scm/scm@EXAMPLE.COM
 dn/dn@EXAMPLE.COM
 ```
 
-The `om/om`, `s3g/s3g`, `scm/scm`, `dn/dn` entries come pre-baked in the
+With `deploy-keyless.sh`, only these — every other principal the cluster
+might once have needed has been eliminated:
+
+```
+testuser@EXAMPLE.COM
+om/om@EXAMPLE.COM
+```
+
+The `om/om`, `s3g/s3g`, `scm/scm`, `dn/dn` entries are pre-baked in the
 testkrb5 image. **None of them carry a hostname tied to a Kubernetes
 pod, Service, or namespace FQDN** — that's the property the deployment
 mode exists to honour. The KDC sees the cluster as a black box; the only
@@ -62,20 +69,36 @@ client's connection target affects the SPN that Kerberos negotiates.
 
 ## How to run
 
+Two deploy variants, same manifests:
+
 ```bash
-./deploy.sh
+./deploy.sh           # baseline: every daemon carries its own keytab
+./deploy-keyless.sh   # minimum-keytab: only OM (and client) have keytabs
 ```
 
-The script:
+`deploy.sh` distributes `om/om`, `scm/scm`, `dn/dn`, `s3g/s3g` keytabs to
+the cluster namespace — this exercises the same path as `deploy.sh`
+without the keyless refinement, so the SCM/DN/S3G keytabs are loaded
+even though they're never used to authenticate anything in split mode.
 
-1. Creates both namespaces.
-2. Brings up the KDC; adds `testuser@EXAMPLE.COM`; extracts keytabs
-   for the five identities listed above.
-3. Creates the `keytabs` Secret in the cluster namespace (om/s3g/scm/dn
-   keytabs) and the `testuser-keytab` Secret in the edge namespace.
-4. Applies the cluster ConfigMap, then the StatefulSets in startup order:
-   SCM → OM → DN → S3G.
-5. Launches the client `Job` in the edge namespace and tails its logs.
+`deploy-keyless.sh` is the deployment that the corporate-KDC use case
+actually wants: the KDC mints **only** `testuser@EXAMPLE.COM` and
+`om/om@EXAMPLE.COM`, and the cluster-side `keytabs` Secret contains
+only `om.keytab`. SCM/DN/S3G start without ever opening
+`/etc/security/keytabs/scm.keytab` (etc.) thanks to the per-daemon
+gate split in Step J — they all check `requiresInterServiceKerberosLogin`
+which is false when `interservice=false`. The deploy script prints
+the actual keytabs directory contents on each pod as a sanity check.
+
+Both scripts:
+
+1. Create both namespaces and the KDC.
+2. Seed the KDC with the required principals (4–5 for `deploy.sh`,
+   2 for `deploy-keyless.sh`).
+3. Extract keytabs via `kadmin.local`; create the cluster-side `keytabs`
+   Secret and the edge-side `testuser-keytab` Secret.
+4. Apply the daemon manifests in startup order: SCM → OM → DN → S3G.
+5. Launch the client `Job` in the edge namespace and tail its logs.
 
 The Job's exit code is the verdict.
 
