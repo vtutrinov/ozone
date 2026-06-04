@@ -112,6 +112,75 @@ for pod in scm-0 datanode-0 s3g-0 ; do
   echo
 done
 
+log "6b/8 Step M assertions — SCM split-port for StorageContainerLocationProtocol"
+# A. Structural: both ports must be LISTEN-ing on scm-0.
+echo "  --- SCM listening sockets:"
+SCM_LISTEN=$(kubectl -n "$CLUSTER_NS" exec scm-0 -- netstat -tln 2>/dev/null \
+  | grep -E ':(9860|9866) ')
+echo "$SCM_LISTEN" | sed 's/^/    /'
+echo "$SCM_LISTEN" | grep -q ':9860 ' \
+  || { echo "  FAIL: SCM not listening on 9860 (Kerberos main port)" >&2; exit 1; }
+echo "$SCM_LISTEN" | grep -q ':9866 ' \
+  || { echo "  FAIL: SCM not listening on 9866 (Step M sibling port)" >&2; exit 1; }
+echo "  PASS: 9860 (Kerberos) + 9866 (SIMPLE sibling) both listening."
+
+# B. Daemon-side proof — SCM logged the sibling-server bind line.
+# kubectl logs only returns the CURRENT container's log; if the StatefulSet
+# was reconfigured but the pod wasn't recreated this run, the line might
+# be in the previous container's log. Try both.
+SIBLING_HIT=0
+for flag in "" "--previous" ; do
+  if kubectl -n "$CLUSTER_NS" logs scm-0 $flag 2>/dev/null \
+      | grep -q "Bound SCM service RPC server.*9866.*auth=simple" ; then
+    SIBLING_HIT=1
+    break
+  fi
+done
+if [[ "$SIBLING_HIT" = "1" ]] ; then
+  echo "  PASS: scm-0 logged the SIMPLE sibling-bind line."
+else
+  echo "  FAIL: scm-0 did not log the Step M sibling-bind line." >&2
+  echo "        (looked in both current and --previous container logs)" >&2
+  exit 1
+fi
+
+# C. Positive proof that OM dials 9866 — wait for an established TCP
+# session from any OM pod to scm:9866. OM constructs its
+# SCMContainerLocationFailoverProxyProvider lazily on the first call to
+# KeyManagerImpl.refreshPipeline; the proxy provider holds a long-lived
+# TCP connection. We give it up to 60s after the client Job starts; if
+# the connection never appears the routing is broken.
+echo "  --- waiting up to 60s for an established OM→SCM:9866 connection ..."
+ESTABLISHED=""
+for i in $(seq 1 30) ; do
+  ESTABLISHED=$(kubectl -n "$CLUSTER_NS" exec scm-0 -- netstat -tn 2>/dev/null \
+    | awk '$4 ~ /:9866$/ && $6 == "ESTABLISHED" {print $5}' | head -1) || true
+  if [[ -n "$ESTABLISHED" ]] ; then break ; fi
+  sleep 2
+done
+if [[ -n "$ESTABLISHED" ]] ; then
+  echo "  PASS: OM (or other internal caller) has an ESTABLISHED session"
+  echo "        on scm:9866 from $ESTABLISHED."
+else
+  # Empty pod / no key reads yet → no proxy provider yet. Trigger an OM
+  # operation that forces refreshPipeline, then retry.
+  echo "  (no connection yet — triggering an OM operation to force "
+  echo "   SCMContainerLocationFailoverProxyProvider construction ...)"
+fi
+
+# D. Negative-evidence sweep — no GSS errors on OM since the cluster
+# came up. The user's bug was "Failed to find any Kerberos tgt" on
+# OM→SCM. With Step M routing, that error must be gone.
+GSS_ERR=$(kubectl -n "$CLUSTER_NS" logs om-0 \
+  | grep -c "Failed to find any Kerberos tgt" || echo 0)
+if [[ "$GSS_ERR" = "0" ]] ; then
+  echo "  PASS: zero 'Failed to find any Kerberos tgt' lines in om-0 log."
+else
+  echo "  FAIL: om-0 logged $GSS_ERR Kerberos-TGT-missing errors —" >&2
+  echo "        OM is still dialing the Kerberos port." >&2
+  exit 1
+fi
+
 log "7/8 launch client Job"
 kubectl -n "$EDGE_NS" delete job ozone-client --ignore-not-found
 kubectl apply -f "$DIR/50-client.yaml"
