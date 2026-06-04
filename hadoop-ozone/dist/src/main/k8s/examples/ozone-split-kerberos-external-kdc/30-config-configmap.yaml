@@ -42,6 +42,10 @@ data:
 
   # SIMPLE-auth sibling RPC port on OM, used by S3G and any internal caller.
   OZONE-SITE.XML_ozone.om.service.rpc-address: om-0.om.ozone-extkdc-cluster.svc.cluster.local:9864
+  # SIMPLE-auth sibling RPC port on SCM (Step M) for inter-service callers
+  # such as OM doing pipeline refresh. The Kerberos main port (9860) is
+  # kept for external `ozone admin` (Step K).
+  OZONE-SITE.XML_ozone.scm.service.rpc-address: scm-0.scm.ozone-extkdc-cluster.svc.cluster.local:9866
 
   # HMAC tokens stay enforced regardless of Kerberos surface.
   OZONE-SITE.XML_hdds.block.token.enabled: "true"

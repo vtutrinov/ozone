@@ -105,9 +105,12 @@ authorisation remains HMAC-verified on both ports.
 | Port | Protocol | Default auth before split mode | In split mode |
 |---|---|---|---|
 | 9860 | `StorageContainerLocationProtocol` (external admin: `ozone admin scm/safemode/datanode/container/pipeline`) | Kerberos | **Kerberos** (Step K). |
+| 9866 | `StorageContainerLocationProtocol` sibling for inter-service callers (OM pipeline refresh) | n/a | **SIMPLE** (Step M). New sibling RPC server; built when `ozone.scm.service.rpc-address` is set. Same protocol, different SASL profile, just like OM's split-port. |
 | 9863 | `ScmBlockLocationProtocol` (OM ↔ SCM block allocation) | Kerberos | SIMPLE. |
 | 9861 | `StorageContainerDatanodeProtocol` (DN heartbeats and reports) | Kerberos | SIMPLE. |
 | 9961 | `SCMSecurityProtocol` (cert issuance / secret-key vending — used by OM and DN internally) | Kerberos | SIMPLE. |
+
+Why Step M had to exist: `StorageContainerLocationProtocol` is **both** an external admin surface *and* an inter-service surface. OM calls `getContainerWithPipelineBatch` on every key read that has to refresh pipeline info (see `KeyManagerImpl.refreshPipeline`). Step K kept 9860 on Kerberos to satisfy "Kerberos required for `ozone admin`"; Step L removed OM's TGT (acceptor-only). That left OM unable to talk to SCM on every read with `Failed to find any Kerberos tgt`. Step M adds a sibling SIMPLE port (default 9866) that internal callers route to via `HAUtils.getScmContainerClient(conf, ugi, internalCaller=true)`; OM uses that. External `ozone admin` keeps targeting 9860 over Kerberos.
 
 ## Request flows
 
@@ -510,3 +513,4 @@ single revertable commit. The order, with what each contains:
 | J | per-daemon login refinement | DN/Recon/S3G gated on inter-service only. SCM/OM stay on the composite gate. |
 | K | SCM external admin port stays Kerberos | `SCMClientProtocolServer` keeps Kerberos when external=true regardless of interservice. |
 | L | acceptor-only Kerberos mode | OM and SCM never contact the KDC at startup or for renewal. |
+| M | SCM split-port for `StorageContainerLocationProtocol` | Sibling SIMPLE-auth RPC server (default port 9866) for OM and other internal callers, so the Kerberos-required 9860 port can stay for external `ozone admin` without forcing OM to hold a TGT. Mirrors OM's Step C-1 / C-2 pattern on the SCM side. |

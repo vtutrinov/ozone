@@ -55,6 +55,10 @@ OZONE-SITE.XML_ozone.security.enabled=true
 OZONE-SITE.XML_ozone.security.kerberos.external.enabled=true
 OZONE-SITE.XML_ozone.security.kerberos.interservice.enabled=false
 OZONE-SITE.XML_ozone.om.service.rpc-address=om:9864
+# SIMPLE-auth sibling RPC port on SCM (Step M) — same shape as OM's split,
+# for OM's pipeline-refresh and similar inter-service calls. The Kerberos
+# main port (9860) remains for `ozone admin scm`.
+OZONE-SITE.XML_ozone.scm.service.rpc-address=scm:9866
 
 OZONE-SITE.XML_ozone.acl.enabled=true
 OZONE-SITE.XML_ozone.acl.authorizer.class=org.apache.hadoop.ozone.security.acl.OzoneNativeAuthorizer

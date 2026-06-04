@@ -1464,7 +1464,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    */
   private static StorageContainerLocationProtocol getScmContainerClient(
       OzoneConfiguration conf) {
-    return HAUtils.getScmContainerClient(conf);
+    // OM is an internal caller: dial SCM's SIMPLE sibling RPC server
+    // (Step M, ozone.scm.service.rpc-address) when configured so OM never
+    // needs a TGT to refresh pipelines. Falls back to the Kerberos main
+    // port automatically when the operator hasn't enabled the split.
+    return HAUtils.getScmContainerClient(conf, null, true);
   }
 
   /**

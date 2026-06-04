@@ -27,6 +27,8 @@ spec:
     name: block-client
   - port: 9861
     name: datanode
+  - port: 9866
+    name: svc-rpc
   selector:
     app: ozone-extkdc
     component: scm
@@ -70,6 +72,8 @@ spec:
           name: block-client
         - containerPort: 9861
           name: datanode
+        - containerPort: 9866
+          name: svc-rpc
         envFrom:
         - configMapRef:
             name: config

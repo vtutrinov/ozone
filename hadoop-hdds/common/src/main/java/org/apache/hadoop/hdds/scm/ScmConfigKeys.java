@@ -159,6 +159,21 @@ public final class ScmConfigKeys {
       "ozone.scm.client.port";
   public static final int OZONE_SCM_CLIENT_PORT_DEFAULT = 9860;
 
+  /**
+   * Optional sibling RPC port for StorageContainerLocationProtocol that
+   * answers SIMPLE auth in split-Kerberos mode. The Kerberos-served
+   * {@link #OZONE_SCM_CLIENT_PORT_KEY} stays as-is for external admin
+   * tools; OM and other internal callers dial this address instead so
+   * they don't need a TGT for inter-service calls. Unset → no sibling
+   * server is built and OM/internal calls fall back to the standard
+   * port (same behaviour as before Step M).
+   */
+  public static final String OZONE_SCM_SERVICE_RPC_ADDRESS_KEY =
+      "ozone.scm.service.rpc-address";
+  public static final String OZONE_SCM_SERVICE_RPC_BIND_HOST_KEY =
+      "ozone.scm.service.rpc-bind-host";
+  public static final int OZONE_SCM_SERVICE_RPC_PORT_DEFAULT = 9866;
+
   public static final String OZONE_SCM_DATANODE_PORT_KEY =
       "ozone.scm.datanode.port";
   public static final int OZONE_SCM_DATANODE_PORT_DEFAULT = 9861;

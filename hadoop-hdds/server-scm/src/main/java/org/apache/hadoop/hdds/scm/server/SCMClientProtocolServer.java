@@ -120,13 +120,18 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.apache.hadoop.hdds.protocol.proto.StorageContainerLocationProtocolProtos.StorageContainerLocationProtocolService.newReflectiveBlockingService;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_CLIENT_BIND_HOST_DEFAULT;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_HANDLER_COUNT_KEY;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_SERVICE_RPC_ADDRESS_KEY;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_SERVICE_RPC_BIND_HOST_KEY;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_SERVICE_RPC_PORT_DEFAULT;
 import static org.apache.hadoop.hdds.scm.ScmUtils.checkIfCertSignRequestAllowed;
 import static org.apache.hadoop.hdds.scm.ha.HASecurityUtils.createSCMRatisTLSConfig;
 import static org.apache.hadoop.hdds.scm.server.StorageContainerManager.startRpcServer;
 import static org.apache.hadoop.hdds.server.ServerUtils.getRemoteUserName;
 import static org.apache.hadoop.hdds.server.ServerUtils.updateRPCListenAddress;
+import org.apache.hadoop.net.NetUtils;
 import static org.apache.hadoop.hdds.utils.HddsServerUtil.getRemoteUser;
 
 /**
@@ -140,6 +145,13 @@ public class SCMClientProtocolServer implements
       new AuditLogger(AuditLoggerType.SCMLOGGER);
   private final RPC.Server clientRpcServer;
   private final InetSocketAddress clientRpcAddress;
+  // Sibling RPC server on a separate port that answers SIMPLE auth for
+  // internal callers (OM doing pipeline refresh, etc.). Built lazily by
+  // maybeBuildServiceRpcServer when external Kerberos is on but
+  // inter-service Kerberos is off (Step M). Null in every other mode.
+  private final RPC.Server serviceRpcServer;
+  private final InetSocketAddress serviceRpcAddress;
+  private volatile boolean isServiceRpcServerRunning = false;
   private final StorageContainerManager scm;
   private final OzoneConfiguration config;
   private final ProtocolMessageMetrics<ProtocolMessageEnum> protocolMetrics;
@@ -170,26 +182,20 @@ public class SCMClientProtocolServer implements
     final InetSocketAddress scmAddress =
         scm.getScmNodeDetails().getClientProtocolServerAddress();
 
-    // SCMClientProtocolServer hosts StorageContainerLocationProtocol — the
-    // protocol behind `ozone admin scm`, `ozone admin safemode`, `ozone admin
-    // datanode`, etc. That's an EXTERNAL admin surface, not an inter-service
-    // one (no other Ozone daemon calls into this port; OM uses the dedicated
-    // block protocol on 9863 for block allocation). So in split-Kerberos mode
-    // this port must stay Kerberos-served whenever external Kerberos is on,
-    // even if inter-service Kerberos is off. Only when external Kerberos is
-    // disabled AND inter-service is disabled do we downgrade to SIMPLE — and
-    // that case is just legacy insecure mode, which the conf already reflects.
-    OzoneConfiguration rpcConf = conf;
-    if (!OzoneSecurityUtil.isExternalKerberosEnabled(conf)
-        && !OzoneSecurityUtil.isInterServiceKerberosEnabled(conf)) {
-      rpcConf = new OzoneConfiguration(conf);
-      rpcConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
-          AuthenticationMethod.SIMPLE.name().toLowerCase(Locale.ROOT));
-    }
-
+    // SCMClientProtocolServer hosts StorageContainerLocationProtocol —
+    // both the EXTERNAL admin surface (`ozone admin scm/safemode/datanode`)
+    // and an INTER-SERVICE surface (OM calls `getContainerWithPipelineBatch`
+    // here every time it refreshes a key's pipeline info during reads).
+    // Step K kept this port Kerberos-served when external Kerberos is on, so
+    // external admin requires a TGT. To keep that property without forcing
+    // OM to hold a TGT (which would defeat Step L's acceptor-only mode for
+    // OM), Step M adds a sibling RPC server on a separate port that answers
+    // SIMPLE auth, intended for OM / other internal callers. The split is
+    // gated by OZONE_SCM_SERVICE_RPC_ADDRESS_KEY: when unset the cluster
+    // keeps today's single-port behaviour.
     clientRpcServer =
         startRpcServer(
-            rpcConf,
+            conf,
             scmAddress,
             StorageContainerLocationProtocolPB.class,
             storageProtoPbService,
@@ -213,6 +219,77 @@ public class SCMClientProtocolServer implements
       clientRpcServer.refreshServiceAcl(conf, SCMPolicyProvider.getInstance());
     }
     HddsServerUtil.addSuppressedLoggingExceptions(clientRpcServer);
+
+    // Optionally bind the SIMPLE-auth sibling for inter-service callers.
+    serviceRpcServer = maybeBuildServiceRpcServer(conf, handlerCount,
+        storageProtoPbService, reconfigureServerProtocol);
+    serviceRpcAddress = (serviceRpcServer == null) ? null
+        : (InetSocketAddress) serviceRpcServer.getListenerAddress();
+  }
+
+  /**
+   * Build the sibling SIMPLE-auth RPC server for inter-service callers
+   * (Step M). Returns {@code null} when {@code ozone.scm.service.rpc-address}
+   * is not set — preserving today's single-port behaviour.
+   */
+  private RPC.Server maybeBuildServiceRpcServer(
+      OzoneConfiguration conf, int handlerCount,
+      BlockingService storageProtoPbService,
+      ReconfigureProtocolServerSideTranslatorPB reconfigureServerProtocol)
+      throws IOException {
+    String serviceRpcAddrStr = conf.get(OZONE_SCM_SERVICE_RPC_ADDRESS_KEY);
+    if (serviceRpcAddrStr == null || serviceRpcAddrStr.isEmpty()) {
+      return null;
+    }
+
+    InetSocketAddress serviceRpcAddr = NetUtils.createSocketAddr(
+        serviceRpcAddrStr, OZONE_SCM_SERVICE_RPC_PORT_DEFAULT,
+        OZONE_SCM_SERVICE_RPC_ADDRESS_KEY);
+    String serviceBindHost = conf.get(OZONE_SCM_SERVICE_RPC_BIND_HOST_KEY,
+        OZONE_SCM_CLIENT_BIND_HOST_DEFAULT);
+    InetSocketAddress serviceBindAddr = new InetSocketAddress(
+        serviceBindHost, serviceRpcAddr.getPort());
+
+    // Clone configuration so we can override the SASL profile on this port
+    // alone. The Kerberos-served main port remains untouched.
+    OzoneConfiguration serviceConf = new OzoneConfiguration(conf);
+    if (!OzoneSecurityUtil.isInterServiceKerberosEnabled(conf)) {
+      serviceConf.set(
+          CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
+          AuthenticationMethod.SIMPLE.name().toLowerCase(Locale.ROOT));
+    }
+
+    RPC.Server siblingServer = startRpcServer(
+        serviceConf,
+        serviceBindAddr,
+        StorageContainerLocationProtocolPB.class,
+        storageProtoPbService,
+        handlerCount);
+
+    BlockingService reconfigureService =
+        ReconfigureProtocolService.newReflectiveBlockingService(
+            reconfigureServerProtocol);
+    HddsServerUtil.addPBProtocol(serviceConf, ReconfigureProtocolPB.class,
+        reconfigureService, siblingServer);
+
+    InetSocketAddress boundAddr = updateRPCListenAddress(conf,
+        OZONE_SCM_SERVICE_RPC_ADDRESS_KEY, serviceRpcAddr, siblingServer);
+    if (serviceConf.getBoolean(
+        CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, false)) {
+      siblingServer.refreshServiceAcl(serviceConf,
+          SCMPolicyProvider.getInstance());
+    }
+    HddsServerUtil.addSuppressedLoggingExceptions(siblingServer);
+    LOG.info("Bound SCM service RPC server (StorageContainerLocationProtocol "
+            + "sibling for internal callers) to {} (auth={})",
+        boundAddr,
+        OzoneSecurityUtil.isInterServiceKerberosEnabled(conf)
+            ? "kerberos" : "simple");
+    return siblingServer;
+  }
+
+  public InetSocketAddress getServiceRpcAddress() {
+    return serviceRpcAddress;
   }
 
   public RPC.Server getClientRpcServer() {
@@ -229,10 +306,27 @@ public class SCMClientProtocolServer implements
         StorageContainerManager.buildRpcServerStartMessage(
             "RPC server for Client ", getClientRpcAddress()));
     getClientRpcServer().start();
+    if (serviceRpcServer != null && !isServiceRpcServerRunning) {
+      LOG.info(
+          StorageContainerManager.buildRpcServerStartMessage(
+              "RPC sibling for internal callers (SIMPLE auth) ",
+              serviceRpcAddress));
+      serviceRpcServer.start();
+      isServiceRpcServerRunning = true;
+    }
   }
 
   public void stop() {
     protocolMetrics.unregister();
+    if (serviceRpcServer != null && isServiceRpcServerRunning) {
+      try {
+        LOG.info("Stopping the SCM service sibling RPC server");
+        serviceRpcServer.stop();
+      } catch (Exception ex) {
+        LOG.error("SCM service sibling RPC stop failed.", ex);
+      }
+      isServiceRpcServerRunning = false;
+    }
     try {
       LOG.info("Stopping the RPC server for Client Protocol");
       getClientRpcServer().stop();
@@ -245,6 +339,9 @@ public class SCMClientProtocolServer implements
   public void join() throws InterruptedException {
     LOG.trace("Join RPC server for Client Protocol");
     getClientRpcServer().join();
+    if (serviceRpcServer != null) {
+      serviceRpcServer.join();
+    }
   }
 
   @Override
