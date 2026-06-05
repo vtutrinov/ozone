@@ -95,19 +95,24 @@ kubectl -n "$CLUSTER_NS" get secret keytabs -o jsonpath='{.data}' \
 log "5/8 apply cluster manifests"
 kubectl apply -f "$DIR/30-config-configmap.yaml"
 kubectl apply -f "$DIR/41-scm.yaml"
-kubectl -n "$CLUSTER_NS" rollout status statefulset/scm --timeout=300s
+# SCM HA bootstrap is sequential: primordial scm-0 inits first, scm-1/scm-2
+# join via --bootstrap once scm-0's RPC is up. Wait for all 3 to be Ready.
+kubectl -n "$CLUSTER_NS" rollout status statefulset/scm --timeout=600s
 
 kubectl apply -f "$DIR/40-om.yaml"
 kubectl apply -f "$DIR/42-datanode.yaml"
-kubectl -n "$CLUSTER_NS" rollout status statefulset/om --timeout=300s
-kubectl -n "$CLUSTER_NS" rollout status statefulset/datanode --timeout=300s
+kubectl -n "$CLUSTER_NS" rollout status statefulset/om       --timeout=600s
+kubectl -n "$CLUSTER_NS" rollout status statefulset/datanode --timeout=600s
 
 kubectl apply -f "$DIR/43-s3g.yaml"
 kubectl -n "$CLUSTER_NS" rollout status statefulset/s3g --timeout=300s
 
-log "6/8 confirm SCM/DN/S3G have no scm.keytab / dn.keytab / s3g.keytab"
-for pod in scm-0 datanode-0 s3g-0 ; do
-  printf '  %-12s ' "$pod:"
+log "6/8 confirm DN/S3G have no dn.keytab / s3g.keytab (and HA pod inventory)"
+echo "  --- HA pod inventory:"
+kubectl -n "$CLUSTER_NS" get pods --no-headers | awk '{printf "    %-12s %s\n", $1, $3}'
+echo "  --- keytab directory contents on each daemon pod:"
+for pod in scm-0 scm-1 scm-2 datanode-0 s3g-0 om-0 om-1 om-2 ; do
+  printf '    %-12s ' "$pod:"
   kubectl -n "$CLUSTER_NS" exec "$pod" -- ls /etc/security/keytabs/ 2>&1 | tr '\n' ' '
   echo
 done
@@ -124,25 +129,34 @@ echo "$SCM_LISTEN" | grep -q ':9866 ' \
   || { echo "  FAIL: SCM not listening on 9866 (Step M sibling port)" >&2; exit 1; }
 echo "  PASS: 9860 (Kerberos) + 9866 (SIMPLE sibling) both listening."
 
-# B. Daemon-side proof — SCM logged the sibling-server bind line.
-# kubectl logs only returns the CURRENT container's log; if the StatefulSet
-# was reconfigured but the pod wasn't recreated this run, the line might
-# be in the previous container's log. Try both.
-SIBLING_HIT=0
-for flag in "" "--previous" ; do
-  if kubectl -n "$CLUSTER_NS" logs scm-0 $flag 2>/dev/null \
-      | grep -q "Bound SCM service RPC server.*9866.*auth=simple" ; then
-    SIBLING_HIT=1
-    break
+# B. Daemon-side proof — each SCM logged the sibling-server bind line.
+# In HA every SCM pod binds its own SCMClientProtocolServer at startup
+# regardless of Ratis leadership, so each of scm-0/1/2 must show the
+# Step M bind line. kubectl logs only returns the CURRENT container's
+# log; if a pod was restarted with the same config since the line was
+# emitted, try --previous too. The log line is printed early in startup,
+# so retry briefly to absorb the gap between rollout-Ready and the
+# line landing in kubectl's log buffer.
+for pod in scm-0 scm-1 scm-2 ; do
+  SIBLING_HIT=0
+  for attempt in 1 2 3 4 5 6 ; do
+    for flag in "" "--previous" ; do
+      if kubectl -n "$CLUSTER_NS" logs "$pod" $flag 2>/dev/null \
+          | grep -q "Bound SCM service RPC server.*9866.*auth=simple" ; then
+        SIBLING_HIT=1
+        break 2
+      fi
+    done
+    sleep 2
+  done
+  if [[ "$SIBLING_HIT" = "1" ]] ; then
+    echo "  PASS: $pod logged the SIMPLE sibling-bind line."
+  else
+    echo "  FAIL: $pod did not log the Step M sibling-bind line." >&2
+    echo "        (looked in both current and --previous container logs)" >&2
+    exit 1
   fi
 done
-if [[ "$SIBLING_HIT" = "1" ]] ; then
-  echo "  PASS: scm-0 logged the SIMPLE sibling-bind line."
-else
-  echo "  FAIL: scm-0 did not log the Step M sibling-bind line." >&2
-  echo "        (looked in both current and --previous container logs)" >&2
-  exit 1
-fi
 
 # C. Positive proof that OM dials 9866 — wait for an established TCP
 # session from any OM pod to scm:9866. OM constructs its

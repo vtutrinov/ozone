@@ -8,9 +8,13 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-# SCM is fully internal in split-Kerberos mode: every RPC port answers
-# SIMPLE (per Step D). No external Service is needed; the headless Service
-# provides pod-FQDN DNS for OM and DN to reach scm-0.
+# SCM HA: three pods running Ratis between them. Headless Service gives
+# each pod a stable FQDN that the configmap's
+# ozone.scm.address.scmservice.scmN keys reference; client-side failover
+# uses those addresses. In split-Kerberos mode every SCM port answers
+# SIMPLE on the inter-service set (Step D) — Step K kept 9860 Kerberos
+# for external `ozone admin`, and Step M added the 9866 SIMPLE sibling
+# for internal callers (OM pipeline refresh).
 apiVersion: v1
 kind: Service
 metadata:
@@ -44,25 +48,66 @@ spec:
       app: ozone-extkdc
       component: scm
   serviceName: scm
-  replicas: 1
+  podManagementPolicy: Parallel
+  replicas: 3
   template:
     metadata:
       labels:
         app: ozone-extkdc
         component: scm
     spec:
-      hostname: scm-0
-      subdomain: scm
       securityContext:
         fsGroup: 1000
+      initContainers:
+      # SCM HA bootstrap:
+      #   scm-0 (the primordial node, set via ozone.scm.primordial.node.id
+      #          in the configmap) runs `ozone scm --init` to format
+      #          the cluster.
+      #   scm-1 and scm-2 wait for scm-0's RPC to come up, then run
+      #          `ozone scm --bootstrap` to join the existing Ratis ring.
+      - name: scm-init
+        image: ozone-split-kerberos:dev
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+            set -e
+            /opt/hadoop/libexec/envtoconf.py --destination /opt/hadoop/etc/hadoop >/dev/null
+            HOSTNAME=$(hostname)
+            echo "SCM init for $HOSTNAME"
+            if [[ ! -f /data/metadata/scm/current/VERSION ]] ; then
+              if [[ "$HOSTNAME" = "scm-0" ]] ; then
+                echo "→ primordial SCM, running --init"
+                ozone scm --init
+              else
+                echo "→ waiting for scm-0:9876 before --bootstrap"
+                until nc -z scm-0.scm.ozone-extkdc-cluster.svc.cluster.local 9876 ; do
+                  sleep 2
+                done
+                echo "→ scm-0 is up, running --bootstrap"
+                ozone scm --bootstrap
+              fi
+            else
+              echo "SCM already initialised — skipping."
+            fi
+        envFrom:
+        - configMapRef:
+            name: config
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: keytabs
+          mountPath: /etc/security/keytabs
+          readOnly: true
+        - name: krb5
+          mountPath: /etc/krb5.conf
+          subPath: krb5.conf
+          readOnly: true
       containers:
       - name: scm
         image: ozone-split-kerberos:dev
         imagePullPolicy: IfNotPresent
         args: [ozone, scm]
-        env:
-        - name: ENSURE_SCM_INITIALIZED
-          value: /data/metadata/scm/current/VERSION
         ports:
         - containerPort: 9876
           name: client-rpc

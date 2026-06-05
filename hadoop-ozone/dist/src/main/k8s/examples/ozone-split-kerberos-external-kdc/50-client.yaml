@@ -23,21 +23,32 @@ metadata:
   name: client-config
   namespace: ozone-extkdc-edge
 data:
-  OZONE-SITE.XML_ozone.om.address: om-public.ozone-extkdc-cluster.svc.cluster.local:9862
+  # HA OM addresses — same shape as the cluster configmap so failover
+  # is symmetric in both directions.
+  OZONE-SITE.XML_ozone.om.service.ids: omservice
+  OZONE-SITE.XML_ozone.om.nodes.omservice: om0,om1,om2
+  OZONE-SITE.XML_ozone.om.address.omservice.om0: om-0.om.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.om.address.omservice.om1: om-1.om.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.om.address.omservice.om2: om-2.om.ozone-extkdc-cluster.svc.cluster.local
   OZONE-SITE.XML_ozone.om.kerberos.principal: om/om@EXAMPLE.COM
-  OZONE-SITE.XML_ozone.scm.names: scm-0.scm.ozone-extkdc-cluster.svc.cluster.local
-  OZONE-SITE.XML_ozone.scm.block.client.address: scm-0.scm.ozone-extkdc-cluster.svc.cluster.local
-  OZONE-SITE.XML_ozone.scm.client.address: scm-0.scm.ozone-extkdc-cluster.svc.cluster.local
+
+  # HA SCM addresses
+  OZONE-SITE.XML_ozone.scm.service.ids: scmservice
+  OZONE-SITE.XML_ozone.scm.nodes.scmservice: scm0,scm1,scm2
+  OZONE-SITE.XML_ozone.scm.address.scmservice.scm0: scm-0.scm.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.scm.address.scmservice.scm1: scm-1.scm.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.scm.address.scmservice.scm2: scm-2.scm.ozone-extkdc-cluster.svc.cluster.local
   OZONE-SITE.XML_hdds.scm.kerberos.principal: scm/scm@EXAMPLE.COM
+
   OZONE-SITE.XML_ozone.security.enabled: "true"
   OZONE-SITE.XML_ozone.security.kerberos.external.enabled: "true"
   OZONE-SITE.XML_ozone.security.kerberos.interservice.enabled: "false"
   OZONE-SITE.XML_hdds.grpc.tls.enabled: "false"
-  OZONE-SITE.XML_ozone.administrators: "testuser,om,scm,dn,s3g,root"
-  OZONE-SITE.XML_ozone.s3.administrators: "testuser,s3g,root"
+  OZONE-SITE.XML_ozone.administrators: "testuser,om,scm,dn,s3g,hadoop,root"
+  OZONE-SITE.XML_ozone.s3.administrators: "testuser,s3g,hadoop,root"
   OZONE-SITE.XML_ozone.security.http.kerberos.enabled: "false"
   CORE-SITE.XML_hadoop.security.authentication: kerberos
-  CORE-SITE.XML_hadoop.security.authorization: "true"
+  CORE-SITE.XML_hadoop.security.authorization: "false"
   CORE-SITE.XML_hadoop.security.auth_to_local: "DEFAULT"
   CORE-SITE.XML_ipc.client.fallback-to-simple-auth-allowed: "true"
   LOG4J.PROPERTIES_log4j.rootLogger: INFO, stdout
@@ -87,7 +98,7 @@ spec:
           # falls back to ozone-defaults and connects to 0.0.0.0:9862.
           /opt/hadoop/libexec/envtoconf.py --destination /opt/hadoop/etc/hadoop
 
-          OM_ADDR="om-public.ozone-extkdc-cluster.svc.cluster.local:9862"
+          OM_ADDR="omservice:9862"
           S3G_URL="http://s3g-public.ozone-extkdc-cluster.svc.cluster.local:9878"
           TEST_USER="testuser@EXAMPLE.COM"
           TEST_KEYTAB="/etc/security/testuser-keytab/testuser.keytab"
@@ -105,7 +116,7 @@ spec:
           ozone sh bucket info /testvol/testbucket >/dev/null
 
           echo "=== Step 4: ozone fs -ls (bucket-level listing via OM Kerberos port)"
-          ozone fs -ls ofs://om-public.ozone-extkdc-cluster.svc.cluster.local/testvol/
+          ozone fs -ls ofs://omservice/testvol/
 
           echo "=== Step 4b: ozone admin scm roles (Kerberos against SCM external admin port)"
           # Per Step K SCMClientProtocolServer (port 9860) stays Kerberos-served
@@ -159,7 +170,7 @@ spec:
           # "Failed to find any Kerberos tgt". Post-Step-M it lands on the
           # SIMPLE sibling at 9866 and succeeds.
           echo "split-kerberos step M write/read test" > /tmp/payload.txt
-          OFS=ofs://om-public.ozone-extkdc-cluster.svc.cluster.local/testvol/testbucket
+          OFS=ofs://omservice/testvol/testbucket
           ozone fs -put -f /tmp/payload.txt $OFS/payload-stepm.txt 2>&1 | tail -3
           ozone fs -ls $OFS/payload-stepm.txt 2>&1 | tail -3
           ozone fs -cat $OFS/payload-stepm.txt > /tmp/payload-roundtrip.txt

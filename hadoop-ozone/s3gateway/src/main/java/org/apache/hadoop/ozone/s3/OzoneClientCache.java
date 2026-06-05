@@ -19,6 +19,7 @@ package org.apache.hadoop.ozone.s3;
 
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.ozone.ha.ConfUtils;
 import org.apache.hadoop.hdds.security.SecurityConfig;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientFactory;
@@ -34,6 +35,7 @@ import javax.annotation.PreDestroy;
 import javax.enterprise.context.ApplicationScoped;
 import java.io.IOException;
 import java.security.cert.CertificateException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -101,10 +103,18 @@ public final class OzoneClientCache {
   }
 
   /**
-   * Returns a copy of {@code base} with {@code ozone.om.address} rewritten to
-   * {@code ozone.om.service.rpc-address} when that key is set, leaving the
-   * original untouched. When the service-RPC key is not configured this
-   * returns {@code base} unchanged, preserving today's single-port behaviour.
+   * Returns a copy of {@code base} with every OM address rewritten so its
+   * port matches {@code ozone.om.service.rpc-address}, leaving the original
+   * conf untouched. In HA mode each per-node address
+   * ({@code ozone.om.address.<service>.<nodeId>}) is rewritten so the
+   * failover proxy provider dials the SIMPLE-auth sibling port on every
+   * OM pod. In non-HA mode the plain {@code ozone.om.address} is rewritten.
+   *
+   * <p>Step N — supersedes the earlier non-HA-only rewrite. Mirrors the
+   * shape of {@code HAUtils.withScmServicePortIfConfigured}: only the port
+   * is taken from the configured rpc-address value, the host portion is
+   * cosmetic. When the rpc-address key is unset, returns {@code base}
+   * unchanged so the cluster keeps its legacy single-port behaviour.
    */
   private static OzoneConfiguration withOmServicePortAddressIfConfigured(
       OzoneConfiguration base) {
@@ -113,9 +123,76 @@ public final class OzoneClientCache {
     if (servicePortAddr == null || servicePortAddr.isEmpty()) {
       return base;
     }
+
+    int port = parsePortOrDefault(servicePortAddr,
+        OMConfigKeys.OZONE_OM_SERVICE_RPC_PORT_DEFAULT);
+
     OzoneConfiguration internal = new OzoneConfiguration(base);
-    internal.set(OMConfigKeys.OZONE_OM_ADDRESS_KEY, servicePortAddr);
+
+    // Non-HA fallback: rewrite the plain ozone.om.address if it's set.
+    String nonHaAddr = base.get(OMConfigKeys.OZONE_OM_ADDRESS_KEY);
+    if (nonHaAddr != null && !nonHaAddr.isEmpty()) {
+      internal.set(OMConfigKeys.OZONE_OM_ADDRESS_KEY,
+          replacePort(nonHaAddr, port));
+    }
+
+    // HA: enumerate every ozone.om.address.<serviceId>.<nodeId> and rewrite
+    // it so the failover proxy provider hits the SIMPLE sibling on every
+    // OM pod. We read the service IDs directly rather than going through
+    // OmUtils.getOzoneManagerServiceId — that helper throws when more than
+    // one service ID is declared without an explicit internal-id override,
+    // which is the very situation S3G is built for. Iterating every
+    // declared service ID is safe: each one's per-node keys are namespaced.
+    Collection<String> serviceIds = base.getTrimmedStringCollection(
+        OMConfigKeys.OZONE_OM_SERVICE_IDS_KEY);
+    for (String serviceId : serviceIds) {
+      if (serviceId == null || serviceId.isEmpty()) {
+        continue;
+      }
+      String nodesKey = ConfUtils.addKeySuffixes(
+          OMConfigKeys.OZONE_OM_NODES_KEY, serviceId);
+      Collection<String> nodeIds = base.getTrimmedStringCollection(nodesKey);
+      for (String nodeId : nodeIds) {
+        String addrKey = ConfUtils.addKeySuffixes(
+            OMConfigKeys.OZONE_OM_ADDRESS_KEY, serviceId, nodeId);
+        String addr = base.get(addrKey);
+        if (addr != null && !addr.isEmpty()) {
+          internal.set(addrKey, replacePort(addr, port));
+        }
+      }
+    }
     return internal;
+  }
+
+  /**
+   * Extract the port from a host:port string, falling back to {@code def}
+   * when the input lacks a port suffix or it doesn't parse as an int.
+   */
+  private static int parsePortOrDefault(String hostPort, int def) {
+    int colon = hostPort.lastIndexOf(':');
+    if (colon <= 0 || colon >= hostPort.length() - 1) {
+      return def;
+    }
+    try {
+      return Integer.parseInt(hostPort.substring(colon + 1));
+    } catch (NumberFormatException ignored) {
+      return def;
+    }
+  }
+
+  /**
+   * Return {@code addr} with any port suffix replaced by {@code newPort}.
+   * Handles bare hostnames (appends {@code :newPort}), host:port
+   * (replaces the suffix), and IPv6 bracketed forms ({@code [::1]:9862}).
+   */
+  private static String replacePort(String addr, int newPort) {
+    int closingBracket = addr.lastIndexOf(']');
+    int colon = addr.lastIndexOf(':');
+    // Treat the colon as a port separator only if it sits past any IPv6
+    // bracket — otherwise it's part of the IPv6 host literal.
+    String host = (colon > closingBracket && colon > 0)
+        ? addr.substring(0, colon) : addr;
+    return host + ":" + newPort;
   }
 
   public static OzoneClient getOzoneClientInstance(OzoneConfiguration ozoneConfiguration)
