@@ -50,6 +50,13 @@ data:
   OZONE-SITE.XML_ozone.datanode.pipeline.limit: "1"
   OZONE-SITE.XML_dfs.datanode.use.datanode.hostname: "true"
 
+  # ── Recon ──────────────────────────────────────────────────────────
+  # DNs heartbeat to Recon on this address (in addition to SCM:9861).
+  # Recon's own RPC to OM/SCM is built from the standard service-id
+  # keys above; no Recon-specific override needed for that path.
+  OZONE-SITE.XML_ozone.recon.address: recon-0.recon.ozone-extkdc-cluster.svc.cluster.local:9891
+  OZONE-SITE.XML_ozone.recon.datanode.address: recon-0.recon.ozone-extkdc-cluster.svc.cluster.local:9891
+
   # ── Split-Kerberos flags ──────────────────────────────────────────
   OZONE-SITE.XML_ozone.security.enabled: "true"
   OZONE-SITE.XML_ozone.security.kerberos.external.enabled: "true"

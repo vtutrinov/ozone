@@ -26,6 +26,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.scm.protocol.StorageContainerLocationProtocol;
 import org.apache.hadoop.hdds.scm.server.OzoneStorageContainerManager;
+import org.apache.hadoop.hdds.utils.HAUtils;
 import org.apache.hadoop.ozone.om.OMMetadataManager;
 import org.apache.hadoop.ozone.om.protocol.OzoneManagerProtocol;
 import org.apache.hadoop.ozone.om.protocolPB.OmTransport;
@@ -74,7 +75,6 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.util.List;
 
-import static org.apache.hadoop.hdds.scm.cli.ContainerOperationClient.newContainerRpcClient;
 import static org.apache.hadoop.ozone.OmUtils.getOzoneManagerServiceId;
 import static org.apache.hadoop.ozone.recon.ReconServerConfigKeys.OZONE_RECON_DB_DIR;
 
@@ -191,7 +191,18 @@ public class ReconControllerModule extends AbstractModule {
   @Provides
   StorageContainerLocationProtocol getSCMProtocol(
       final OzoneConfiguration configuration) {
-    return newContainerRpcClient(configuration);
+    // Recon is an inter-service caller of SCM. In split-Kerberos mode
+    // (interservice=false) Recon has no TGT — its daemon login is
+    // skipped by Step J — and the SCM admin port (9860) demands
+    // Kerberos. Step M added a SIMPLE sibling at
+    // ozone.scm.service.rpc-address. Route there.
+    try {
+      return HAUtils.getScmContainerClient(configuration,
+          UserGroupInformation.getCurrentUser(), true);
+    } catch (IOException ioEx) {
+      throw new RuntimeException(
+          "Unable to construct Recon's SCM container client", ioEx);
+    }
   }
 
   @Provides
