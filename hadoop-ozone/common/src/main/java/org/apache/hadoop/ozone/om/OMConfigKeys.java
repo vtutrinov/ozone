@@ -205,6 +205,10 @@ public final class OMConfigKeys {
   // OM Ratis Log configurations
   public static final String OZONE_OM_RATIS_STORAGE_DIR
       = "ozone.om.ratis.storage.dir";
+  public static final String OZONE_OM_RATIS_LOG_GAP_CHECK_ENABLED
+      = "ozone.om.ratis.log.gap.check.enabled";
+  public static final boolean OZONE_OM_RATIS_LOG_GAP_CHECK_ENABLED_DEFAULT
+      = true;
   public static final String OZONE_OM_RATIS_SEGMENT_SIZE_KEY
       = "ozone.om.ratis.segment.size";
   public static final String OZONE_OM_RATIS_SEGMENT_SIZE_DEFAULT
@@ -790,6 +794,7 @@ public final class OMConfigKeys {
           = "ozone.om.multi.raft.bucket.group.transfer.leader.period";
   public static final String OZONE_OM_MULTI_RAFT_BUCKET_GROUP_TRANSFER_LEADERSHIP_SCHEDULING_PERIOD_DEFAULT
           = "60s";
+
   /**
    * Never constructed.
    */

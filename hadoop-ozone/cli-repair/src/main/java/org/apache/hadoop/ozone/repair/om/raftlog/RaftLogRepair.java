@@ -15,30 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.ozone.repair.om;
+package org.apache.hadoop.ozone.repair.om.raftlog;
 
-import org.apache.hadoop.hdds.cli.RepairSubcommand;
-import org.apache.hadoop.ozone.repair.TransactionInfoRepair;
-import org.apache.hadoop.ozone.repair.om.quota.QuotaRepair;
-import org.apache.hadoop.ozone.repair.om.raftlog.RaftLogRepair;
-import org.kohsuke.MetaInfServices;
 import picocli.CommandLine;
 
 /**
- * Ozone Repair CLI for OM.
+ * Subgroup that holds raft-log specific repair subcommands
+ * ({@code inspect}, {@code truncate}). Invoked as
+ * {@code ozone repair om raft-log <subcommand>}.
  */
-@CommandLine.Command(name = "om",
-    subcommands = {
-        FSORepairTool.class,
-        SnapshotRepair.class,
-        TransactionInfoRepair.class,
-        QuotaRepair.class,
-        CompactOMDB.class,
-        OMRatisLogRepair.class,
-        RaftLogRepair.class
-    },
-    description = "Operational tool to repair OM.")
-@MetaInfServices(RepairSubcommand.class)
-public class OMRepair implements RepairSubcommand {
+@CommandLine.Command(name = "raft-log",
+    description = "Inspect or truncate the OM Ratis segmented raft log on disk.",
+    subcommands = {RaftLogInspect.class, RaftLogTruncate.class})
+public class RaftLogRepair {
 
+  @CommandLine.Option(names = {"--raft-log-dir"},
+      required = true,
+      description = "Path to the OM Ratis storage dir (the dir configured by "
+          + "ozone.om.ratis.storage.dir, containing the raft group "
+          + "subdirectories with 'current/log_*' segment files).")
+  private String raftLogDir;
+
+  public String getRaftLogDir() {
+    return raftLogDir;
+  }
 }

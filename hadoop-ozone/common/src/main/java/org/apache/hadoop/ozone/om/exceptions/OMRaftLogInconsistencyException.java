@@ -15,30 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.ozone.repair.om;
+package org.apache.hadoop.ozone.om.exceptions;
 
-import org.apache.hadoop.hdds.cli.RepairSubcommand;
-import org.apache.hadoop.ozone.repair.TransactionInfoRepair;
-import org.apache.hadoop.ozone.repair.om.quota.QuotaRepair;
-import org.apache.hadoop.ozone.repair.om.raftlog.RaftLogRepair;
-import org.kohsuke.MetaInfServices;
-import picocli.CommandLine;
+import java.io.IOException;
 
 /**
- * Ozone Repair CLI for OM.
+ * Thrown when the OM detects an inconsistency in its Ratis segmented raft log
+ * that would otherwise surface as an opaque {@code IllegalStateException} from
+ * inside Ratis (e.g. "gap between entries"). The message points the operator
+ * at the {@code ozone repair om raft-log} tool.
  */
-@CommandLine.Command(name = "om",
-    subcommands = {
-        FSORepairTool.class,
-        SnapshotRepair.class,
-        TransactionInfoRepair.class,
-        QuotaRepair.class,
-        CompactOMDB.class,
-        OMRatisLogRepair.class,
-        RaftLogRepair.class
-    },
-    description = "Operational tool to repair OM.")
-@MetaInfServices(RepairSubcommand.class)
-public class OMRepair implements RepairSubcommand {
+public class OMRaftLogInconsistencyException extends IOException {
 
+  public OMRaftLogInconsistencyException(String message) {
+    super(message);
+  }
+
+  public OMRaftLogInconsistencyException(String message, Throwable cause) {
+    super(message, cause);
+  }
 }

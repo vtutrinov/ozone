@@ -15,30 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.ozone.repair.om;
-
-import org.apache.hadoop.hdds.cli.RepairSubcommand;
-import org.apache.hadoop.ozone.repair.TransactionInfoRepair;
-import org.apache.hadoop.ozone.repair.om.quota.QuotaRepair;
-import org.apache.hadoop.ozone.repair.om.raftlog.RaftLogRepair;
-import org.kohsuke.MetaInfServices;
-import picocli.CommandLine;
-
 /**
- * Ozone Repair CLI for OM.
+ * {@code ozone repair om raft-log} CLI subcommands: inspect and truncate the
+ * OM Ratis segmented raft log on disk to recover from gap conditions.
  */
-@CommandLine.Command(name = "om",
-    subcommands = {
-        FSORepairTool.class,
-        SnapshotRepair.class,
-        TransactionInfoRepair.class,
-        QuotaRepair.class,
-        CompactOMDB.class,
-        OMRatisLogRepair.class,
-        RaftLogRepair.class
-    },
-    description = "Operational tool to repair OM.")
-@MetaInfServices(RepairSubcommand.class)
-public class OMRepair implements RepairSubcommand {
+package org.apache.hadoop.ozone.repair.om.raftlog;
 
-}
