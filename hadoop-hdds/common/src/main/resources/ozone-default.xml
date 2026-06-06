@@ -2084,6 +2084,19 @@
   </property>
 
   <property>
+    <name>ozone.om.ratis.log.gap.check.enabled</name>
+    <value>true</value>
+    <tag>OZONE, OM, RATIS</tag>
+    <description>If true, the OM scans its Ratis segmented raft log for
+      inter-segment gaps at startup and refuses to start when one is found,
+      throwing an OMRaftLogInconsistencyException that points at the
+      'ozone repair om raft-log' tool. Defense-in-depth alongside the
+      install-snapshot race guard and the Ratis startup wrapper. Disable
+      only when intentionally bypassing the check during recovery.
+    </description>
+  </property>
+
+  <property>
     <name>ozone.om.ratis.segment.size</name>
     <value>4MB</value>
     <tag>OZONE, OM, RATIS, PERFORMANCE</tag>

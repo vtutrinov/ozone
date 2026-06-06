@@ -21,10 +21,16 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.ServiceException;
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -32,7 +38,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.hadoop.hdds.utils.db.Table;
 import org.apache.hadoop.hdds.utils.TransactionInfo;
@@ -40,6 +49,7 @@ import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.OzoneManagerPrepareState;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
+import org.apache.hadoop.ozone.om.exceptions.OMRaftLogInconsistencyException;
 import org.apache.hadoop.ozone.om.helpers.OMRatisHelper;
 import org.apache.hadoop.ozone.om.ratis.metrics.OzoneManagerStateMachineMetrics;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
@@ -733,6 +743,114 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
     }
     LOG.info("LastAppliedIndex is set from TransactionInfo from OM DB as {}",
         getLastAppliedTermIndex());
+
+    checkRaftLogForInterSegmentGaps();
+  }
+
+  /**
+   * Pre-flight scan of the OM Ratis segmented raft log for inter-segment gaps
+   * (e.g. {@code log_0-99} followed by {@code log_inprogress_150}). Fails fast
+   * with {@link OMRaftLogInconsistencyException} so the operator sees an
+   * actionable error pointing at {@code ozone repair om raft-log} instead of
+   * an opaque Ratis {@code IllegalStateException} during {@code RaftLog.open}.
+   *
+   * Intra-segment gaps (the HDDS-15068 production crash mode) are caught by
+   * the wrap-and-rethrow in {@link OzoneManagerRatisServer#start()} since
+   * detecting them cheaply requires actually reading segment files.
+   */
+  private void checkRaftLogForInterSegmentGaps() throws IOException {
+    if (!ozoneManager.getConfiguration().getBoolean(
+        OMConfigKeys.OZONE_OM_RATIS_LOG_GAP_CHECK_ENABLED,
+        OMConfigKeys.OZONE_OM_RATIS_LOG_GAP_CHECK_ENABLED_DEFAULT)) {
+      return;
+    }
+    String storageDir = omRatisServer.getRatisStorageDir();
+    if (storageDir == null || storageDir.isEmpty()) {
+      return;
+    }
+    File root = new File(storageDir);
+    if (!root.isDirectory()) {
+      return;
+    }
+    Map<Path, List<SegmentFile>> segmentsByDir = collectSegmentFiles(root);
+    for (Map.Entry<Path, List<SegmentFile>> entry : segmentsByDir.entrySet()) {
+      List<SegmentFile> segments = entry.getValue();
+      segments.sort(Comparator.comparingLong(s -> s.startIndex));
+      for (int i = 1; i < segments.size(); i++) {
+        SegmentFile prev = segments.get(i - 1);
+        SegmentFile curr = segments.get(i);
+        if (!prev.hasEnd) {
+          // An in-progress segment should be the only/last segment in the dir;
+          // any segment following it indicates a corrupted layout.
+          throw new OMRaftLogInconsistencyException(
+              "OM Ratis raft log has corrupted segment layout in " + entry.getKey()
+                  + ": in-progress segment " + prev.file.getName()
+                  + " is followed by " + curr.file.getName()
+                  + ". Run 'ozone repair om raft-log inspect --raft-log-dir "
+                  + entry.getKey() + "' to diagnose, then truncate with"
+                  + " 'ozone repair om raft-log truncate --raft-log-dir "
+                  + entry.getKey() + " --index <last-good-index>'.");
+        }
+        if (curr.startIndex != prev.endIndex + 1) {
+          throw new OMRaftLogInconsistencyException(
+              "OM Ratis raft log has an inter-segment gap in " + entry.getKey()
+                  + ": segment " + prev.file.getName() + " ends at index "
+                  + prev.endIndex + " but next segment " + curr.file.getName()
+                  + " starts at index " + curr.startIndex + " (expected "
+                  + (prev.endIndex + 1) + "). Run 'ozone repair om raft-log"
+                  + " inspect --raft-log-dir " + entry.getKey() + "' to diagnose,"
+                  + " then 'ozone repair om raft-log truncate --raft-log-dir "
+                  + entry.getKey() + " --index " + prev.endIndex + "' to recover.");
+        }
+      }
+    }
+  }
+
+  private static final Pattern CLOSED_SEGMENT =
+      Pattern.compile("log_(\\d+)-(\\d+)");
+  private static final Pattern OPEN_SEGMENT =
+      Pattern.compile("log_inprogress_(\\d+)");
+
+  private static Map<Path, List<SegmentFile>> collectSegmentFiles(File root)
+      throws IOException {
+    Map<Path, List<SegmentFile>> byDir = new LinkedHashMap<>();
+    try (Stream<Path> stream = Files.walk(root.toPath())) {
+      stream.filter(Files::isRegularFile).forEach(p -> {
+        String name = p.getFileName().toString();
+        SegmentFile seg = parseSegmentFile(p.toFile(), name);
+        if (seg != null) {
+          byDir.computeIfAbsent(p.getParent(), k -> new ArrayList<>()).add(seg);
+        }
+      });
+    }
+    return byDir;
+  }
+
+  private static SegmentFile parseSegmentFile(File f, String name) {
+    Matcher closed = CLOSED_SEGMENT.matcher(name);
+    if (closed.matches()) {
+      return new SegmentFile(f, Long.parseLong(closed.group(1)),
+          Long.parseLong(closed.group(2)), true);
+    }
+    Matcher open = OPEN_SEGMENT.matcher(name);
+    if (open.matches()) {
+      return new SegmentFile(f, Long.parseLong(open.group(1)), -1L, false);
+    }
+    return null;
+  }
+
+  private static final class SegmentFile {
+    private final File file;
+    private final long startIndex;
+    private final long endIndex;
+    private final boolean hasEnd;
+
+    SegmentFile(File file, long startIndex, long endIndex, boolean hasEnd) {
+      this.file = file;
+      this.startIndex = startIndex;
+      this.endIndex = endIndex;
+      this.hasEnd = hasEnd;
+    }
   }
 
   /**

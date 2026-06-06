@@ -212,6 +212,7 @@ import org.apache.ratis.proto.RaftProtos;
 import org.apache.ratis.proto.RaftProtos.RaftPeerRole;
 import org.apache.ratis.protocol.RaftGroup;
 import org.apache.ratis.protocol.RaftGroupId;
+import org.apache.ratis.server.raftlog.RaftLog;
 import org.apache.ratis.protocol.RaftPeer;
 import org.apache.ratis.protocol.RaftPeerId;
 import org.apache.ratis.protocol.exceptions.AlreadyExistsException;
@@ -4369,6 +4370,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   TermIndex installCheckpoint(RaftGroupId raftGroupId, String leaderId, Path checkpointLocation,
       TransactionInfo checkpointTrxnInfo) throws Exception {
     long startTime = Time.monotonicNow();
+    final long prePauseEndIdx = readRaftLogEndIndexQuietly(raftGroupId); // HDDS-15068 race-guard input.
     File oldDBLocation = metadataManager.getStore().getDbLocation();
     try {
       // Stop Background services
@@ -4436,6 +4438,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         LOG.info("Replaced DB with checkpoint from OM: {}, term: {}, " +
             "index: {}, time: {} ms", leaderId, term, lastAppliedIndex,
             Time.monotonicNow() - time);
+        purgeRaftLogPastSnapshotIfNeeded(raftGroupId, prePauseEndIdx, lastAppliedIndex, leaderId);
       } catch (Exception e) {
         LOG.error("Failed to install Snapshot from {} as OM failed to replace" +
             " DB with downloaded checkpoint. Reloading old OM state.",
@@ -4517,6 +4520,56 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         "Spend {} ms.", newTermIndex.getTerm(), newTermIndex.getIndex(),
         (Time.monotonicNow() - startTime));
     return newTermIndex;
+  }
+
+  /**
+   * Read the raft-log end index without throwing — returns {@code -1L} on any
+   * failure. Used by {@link #installCheckpoint} to capture state before the
+   * state machine pauses so the install-snapshot race guard can compare.
+   * See HDDS-15068.
+   */
+  private long readRaftLogEndIndexQuietly(RaftGroupId raftGroupId) {
+    try {
+      RaftLog raftLog =
+          omRatisServer.getServerDivision(raftGroupId).getRaftLog();
+      return raftLog.getNextIndex() - 1;
+    } catch (Exception e) {
+      LOG.warn("Could not read raft log end index before install-snapshot; "
+          + "skipping post-install gap guard.", e);
+      return -1L;
+    }
+  }
+
+  /**
+   * HDDS-15068 / HDDS-15103 guard: when the just-installed snapshot index is
+   * past the raft-log end index captured before {@code pause()}, purge the
+   * raft log up to the snapshot index. This makes subsequent leader appends
+   * land in a fresh segment that starts at {@code snapshotIndex + 1} instead
+   * of being mis-stitched into a segment whose tail is at the pre-snapshot
+   * end index, which is what produces the intra-segment gap that crashes the
+   * next OM startup with {@code IllegalStateException("gap between entries")}.
+   */
+  private void purgeRaftLogPastSnapshotIfNeeded(RaftGroupId raftGroupId,
+      long prePauseEndIdx, long snapshotIndex, String leaderId) {
+    if (prePauseEndIdx < 0 || snapshotIndex <= prePauseEndIdx) {
+      return;
+    }
+    LOG.warn("Install-snapshot index {} from leader {} is past raft log end "
+        + "index {}; purging raft log to align and prevent intra-segment gap "
+        + "(HDDS-15068).", snapshotIndex, leaderId, prePauseEndIdx);
+    try {
+      RaftLog raftLog =
+          omRatisServer.getServerDivision(raftGroupId).getRaftLog();
+      raftLog.purge(snapshotIndex).get();
+    } catch (Exception e) {
+      LOG.error("Failed to purge raft log past snapshot index {} after "
+          + "install-snapshot from {}. OM will continue, but the next startup "
+          + "may detect the gap and refuse to start. In that case run "
+          + "'ozone repair om raft-log inspect --raft-log-dir <dir>' and "
+          + "'ozone repair om raft-log truncate --raft-log-dir <dir> "
+          + "--index {}'.", snapshotIndex, leaderId,
+          prePauseEndIdx, e);
+    }
   }
 
   private void stopTrashEmptier() {

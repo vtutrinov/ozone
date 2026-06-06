@@ -209,6 +209,10 @@ public final class OMConfigKeys {
   // OM Ratis Log configurations
   public static final String OZONE_OM_RATIS_STORAGE_DIR
       = "ozone.om.ratis.storage.dir";
+  public static final String OZONE_OM_RATIS_LOG_GAP_CHECK_ENABLED
+      = "ozone.om.ratis.log.gap.check.enabled";
+  public static final boolean OZONE_OM_RATIS_LOG_GAP_CHECK_ENABLED_DEFAULT
+      = true;
   public static final String OZONE_OM_RATIS_SEGMENT_SIZE_KEY
       = "ozone.om.ratis.segment.size";
   public static final String OZONE_OM_RATIS_SEGMENT_SIZE_DEFAULT
