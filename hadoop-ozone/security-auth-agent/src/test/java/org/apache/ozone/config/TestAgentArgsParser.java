@@ -147,4 +147,18 @@ class TestAgentArgsParser {
     assertNull(config.getKerberosRealm());
     assertNull(config.getKerberosHost());
   }
+
+  @Test
+  void logLevelParsed() {
+    AgentConfig config = AgentArgsParser.parse(
+        "auth-data-provider=env,auth-log-level=DEBUG");
+    assertEquals("DEBUG", config.getLogLevel());
+  }
+
+  @Test
+  void logLevelDefaultNull() {
+    AgentConfig config = AgentArgsParser.parse(
+        "auth-data-provider=env");
+    assertNull(config.getLogLevel());
+  }
 }

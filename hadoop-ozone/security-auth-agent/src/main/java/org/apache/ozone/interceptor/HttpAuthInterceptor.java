@@ -33,8 +33,8 @@ public class HttpAuthInterceptor {
 
   @RuntimeType
   public static void interceptInit(@Origin Method method) {
-    System.out.println(
-        "[SecurityAuthAgent] Skipping " + method.getDeclaringClass()
-            .getSimpleName() + ".init() — no keytab needed (OAuth)");
+    org.apache.ozone.AgentLog.debug(
+        "Skipping " + method.getDeclaringClass().getSimpleName()
+            + ".init() — no keytab needed (OAuth)");
   }
 }

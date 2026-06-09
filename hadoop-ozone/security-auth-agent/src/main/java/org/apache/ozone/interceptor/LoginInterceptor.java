@@ -47,15 +47,14 @@ public class LoginInterceptor {
   public static Object intercept(@AllArguments Object[] args,
       @Origin Method method) throws Exception {
     String principal = substituteHostToken((String) args[0]);
-    System.out.println(
-        "[SecurityAuthAgent] Intercepted " + method.getName()
-            + " for principal: " + principal);
+    org.apache.ozone.AgentLog.debug("Intercepted " + method.getName()
+        + " for principal: " + principal);
 
     // Obtain OAuth token instead of Kerberos ticket
     OAuthToken token = OAuthTokenManager.getToken(principal);
     if (token != null) {
-      System.out.println(
-          "[SecurityAuthAgent] OAuth token obtained for: " + principal);
+      org.apache.ozone.AgentLog.info(
+          "OAuth token obtained for: " + principal);
     }
 
     // Create a UGI with KERBEROS auth method via reflection.
@@ -68,13 +67,21 @@ public class LoginInterceptor {
     Object ugi = getCreateRemoteUserMethod(ugiClass, cl)
         .invoke(null, principal, getKerberosAuthMethod(cl));
 
-    // For loginUserFromKeytab (void), set as the login user
+    // Always restore the cluster-configured service principal as
+    // the loginUser, regardless of which keytab variant Hadoop
+    // called. OAuthTokenManager.getToken(...) above triggered
+    // replaceLoginUser, which set the loginUser to a JWT-derived
+    // principal (e.g. om/host@OZONE). For service-to-service auth
+    // the cluster's policy ACLs match the principal the cluster is
+    // configured with (e.g. om/om@EXAMPLE.COM from
+    // ozone.om.kerberos.principal), so we must overwrite the
+    // JWT-shaped one with the cluster-shaped one here.
+    getSetLoginUserMethod(ugiClass).invoke(null, ugi);
+
     if (method.getReturnType() == void.class) {
-      getSetLoginUserMethod(ugiClass).invoke(null, ugi);
       return null;
     }
-
-    // For loginUserFromKeytabAndReturnUGI, return the UGI
+    // For loginUserFromKeytabAndReturnUGI, return the UGI as well.
     return ugi;
   }
 

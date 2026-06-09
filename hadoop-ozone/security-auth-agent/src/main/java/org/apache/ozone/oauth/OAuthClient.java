@@ -77,10 +77,9 @@ public class OAuthClient {
       } catch (IOException e) {
         lastException = e;
         if (attempt < MAX_RETRIES - 1) {
-          System.err.println(
-              "[SecurityAuthAgent] Token request failed (attempt "
-                  + (attempt + 1) + "/" + MAX_RETRIES + "): "
-                  + e.getMessage());
+          org.apache.ozone.AgentLog.warn(
+              "Token request failed (attempt " + (attempt + 1) + "/"
+                  + MAX_RETRIES + "): " + e.getMessage());
           try {
             Thread.sleep(RETRY_DELAY_MS * (attempt + 1));
           } catch (InterruptedException ie) {

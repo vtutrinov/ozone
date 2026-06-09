@@ -55,10 +55,10 @@ public class JksAuthDataProvider implements AuthDataProvider {
     String jksAlias = config.getJksAlias();
 
     if (jksPath == null || jksPassword == null || jksAlias == null) {
-      System.err.println(
-          "[SecurityAuthAgent] --auth-data-jks-path, "
-              + "--auth-data-jks-password, and --auth-data-jks-alias "
-              + "are all required for 'jks' provider");
+      org.apache.ozone.AgentLog.error(
+          "--auth-data-jks-path, --auth-data-jks-password, and "
+              + "--auth-data-jks-alias are all required for 'jks' "
+              + "provider");
       return;
     }
 
@@ -71,8 +71,8 @@ public class JksAuthDataProvider implements AuthDataProvider {
           ks.getEntry(jksAlias,
               new KeyStore.PasswordProtection(pw));
       if (entry == null) {
-        System.err.println(
-            "[SecurityAuthAgent] No entry found for alias: " + jksAlias);
+        org.apache.ozone.AgentLog.error(
+            "No entry found for alias: " + jksAlias);
         return;
       }
       String data = new String(entry.getSecretKey().getEncoded(),
@@ -103,8 +103,8 @@ public class JksAuthDataProvider implements AuthDataProvider {
         }
       }
     } catch (Exception e) {
-      System.err.println("[SecurityAuthAgent] Failed to read JKS: "
-          + e.getMessage());
+      org.apache.ozone.AgentLog.error(
+          "Failed to read JKS: " + e.getMessage());
     }
   }
 

@@ -61,8 +61,8 @@ services:
     environment:
       ENSURE_SCM_INITIALIZED: /data/metadata/scm/current/VERSION
       OZONE-SITE.XML_hdds.scm.safemode.min.datanode: "${OZONE_SAFEMODE_MIN_DATANODES:-1}"
-      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005
-      AUTH_SERVER_URL: http://keycloak:8080/realms/ozone/protocol/openid-connect/token
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
       AUTH_CLIENT_ID: ozone-client
       AUTH_LOGIN: scm
       AUTH_PASSWORD: scm
@@ -84,7 +84,7 @@ services:
     environment:
       ENSURE_OM_INITIALIZED: /data/metadata/om/current/VERSION
       OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none
-      AUTH_SERVER_URL: http://keycloak:8080/realms/ozone/protocol/openid-connect/token
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
       AUTH_CLIENT_ID: ozone-client
       AUTH_LOGIN: om
       AUTH_PASSWORD: om
@@ -104,7 +104,7 @@ services:
       - docker-config
     environment:
       OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none
-      AUTH_SERVER_URL: http://keycloak:8080/realms/ozone/protocol/openid-connect/token
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
       AUTH_CLIENT_ID: ozone-client
       AUTH_LOGIN: dn
       AUTH_PASSWORD: dn
@@ -124,7 +124,7 @@ services:
       - docker-config
     environment:
       OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none
-      AUTH_SERVER_URL: http://keycloak:8080/realms/ozone/protocol/openid-connect/token
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
       AUTH_CLIENT_ID: ozone-client
       AUTH_LOGIN: s3g
       AUTH_PASSWORD: s3g
@@ -144,7 +144,7 @@ services:
       - docker-config
     environment:
       OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none
-      AUTH_SERVER_URL: http://keycloak:8080/realms/ozone/protocol/openid-connect/token
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
       AUTH_CLIENT_ID: ozone-client
       AUTH_LOGIN: recon
       AUTH_PASSWORD: recon

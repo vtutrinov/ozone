@@ -67,13 +67,13 @@ public class SecurityAuthAgent {
   private static void init(String agentArgs, Instrumentation inst) {
     try {
       agentConfig = AgentArgsParser.parse(agentArgs);
-      System.out.println("[SecurityAuthAgent] Config: " + agentConfig);
+      AgentLog.setLevel(agentConfig.getLogLevel());
+      AgentLog.info("Config: " + agentConfig);
       resolveProvider();
       installAgent(inst);
       prewarmAuth();
     } catch (Throwable t) {
-      t.printStackTrace();
-      System.err.println("[SecurityAuthAgent] Failed to initialize!");
+      AgentLog.error("Failed to initialize!", t);
     }
   }
 
@@ -94,9 +94,8 @@ public class SecurityAuthAgent {
     try {
       org.apache.ozone.oauth.OAuthTokenManager.getToken("default");
     } catch (Throwable t) {
-      System.err.println(
-          "[SecurityAuthAgent] Pre-warm auth failed: " + t.getMessage()
-              + " (lazy path will retry)");
+      AgentLog.warn("Pre-warm auth failed: " + t.getMessage()
+          + " (lazy path will retry)");
     }
   }
 
@@ -108,12 +107,11 @@ public class SecurityAuthAgent {
       if (candidate.getName().equals(name)) {
         candidate.init(agentConfig);
         provider = candidate;
-        System.out.println("[SecurityAuthAgent] Using provider: " + name);
+        AgentLog.info("Using provider: " + name);
         return;
       }
     }
-    System.err.println("[SecurityAuthAgent] No provider found for: "
-        + name);
+    AgentLog.error("No provider found for: " + name);
   }
 
   private static void installAgent(Instrumentation inst) {
@@ -210,8 +208,7 @@ public class SecurityAuthAgent {
                     ConnectionContextInterceptor.class))
         )
         .installOn(inst);
-    System.out.println("[SecurityAuthAgent] Installed Hadoop security"
-        + " auth agent");
+    AgentLog.info("Installed Hadoop security auth agent");
   }
 
   public static AuthDataProvider getProvider() {

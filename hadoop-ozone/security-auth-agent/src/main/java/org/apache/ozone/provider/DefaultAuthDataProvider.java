@@ -64,8 +64,8 @@ public class DefaultAuthDataProvider implements AuthDataProvider {
       login = SimpleConfigParser.getValue(sections, "cred", "login");
       password = SimpleConfigParser.getValue(sections, "cred", "password");
     } catch (Exception e) {
-      System.err.println("[SecurityAuthAgent] Failed to read "
-          + configPath + ": " + e.getMessage());
+      org.apache.ozone.AgentLog.error(
+          "Failed to read " + configPath + ": " + e.getMessage());
     }
   }
 

@@ -53,9 +53,8 @@ public class DoAsInterceptor {
     try {
       OAuthTokenManager.getToken(ugiName);
     } catch (SecurityException e) {
-      System.err.println(
-          "[SecurityAuthAgent] OAuth check failed for " + ugiName
-              + ": " + e.getMessage());
+      org.apache.ozone.AgentLog.warn(
+          "OAuth check failed for " + ugiName + ": " + e.getMessage());
       // Allow the call to proceed — the user may have been
       // authenticated via another mechanism
     }

@@ -79,6 +79,7 @@ treated as boolean flags (set to true).
 | `auth-offline-access` | `false` | request `scope=openid offline_access` in device flow |
 | `auth-kerberos-realm` | derived from JWT `iss` | realm component of the synthesized `user/host@REALM` principal |
 | `auth-kerberos-host` | local canonical hostname | host component of the synthesized principal |
+| `auth-log-level` | env `OZONE_AGENT_LOG_LEVEL` or `INFO` | `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`. `INFO` keeps startup messages and successful login replacements; `DEBUG` adds per-SASL-call traces; `OFF` silences the agent entirely. |
 
 Example:
 

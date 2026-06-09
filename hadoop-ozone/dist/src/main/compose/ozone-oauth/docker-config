@@ -55,7 +55,12 @@ OZONE-SITE.XML_ozone.recon.address=recon:9891
 OZONE-SITE.XML_ozone.security.enabled=true
 OZONE-SITE.XML_ozone.acl.enabled=true
 OZONE-SITE.XML_ozone.acl.authorizer.class=org.apache.hadoop.ozone.security.acl.OzoneNativeAuthorizer
-OZONE-SITE.XML_ozone.administrators="testuser,recon,om"
+# Wildcard: any authenticated user can create volumes. The smoketest
+# runs `createmrenv.robot` from the scm container (CLI runs as `scm`
+# per its AUTH_LOGIN), and submits MR jobs from rm with submitter
+# `hadoop` (via USER_PREFIX) — both need volume-create privilege to
+# bring up the test fixtures. Tighten this for production deployments.
+OZONE-SITE.XML_ozone.administrators=*
 OZONE-SITE.XML_ozone.s3.administrators="testuser,s3g"
 OZONE-SITE.XML_ozone.recon.administrators="testuser2"
 
@@ -66,6 +71,20 @@ HDFS-SITE.XML_dfs.datanode.address=0.0.0.0:1019
 HDFS-SITE.XML_dfs.datanode.http.address=0.0.0.0:1012
 CORE-SITE.XML_dfs.data.transfer.protection=authentication
 CORE-SITE.XML_hadoop.security.authentication=kerberos
+# Standard Hadoop auth_to_local: strip the realm only if it matches
+# the local Kerberos realm. We pick EXAMPLE.COM (matching the cluster
+# service principals below) as the Keycloak realm name so the JWTs
+# we issue carry iss=http://keycloak:8080/realms/EXAMPLE.COM, and the
+# agent's OAuthPrincipalBuilder derives the same EXAMPLE.COM realm
+# for the synthesized service/host@REALM principals — making DEFAULT
+# strip the realm correctly for both Kerberos-shaped and OAuth-shaped
+# principals.
+#
+# Alternative if you want to keep an arbitrary Keycloak realm name
+# (e.g. "ozone"): pass `auth-kerberos-realm=EXAMPLE.COM` in the
+# agent args (OZONE_OPTS / HADOOP_OPTS -javaagent params). The
+# agent then uses that realm in the synthesized principal regardless
+# of what the JWT iss claim says — same end result with one knob.
 CORE-SITE.XML_hadoop.security.auth_to_local="DEFAULT"
 
 # --- Kerberos principals (keytab files don't exist — no KDC) ---

@@ -92,8 +92,11 @@ public final class AgentArgsParser {
     case "auth-kerberos-host":
       config.setKerberosHost(value);
       break;
+    case "auth-log-level":
+      config.setLogLevel(value);
+      break;
     default:
-      System.err.println("[SecurityAuthAgent] Unknown arg: " + key);
+      org.apache.ozone.AgentLog.warn("Unknown arg: " + key);
       break;
     }
   }

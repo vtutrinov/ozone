@@ -52,9 +52,8 @@ public class KerberosAuthenticatorInterceptor {
 
     String oauthToken = OAuthTokenManager.getCurrentAccessToken();
     if (oauthToken == null) {
-      System.err.println(
-          "[SecurityAuthAgent] No OAuth token available for HTTP "
-              + "auth to " + url);
+      org.apache.ozone.AgentLog.warn(
+          "No OAuth token available for HTTP auth to " + url);
       return;
     }
 
@@ -66,18 +65,16 @@ public class KerberosAuthenticatorInterceptor {
       conn.setReadTimeout(10_000);
       conn.connect();
       int status = conn.getResponseCode();
-      System.out.println(
-          "[SecurityAuthAgent] HTTP Bearer auth to " + url
-              + " returned " + status);
+      org.apache.ozone.AgentLog.debug(
+          "HTTP Bearer auth to " + url + " returned " + status);
       if (status == 200 || status == 405) {
         // Extract auth cookie set by AuthenticationFilter into the
         // AuthenticatedURL.Token so subsequent calls reuse it.
         try {
           getExtractTokenMethod(token).invoke(null, conn, token);
         } catch (Exception e) {
-          System.err.println(
-              "[SecurityAuthAgent] Failed to extract auth cookie: "
-                  + e.getMessage());
+          org.apache.ozone.AgentLog.warn(
+              "Failed to extract auth cookie: " + e.getMessage());
         }
       } else if (status >= 400) {
         throw new IOException(

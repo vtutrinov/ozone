@@ -76,9 +76,9 @@ public class OAuthSaslServer implements SaslServer {
       }
 
       complete = true;
-      System.out.println(
-          "[SecurityAuthAgent] SASL OAuth validated: "
-              + authorizationId + " (jwt user: " + validatedUser + ")");
+      org.apache.ozone.AgentLog.debug(
+          "SASL OAuth validated: " + authorizationId
+              + " (jwt user: " + validatedUser + ")");
       return null; // no challenge to send back
     } catch (IOException e) {
       throw new SaslException("OAuth token validation failed", e);

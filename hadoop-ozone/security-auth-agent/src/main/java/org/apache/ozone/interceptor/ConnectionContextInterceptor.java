@@ -56,12 +56,22 @@ public class ConnectionContextInterceptor {
    * Kerberos principal — i.e., it's an OS user. Service principals
    * (set by LoginInterceptor) already have the correct identity
    * and should pass through unchanged.
+   *
+   * <p>Additionally, never substitute when the original ticket
+   * carries any Hadoop delegation tokens in its credentials — those
+   * tokens (e.g. YARN NMToken, AMRMToken, Ozone delegation token)
+   * are how the RPC authenticates. Replacing the ticket strips them
+   * and the SASL handshake fails with "Client cannot authenticate
+   * via:[TOKEN]".
    */
   private static boolean shouldSubstitute(Object ugi) {
     if (ugi == null) {
       return true;
     }
     try {
+      if (hasTokens(ugi)) {
+        return false;
+      }
       String name = (String) ugi.getClass()
           .getMethod("getUserName").invoke(ugi);
       if (name == null) {
@@ -71,5 +81,18 @@ public class ConnectionContextInterceptor {
     } catch (Exception e) {
       return false;
     }
+  }
+
+  private static boolean hasTokens(Object ugi) {
+    try {
+      Object tokens =
+          ugi.getClass().getMethod("getTokens").invoke(ugi);
+      if (tokens instanceof java.util.Collection) {
+        return !((java.util.Collection<?>) tokens).isEmpty();
+      }
+    } catch (Exception ignored) {
+      // fall through
+    }
+    return false;
   }
 }

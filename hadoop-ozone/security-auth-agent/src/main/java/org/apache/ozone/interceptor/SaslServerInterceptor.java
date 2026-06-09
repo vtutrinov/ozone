@@ -53,9 +53,8 @@ public class SaslServerInterceptor {
 
     if ("KERBEROS".equals(authMethodName)) {
       TokenValidator validator = createValidator();
-      System.out.println(
-          "[SecurityAuthAgent] Using OAuth SASL server "
-              + "instead of GSSAPI (validation: "
+      org.apache.ozone.AgentLog.debug(
+          "Using OAuth SASL server instead of GSSAPI (validation: "
               + SecurityAuthAgent.getAgentConfig()
                   .getTokenValidation() + ")");
       return new OAuthSaslServer(validator);
@@ -97,9 +96,9 @@ public class SaslServerInterceptor {
       String clientId = provider != null
           ? provider.getClientId() : null;
       if (tokenUrl == null || clientId == null) {
-        System.err.println(
-            "[SecurityAuthAgent] introspect mode requires "
-                + "server URL and client ID, falling back to none");
+        org.apache.ozone.AgentLog.warn(
+            "introspect mode requires server URL and client ID, "
+                + "falling back to none");
         return new NoneTokenValidator();
       }
       return new IntrospectTokenValidator(tokenUrl, clientId);
@@ -107,9 +106,8 @@ public class SaslServerInterceptor {
       String jwtTokenUrl = provider != null
           ? provider.getServerUrl() : null;
       if (jwtTokenUrl == null) {
-        System.err.println(
-            "[SecurityAuthAgent] jwt mode requires "
-                + "server URL, falling back to none");
+        org.apache.ozone.AgentLog.warn(
+            "jwt mode requires server URL, falling back to none");
         return new NoneTokenValidator();
       }
       return new JwtTokenValidator(jwtTokenUrl);

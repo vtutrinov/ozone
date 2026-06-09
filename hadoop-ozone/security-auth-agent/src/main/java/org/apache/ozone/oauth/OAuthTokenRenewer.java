@@ -61,9 +61,8 @@ public class OAuthTokenRenewer extends TokenRenewer {
           "Cannot renew OAuth token: no refresh_token in password bytes");
     }
 
-    System.out.println(
-        "[SecurityAuthAgent] Renewing OAuth token for user "
-            + id.getUsername());
+    org.apache.ozone.AgentLog.info(
+        "Renewing OAuth token for user " + id.getUsername());
 
     OAuthClient client = new OAuthClient();
     OAuthToken refreshed = client.refreshToken(
@@ -95,8 +94,8 @@ public class OAuthTokenRenewer extends TokenRenewer {
   public void cancel(Token<?> token, Configuration conf) {
     // No-op: OAuth tokens expire naturally. If/when Keycloak
     // session-logout via refresh_token is desired, hook here.
-    System.out.println(
-        "[SecurityAuthAgent] OAuth token cancel requested — ignored");
+    org.apache.ozone.AgentLog.info(
+        "OAuth token cancel requested — ignored");
   }
 
   private static OAuthCredentialsIdentifier decodeIdentifier(Token<?> token)

@@ -89,14 +89,12 @@ public class HttpOidcInterceptor {
       String token = authHeader.substring("Bearer ".length()).trim();
       try {
         String username = getValidator().validate(token);
-        System.out.println(
-            "[SecurityAuthAgent] HTTP Bearer auth validated: "
-                + username);
+        org.apache.ozone.AgentLog.debug(
+            "HTTP Bearer auth validated: " + username);
         return createAuthToken(handler, username);
       } catch (Exception e) {
-        System.err.println(
-            "[SecurityAuthAgent] Bearer token rejected: "
-                + e.getMessage());
+        org.apache.ozone.AgentLog.warn(
+            "Bearer token rejected: " + e.getMessage());
         sendError(response, 401, "Invalid bearer token");
         return null;
       }
@@ -212,8 +210,8 @@ public class HttpOidcInterceptor {
         + "&state=" + URLEncoder.encode(state, "UTF-8")
         + "&scope=" + URLEncoder.encode("openid profile", "UTF-8");
 
-    System.out.println(
-        "[SecurityAuthAgent] Redirecting to Keycloak: " + location);
+    org.apache.ozone.AgentLog.debug(
+        "Redirecting to Keycloak: " + location);
     sendRedirect(response, location);
   }
 

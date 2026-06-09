@@ -25,6 +25,12 @@ Test Timeout        4 minute
 ${SCHEME}          o3fs
 ${volume}          volume1
 ${bucket}          bucket1
+# Prepended to every ``yarn jar`` invocation. Lets OAuth-based suites
+# inject ``AUTH_LOGIN``/``AUTH_PASSWORD`` env so the job submitter
+# matches the OS user inside the NM container (required by the
+# Kerberos-secure ShuffleHandler's owner check on map output files).
+# Default empty preserves behavior for Kerberos suites.
+${USER_PREFIX}     ${EMPTY}
 
 *** Keywords ***
 Find example jar
@@ -36,7 +42,7 @@ Find example jar
 Execute PI calculation
                     ${exampleJar}    Find example jar
     ${root} =       Format FS URL    ${SCHEME}    ${volume}    ${bucket}
-                    ${output} =      Execute                 yarn jar ${exampleJar} pi -D fs.defaultFS=${root} 3 3
+                    ${output} =      Execute                 ${USER_PREFIX} yarn jar ${exampleJar} pi -D fs.defaultFS=${root} 3 3
                     Should Contain   ${output}               completed successfully
                     Should Not Contain   ${output}           multiple SLF4J bindings
 
@@ -46,6 +52,6 @@ Execute WordCount
     ${root} =       Format FS URL    ${SCHEME}    ${volume}    ${bucket}
     ${dir} =        Format FS URL    ${SCHEME}    ${volume}    ${bucket}   input/
     ${result} =     Format FS URL    ${SCHEME}    ${volume}    ${bucket}   wordcount-${random}.txt
-    ${output} =     Execute          yarn jar ${exampleJar} wordcount -D fs.defaultFS=${root} ${dir} ${result}
+    ${output} =     Execute          ${USER_PREFIX} yarn jar ${exampleJar} wordcount -D fs.defaultFS=${root} ${dir} ${result}
                     Should Contain   ${output}               map tasks=3
                     Should Contain   ${output}               completed successfully

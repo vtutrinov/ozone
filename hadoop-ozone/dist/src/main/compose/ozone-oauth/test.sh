@@ -22,10 +22,23 @@ set -u -o pipefail
 COMPOSE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 export COMPOSE_DIR
 
+# docker-compose reads .env automatically, but plain bash doesn't.
+# common/hadoop-test.sh reads HADOOP_IMAGE / HADOOP_VERSION from the
+# shell env to build HADOOP_TEST_IMAGE; without sourcing .env first
+# it falls into an unfiltered Maven default (${docker.hadoop.image})
+# that aborts the script with "bad substitution".
+if [[ -f "$COMPOSE_DIR/.env" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$COMPOSE_DIR/.env"
+  set +a
+fi
+
 # shellcheck source=/dev/null
 source "$COMPOSE_DIR/../testlib.sh"
 
 export SECURITY_ENABLED=true
+export SECURITY_OAUTH_ENABLED=true
 
 start_docker_env
 
@@ -33,7 +46,7 @@ start_docker_env
 # but verify from test runner side too
 echo "Verifying Keycloak is accessible..."
 for i in $(seq 1 30); do
-  if docker-compose exec -T scm curl -sf http://keycloak:8080/realms/ozone > /dev/null 2>&1; then
+  if docker-compose exec -T scm curl -sf http://keycloak:8080/realms/EXAMPLE.COM > /dev/null 2>&1; then
     echo "Keycloak is ready"
     break
   fi
@@ -61,10 +74,26 @@ for svc in scm om; do
   fi
 done
 
-# Run OAuth-specific acceptance tests
+# Run OAuth-specific acceptance tests. These exercise the same
+# operations the shared `basic` smoketest would (volume / bucket /
+# key create, list, read-back), but with OAuth-aware identity and
+# silenced agent stdout. We deliberately don't run the shared
+# `basic` suite here: it's hardwired to Kerberos (Kinit test user
+# <user> <keytab>), and our cluster runs no KDC and ships no
+# keytabs, so every basic test would retry kinit for two minutes
+# before failing. The OAuth suite is the equivalent for this
+# deployment.
 execute_robot_test scm security/ozone-oauth.robot
 
-# Run basic Ozone operations — these require working auth
-# In a secure cluster without KDC, these ONLY work if the
-# agent successfully replaced Kerberos with OAuth
-execute_robot_test scm basic
+# YARN/MR end-to-end (pi job). hadoop-test.sh brings up rm/nm/jhs
+# via hadoop-secure-oauth.yaml (the OAuth compose overlay selected
+# by SECURITY_OAUTH_ENABLED above) and skips kinit-only suites in
+# that mode. mapreduce.robot does not itself kinit — auth is via
+# the agent's -javaagent on the rm container's HADOOP_OPTS.
+#
+# Restrict the per-image loop to Hadoop 3.x. The agent's ByteBuddy
+# interceptors target Hadoop 3.x UGI signatures; Hadoop 2.10.2's
+# RM/NM containers don't get their Kerberos keytab login intercepted
+# and crash at startup with "Unable to obtain password from user".
+export HADOOP_TEST_IMAGES="${HADOOP_IMAGE}:3.3.6 ${HADOOP_IMAGE}:${HADOOP_VERSION}"
+source "$COMPOSE_DIR/../common/hadoop-test.sh"

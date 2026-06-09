@@ -94,16 +94,16 @@ public class InteractiveAuthFlow {
     // re-prompting the user for an interactive login.
     if (saved != null && saved.getRefreshToken() != null) {
       try {
-        System.err.println(
-            "[SecurityAuthAgent] Saved session expired — refreshing");
+        org.apache.ozone.AgentLog.info(
+            "Saved session expired — refreshing");
         OAuthToken refreshed = new OAuthClient().refreshToken(
             serverUrl, clientId, saved.getRefreshToken());
         saveSession(refreshed);
         return refreshed;
       } catch (IOException e) {
-        System.err.println(
-            "[SecurityAuthAgent] Refresh failed, falling back to "
-                + "device flow: " + e.getMessage());
+        org.apache.ozone.AgentLog.warn(
+            "Refresh failed, falling back to device flow: "
+                + e.getMessage());
       }
     }
 
@@ -235,8 +235,8 @@ public class InteractiveAuthFlow {
         }
       } catch (IOException e) {
         // HTTP error during polling — retry
-        System.err.println(
-            "[SecurityAuthAgent] Poll error: " + e.getMessage());
+        org.apache.ozone.AgentLog.warn(
+            "Poll error: " + e.getMessage());
       }
     }
     throw new IOException(
@@ -360,9 +360,8 @@ public class InteractiveAuthFlow {
         writer.newLine();
       }
     } catch (IOException e) {
-      System.err.println(
-          "[SecurityAuthAgent] Failed to save session: "
-              + e.getMessage());
+      org.apache.ozone.AgentLog.error(
+          "Failed to save session: " + e.getMessage());
     }
   }
 }

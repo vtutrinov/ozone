@@ -1,5 +1,5 @@
 {
-  "realm": "ozone",
+  "realm": "EXAMPLE.COM",
   "enabled": true,
   "sslRequired": "none",
   "registrationAllowed": false,
@@ -149,6 +149,74 @@
         {
           "type": "password",
           "value": "recon",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    },
+    {
+      "username": "hadoop",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "hadoop@example.com",
+      "firstName": "Hadoop",
+      "lastName": "User",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "hadoop",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    },
+    {
+      "username": "rm",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "rm@example.com",
+      "firstName": "YARN",
+      "lastName": "ResourceManager",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "rm",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    },
+    {
+      "username": "nm",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "nm@example.com",
+      "firstName": "YARN",
+      "lastName": "NodeManager",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "nm",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    },
+    {
+      "username": "jhs",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "jhs@example.com",
+      "firstName": "MR",
+      "lastName": "JobHistoryServer",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "jhs",
           "temporary": false
         }
       ],

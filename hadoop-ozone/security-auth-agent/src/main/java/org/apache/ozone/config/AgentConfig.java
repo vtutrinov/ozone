@@ -57,6 +57,13 @@ public class AgentConfig {
    * canonical hostname.
    */
   private String kerberosHost;
+  /**
+   * Optional override for the agent log level. Resolution order is
+   * arg > env var {@code OZONE_AGENT_LOG_LEVEL} > {@code INFO}.
+   * Accepted values: {@code OFF}, {@code ERROR}, {@code WARN},
+   * {@code INFO}, {@code DEBUG}.
+   */
+  private String logLevel;
 
   public String getProviderName() {
     return providerName;
@@ -146,6 +153,14 @@ public class AgentConfig {
     this.kerberosHost = kerberosHost;
   }
 
+  public String getLogLevel() {
+    return logLevel;
+  }
+
+  public void setLogLevel(String logLevel) {
+    this.logLevel = logLevel;
+  }
+
   @Override
   public String toString() {
     return "AgentConfig{"
@@ -159,6 +174,7 @@ public class AgentConfig {
         + ", offlineAccess=" + offlineAccess
         + ", kerberosRealm='" + kerberosRealm + '\''
         + ", kerberosHost='" + kerberosHost + '\''
+        + ", logLevel='" + logLevel + '\''
         + '}';
   }
 }

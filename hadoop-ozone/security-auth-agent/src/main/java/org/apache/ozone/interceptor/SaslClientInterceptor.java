@@ -55,9 +55,9 @@ public class SaslClientInterceptor {
       if (token != null) {
         String ugiPrincipal = extractPrincipal(thiz);
         String principal = resolvePrincipal(ugiPrincipal, token);
-        System.out.println(
-            "[SecurityAuthAgent] Using OAuth SASL client "
-                + "instead of GSSAPI (principal: " + principal + ")");
+        org.apache.ozone.AgentLog.debug(
+            "Using OAuth SASL client instead of GSSAPI (principal: "
+                + principal + ")");
         return new OAuthSaslClient(token, principal);
       }
     }
@@ -88,9 +88,8 @@ public class SaslClientInterceptor {
         return jwtUser;
       }
     } catch (Exception e) {
-      System.err.println(
-          "[SecurityAuthAgent] Could not extract JWT username: "
-              + e.getMessage());
+      org.apache.ozone.AgentLog.warn(
+          "Could not extract JWT username: " + e.getMessage());
     }
     return ugiPrincipal != null ? ugiPrincipal : "unknown";
   }
@@ -106,9 +105,8 @@ public class SaslClientInterceptor {
             .getMethod("getUserName").invoke(ugi);
       }
     } catch (Exception e) {
-      System.err.println(
-          "[SecurityAuthAgent] Could not extract principal: "
-              + e.getMessage());
+      org.apache.ozone.AgentLog.warn(
+          "Could not extract principal: " + e.getMessage());
     }
     return "unknown";
   }

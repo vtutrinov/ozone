@@ -45,9 +45,8 @@ public class FileAuthDataProvider implements AuthDataProvider {
   public void init(AgentConfig config) {
     String filePath = config.getFilePath();
     if (filePath == null || filePath.isEmpty()) {
-      System.err.println(
-          "[SecurityAuthAgent] auth-data-file-path is required "
-              + "for 'file' provider");
+      org.apache.ozone.AgentLog.error(
+          "auth-data-file-path is required for 'file' provider");
       return;
     }
     Path path = Paths.get(filePath);
@@ -61,8 +60,8 @@ public class FileAuthDataProvider implements AuthDataProvider {
       login = SimpleConfigParser.getValue(sections, "cred", "login");
       password = SimpleConfigParser.getValue(sections, "cred", "password");
     } catch (Exception e) {
-      System.err.println("[SecurityAuthAgent] Failed to read "
-          + path + ": " + e.getMessage());
+      org.apache.ozone.AgentLog.error(
+          "Failed to read " + path + ": " + e.getMessage());
     }
   }
 

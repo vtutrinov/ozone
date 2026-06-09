@@ -15,9 +15,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Allow callers that don't set SECURITY_OAUTH_ENABLED (e.g.
+# ozone/test-hadoop.sh, ozonesecure-mr/test.sh) to source this
+# script under `set -u`.
+: ${SECURITY_OAUTH_ENABLED:=false}
+
 extra_compose_file=hadoop.yaml
 if [[ ${SECURITY_ENABLED} == "true" ]]; then
   extra_compose_file=hadoop-secure.yaml
+fi
+if [[ $SECURITY_OAUTH_ENABLED == "true" ]]; then
+  extra_compose_file=hadoop-secure-oauth.yaml
 fi
 export COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yaml}":../common/${extra_compose_file}
 
@@ -40,7 +48,10 @@ source "$COMPOSE_DIR/../testlib.sh"
 
 start_docker_env
 
-if [[ ${SECURITY_ENABLED} == "true" ]]; then
+# Skip kinit when OAuth is enabled — there's no KDC and the agent
+# authenticates services + CLI via OAuth, so kinit would time out
+# after 2 minutes trying to read a non-existent keytab.
+if [[ ${SECURITY_ENABLED} == "true" && ${SECURITY_OAUTH_ENABLED} != "true" ]]; then
   execute_robot_test ${SCM} kinit.robot
 fi
 
@@ -61,15 +72,26 @@ for HADOOP_TEST_IMAGE in $HADOOP_TEST_IMAGES; do
 
   execute_command_in_container rm hadoop version
 
-  if [[ ${SECURITY_ENABLED} == "true" ]]; then
+  # Same OAuth gate as above: kinit-hadoop.robot is purely a kinit
+  # setup and is not needed when the agent handles auth.
+  if [[ ${SECURITY_ENABLED} == "true" && ${SECURITY_OAUTH_ENABLED} != "true" ]]; then
     execute_robot_test rm -v SECURITY_ENABLED:"${SECURITY_ENABLED}" kinit-hadoop.robot
+  fi
+
+  # In OAuth mode, submit MR jobs as user 'hadoop' so the submitter
+  # matches the NM container's OS user — the Kerberos-secure
+  # ShuffleHandler enforces map output file ownership = submitter,
+  # and DefaultContainerExecutor creates files as the NM OS user.
+  mr_user_prefix=""
+  if [[ ${SECURITY_OAUTH_ENABLED} == "true" ]]; then
+    mr_user_prefix="AUTH_LOGIN=hadoop AUTH_PASSWORD=hadoop"
   fi
 
   for scheme in o3fs ofs; do
     execute_robot_test rm -v "SCHEME:${scheme}" -N "hadoop-${hadoop_version}-hadoopfs-${scheme}" ozonefs/hadoopo3fs.robot
     # TODO secure MapReduce test is failing with 2.7 due to some token problem
     if [[ ${SECURITY_ENABLED} != "true" ]] || [[ ${HADOOP_MAJOR_VERSION} == "3" ]]; then
-      execute_robot_test rm -v "SCHEME:${scheme}" -N "hadoop-${hadoop_version}-mapreduce-${scheme}" mapreduce.robot
+      execute_robot_test rm -v "SCHEME:${scheme}" -v "USER_PREFIX:${mr_user_prefix}" -N "hadoop-${hadoop_version}-mapreduce-${scheme}" mapreduce.robot
     fi
   done
 

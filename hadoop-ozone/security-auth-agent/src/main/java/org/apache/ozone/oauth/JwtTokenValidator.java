@@ -242,9 +242,9 @@ public class JwtTokenValidator implements TokenValidator {
             PublicKey pk = buildRsaPublicKey(n, e);
             keyCache.put(kid != null ? kid : "default", pk);
           } catch (Exception ex) {
-            System.err.println(
-                "[SecurityAuthAgent] Failed to parse RSA key "
-                    + kid + ": " + ex.getMessage());
+            org.apache.ozone.AgentLog.warn(
+                "Failed to parse RSA key " + kid + ": "
+                    + ex.getMessage());
           }
         }
       }
@@ -253,9 +253,8 @@ public class JwtTokenValidator implements TokenValidator {
     if (keyCache.isEmpty()) {
       throw new IOException("No RSA keys found in JWKS response");
     }
-    System.out.println(
-        "[SecurityAuthAgent] Cached " + keyCache.size()
-            + " JWKS public key(s)");
+    org.apache.ozone.AgentLog.info(
+        "Cached " + keyCache.size() + " JWKS public key(s)");
   }
 
   private static int findMatchingBrace(String s, int start) {

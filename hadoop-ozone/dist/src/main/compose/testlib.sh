@@ -117,7 +117,7 @@ find_tests(){
 ## @description wait until safemode exit (or 240 seconds)
 wait_for_safemode_exit(){
   local cmd="ozone admin safemode wait -t 240"
-  if [[ "${SECURITY_ENABLED}" == 'true' ]]; then
+  if [[ "${SECURITY_ENABLED}" == 'true' && "${SECURITY_OAUTH_ENABLED}" == false ]]; then
     wait_for_port kdc 88 60
     cmd="kinit -k HTTP/scm@EXAMPLE.COM -t /etc/security/keytabs/HTTP.keytab && $cmd"
   fi
@@ -213,8 +213,9 @@ has_scalable_datanode() {
 execute_robot_test(){
   CONTAINER="$1"
   shift 1 #Remove first argument which was the container name
-  # shellcheck disable=SC2206
-  ARGUMENTS=($@)
+  # Preserve quoted arguments so a -v value can contain spaces
+  # (e.g. -v "USER_PREFIX:AUTH_LOGIN=x AUTH_PASSWORD=y" stays one arg).
+  ARGUMENTS=("$@")
   TEST="${ARGUMENTS[${#ARGUMENTS[@]}-1]}" #Use last element as the test name
   unset 'ARGUMENTS[${#ARGUMENTS[@]}-1]' #Remove the last element, remainings are the custom parameters
   TEST_NAME=$(basename "$TEST")
@@ -236,6 +237,10 @@ execute_robot_test(){
   RESULT_DIR_INSIDE="/tmp/smoketest/$COMPOSE_ENV_NAME/result"
   OUTPUT_PATH="$RESULT_DIR_INSIDE/${OUTPUT_FILE}"
 
+
+  REPORT_PATH="$RESULT_DIR_INSIDE/report.html"  # new line
+  LOG_PATH="$RESULT_DIR_INSIDE/log.html"
+
   OM_HA_PARAM=""
   if [[ -n "${OM_SERVICE_ID:-}" ]] && [[ "${OM_SERVICE_ID}" != "om" ]]; then
     OM_HA_PARAM="--om-service-id=${OM_SERVICE_ID}"
@@ -251,12 +256,14 @@ execute_robot_test(){
       -v OM_SERVICE_ID:"${OM_SERVICE_ID:-om}" \
       -v OZONE_DIR:"${OZONE_DIR}" \
       -v SCM:"${SCM}" \
-      ${ARGUMENTS[@]} --log NONE --report NONE --output "$OUTPUT_PATH" \
+      "${ARGUMENTS[@]}" --log ${LOG_PATH} --report ${REPORT_PATH} --output "$OUTPUT_PATH" \
       "$SMOKETEST_DIR_INSIDE/$TEST"
   local -i rc=$?
 
   FULL_CONTAINER_NAME=$(docker-compose ps -a | grep "[-_]${CONTAINER}[-_]" | head -n 1 | awk '{print $1}')
   docker cp "$FULL_CONTAINER_NAME:$OUTPUT_PATH" "$RESULT_DIR/"
+  docker cp "$FULL_CONTAINER_NAME:$LOG_PATH" "$RESULT_DIR/"
+  docker cp "$FULL_CONTAINER_NAME:$REPORT_PATH" "$RESULT_DIR/"
 
   if [[ ${rc} -gt 0 ]] && [[ ${rc} -le 250 ]]; then
     create_stack_dumps

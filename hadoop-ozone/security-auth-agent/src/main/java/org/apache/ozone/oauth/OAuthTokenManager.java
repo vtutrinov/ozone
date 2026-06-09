@@ -141,19 +141,22 @@ public final class OAuthTokenManager {
     // Try refresh first if we have a refresh token
     if (existing != null && existing.getRefreshToken() != null) {
       try {
-        return CLIENT.refreshToken(serverUrl, clientId,
-            existing.getRefreshToken());
+        OAuthToken refreshed = CLIENT.refreshToken(serverUrl,
+            clientId, existing.getRefreshToken());
+        replaceLoginUser(refreshed.getAccessToken());
+        return refreshed;
       } catch (IOException e) {
-        System.err.println(
-            "[SecurityAuthAgent] Refresh failed, re-authenticating: "
-                + e.getMessage());
+        org.apache.ozone.AgentLog.warn(
+            "Refresh failed, re-authenticating: " + e.getMessage());
       }
     }
 
     // Obtain new token with credentials
     if (provider.hasCredentials()) {
-      return CLIENT.obtainToken(serverUrl, clientId,
+      OAuthToken token = CLIENT.obtainToken(serverUrl, clientId,
           provider.getLogin(), provider.getPassword());
+      replaceLoginUser(token.getAccessToken());
+      return token;
     }
 
     // Fall back to interactive flow if no credentials
@@ -163,9 +166,6 @@ public final class OAuthTokenManager {
           new InteractiveAuthFlow(config.isQrEnabled(), clientId,
               config.isOfflineAccess());
       OAuthToken token = flow.execute(serverUrl);
-      // After interactive login, replace the JVM's login UGI with
-      // the OAuth-authenticated user so getCurrentUser() returns
-      // the OAuth user (not the OS user).
       replaceLoginUser(token.getAccessToken());
       return token;
     }
@@ -230,6 +230,17 @@ public final class OAuthTokenManager {
             "org.apache.hadoop.security.UserGroupInformation",
             true, cl);
       }
+      // If a Kerberos-shaped loginUser is already installed — either
+      // by LoginInterceptor (cluster service principal) or by a
+      // prior replaceLoginUser — don't overwrite it. obtainOrRefresh
+      // calls this method on every token refresh; without this
+      // guard, every DoAsInterceptor-triggered refresh clobbers the
+      // LoginInterceptor's setLoginUser, sending the wrong principal
+      // to service-to-service ACL checks (e.g. dn -> SCM secret-key
+      // protocol expects dn/dn@EXAMPLE.COM, not dn/host@OZONE).
+      if (isKerberosShapedLoginUser(resolvedUgiClass)) {
+        return;
+      }
       Class<?> authMethodClass = Class.forName(
           "org.apache.hadoop.security.SaslRpcServer$AuthMethod",
           true, cl);
@@ -250,13 +261,65 @@ public final class OAuthTokenManager {
       // can substitute it when an existing ticket holds the OS user.
       oauthUgi = ugi;
 
-      System.out.println(
-          "[SecurityAuthAgent] Replaced login UGI with OAuth user: "
-              + principal);
-    } catch (Exception e) {
-      System.err.println(
-          "[SecurityAuthAgent] Failed to replace login UGI: "
-              + e.getMessage());
+      org.apache.ozone.AgentLog.info(
+          "Replaced login UGI with OAuth user: " + principal);
+    } catch (Throwable e) {
+      // Hadoop's KerberosName.rules is null until UGI has read
+      // auth_to_local from core-site.xml. That doesn't happen until
+      // Hadoop's own initialization runs, which is AFTER agent
+      // premain. We get one shot here that fails on prewarmAuth and
+      // a second, successful one when the first RPC triggers
+      // DoAsInterceptor -> getToken -> replaceLoginUser. Don't
+      // print a noisy stack for the expected first-call failure;
+      // do print one for unexpected failures.
+      Throwable cause = unwrap(e);
+      if (cause instanceof NullPointerException
+          && String.valueOf(cause.getMessage()).contains(
+              "KerberosName.rules")) {
+        // expected at premain — silent
+        return;
+      }
+      org.apache.ozone.AgentLog.error(
+          "Failed to replace login UGI: "
+              + cause.getClass().getName() + ": " + cause.getMessage(),
+          cause);
+    }
+  }
+
+  private static Throwable unwrap(Throwable t) {
+    Throwable cur = t;
+    while (cur instanceof java.lang.reflect.InvocationTargetException
+        && cur.getCause() != null) {
+      cur = cur.getCause();
+    }
+    return cur;
+  }
+
+  /**
+   * Returns true if the current login UGI's username looks like a
+   * Kerberos principal ({@code service/host@REALM}). Used as a
+   * guard against {@link #replaceLoginUser(String)} overwriting a
+   * principal that was already installed by
+   * {@link org.apache.ozone.interceptor.LoginInterceptor} (a service
+   * keytab login) or a prior {@code replaceLoginUser} call.
+   */
+  private static boolean isKerberosShapedLoginUser(Class<?> ugiCls) {
+    try {
+      java.lang.reflect.Method getLoginUser =
+          ugiCls.getMethod("getLoginUser");
+      Object loginUgi = getLoginUser.invoke(null);
+      if (loginUgi == null) {
+        return false;
+      }
+      Object name = loginUgi.getClass().getMethod("getUserName")
+          .invoke(loginUgi);
+      if (!(name instanceof String)) {
+        return false;
+      }
+      String s = (String) name;
+      return s.indexOf('/') > 0 && s.indexOf('@') > 0;
+    } catch (Throwable t) {
+      return false;
     }
   }
 
@@ -320,9 +383,9 @@ public final class OAuthTokenManager {
           TOKEN_CACHE.put(id.username, oauth);
           fallbackAccessToken = pw.accessToken;
           CURRENT_ACCESS_TOKEN.set(pw.accessToken);
-          System.out.println(
-              "[SecurityAuthAgent] Loaded bundled OAuth token "
-                  + "from UGI credentials for user " + id.username);
+          org.apache.ozone.AgentLog.info(
+              "Loaded bundled OAuth token from UGI credentials for user "
+                  + id.username);
           return;
         }
       } catch (Throwable t) {
@@ -378,13 +441,13 @@ public final class OAuthTokenManager {
           .newInstance(idBytes, pwBytes, kind, service);
       current.getClass().getMethod("addToken", hadoopTokenClass)
           .invoke(current, hadoopToken);
-      System.out.println(
-          "[SecurityAuthAgent] Bundled OAUTH-CREDS token into UGI "
-              + "credentials for user " + username);
+      org.apache.ozone.AgentLog.info(
+          "Bundled OAUTH-CREDS token into UGI credentials for user "
+              + username);
     } catch (Throwable t) {
-      System.err.println(
-          "[SecurityAuthAgent] Could not bundle OAuth token into UGI: "
-              + t.getMessage());
+      org.apache.ozone.AgentLog.error(
+          "Could not bundle OAuth token into UGI: " + t.getMessage(),
+          t);
     }
   }
 
