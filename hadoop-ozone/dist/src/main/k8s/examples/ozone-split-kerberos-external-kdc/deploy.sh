@@ -113,6 +113,10 @@ kubectl -n "$CLUSTER_NS" create secret generic ranger-admin-keytabs \
 
 log "5/8 apply cluster manifests"
 kubectl apply -f "$DIR/30-config-configmap.yaml"
+# OM mounts ranger-ozone-security as a volume — must exist before
+# the OM StatefulSet is applied, or the OM pods stay stuck on
+# MountVolume.SetUp for a missing configmap.
+kubectl apply -f "$DIR/64-ranger-ozone-security-configmap.yaml"
 kubectl apply -f "$DIR/41-scm.yaml"
 kubectl -n "$CLUSTER_NS" rollout status statefulset/scm --timeout=300s
 
@@ -132,7 +136,6 @@ log "5b/8 apply Step P regression chain (ranger-db, ranger-admin, bootstrap, tes
 kubectl apply -f "$DIR/60-ranger-db.yaml"
 kubectl apply -f "$DIR/61-ranger-admin.yaml"
 kubectl apply -f "$DIR/62-ranger-bootstrap.yaml"
-kubectl apply -f "$DIR/64-ranger-ozone-security-configmap.yaml"
 kubectl -n "$CLUSTER_NS" rollout status deployment/ranger-admin --timeout=600s
 kubectl -n "$CLUSTER_NS" wait --for=condition=complete --timeout=15m job/ranger-policies-bootstrap
 

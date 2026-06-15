@@ -37,6 +37,33 @@
 #      now create a volume. Without Step P OM's plugin can't pull the
 #      updated policy (no TGT → 401) so the snapshot stays frozen and
 #      the write is denied.
+# RBAC for the wait-bootstrap init container — the test Job runs in the
+# edge namespace under `default` SA but its initContainer needs to
+# `kubectl wait` on the bootstrap Job in the cluster namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: wait-bootstrap-reader
+  namespace: ozone-extkdc-cluster
+rules:
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: wait-bootstrap-reader-edge
+  namespace: ozone-extkdc-cluster
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: ozone-extkdc-edge
+roleRef:
+  kind: Role
+  name: wait-bootstrap-reader
+  apiGroup: rbac.authorization.k8s.io
+---
 apiVersion: batch/v1
 kind: Job
 metadata:
