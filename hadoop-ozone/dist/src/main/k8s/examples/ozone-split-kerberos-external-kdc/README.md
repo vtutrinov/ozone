@@ -119,3 +119,65 @@ client Job exercises the surface that's known to work end-to-end:
 Two follow-ups make the write path green: rebuild the dist with
 `mvn -Drelease=11` (full Java-11-target cross-compile, not just
 `-source 8 -target 8`) or bump the runner image to Java 17 LTS.
+
+## Step P regression: SPNEGO ranger-admin + TGT renewal
+
+### Why
+
+Step L (commit ab99ec2d46) unconditionally flips
+`Krb5LoginModule.isInitiator=false` whenever the daemon is in split-
+Kerberos external mode with internal SIMPLE. The JVM loads its keytab
+key for accepting SPNEGO/RPC service tickets but never acquires a TGT.
+
+That is the intended behaviour for daemons whose only Kerberos surface
+is an acceptor — Step L's "zero KDC traffic" property. But when the
+same JVM has an in-process *outbound* Kerberos consumer (the Ranger
+plugin's REST poll under SPNEGO), it has nothing to sign with. OM
+keeps 401-ing ranger-admin and the ACL policy table freezes at the
+boot snapshot — observed in the QA cluster `iftdrpoznb2c_ozone`
+PolicyRefresher logs.
+
+Step P (this commit) adds
+`ozone.security.kerberos.acceptor-only.enabled` (default `true` keeps
+Step L). The config in `30-config-configmap.yaml` sets it to `false`
+so OM (and every other daemon) does a normal AS-REQ at startup +
+Hadoop's auto-renewer.
+
+### Build the OM image with the Ranger plugin
+
+`spnego-ranger-om:dev` is built by `Dockerfile.spnego-ranger-om`. Only
+OM uses this image — SCM, DN, S3G, Recon keep `ozone-split-kerberos:dev`.
+
+```bash
+cd /work/sber/component-ranger-plugins
+mvn -pl :ranger-distro,:ranger-ozone-plugin,:ranger-ozone-plugin-shim,\
+:ranger-plugin-classloader,:ranger-plugins-common,\
+:ranger-plugins-audit,:ranger-plugins-cred \
+  -am -P sdp-build-ranger-ozone-plugin package -DskipTests -q
+
+cp target/ranger-2.4.0-ozone-plugin.tar.gz \
+   /work/sber/component-ozone/hadoop-ozone/dist/src/main/k8s/examples/ozone-split-kerberos-external-kdc/
+
+cd /work/sber/component-ozone/hadoop-ozone/dist/src/main/k8s/examples/ozone-split-kerberos-external-kdc
+docker build -t spnego-ranger-om:dev -f Dockerfile.spnego-ranger-om .
+minikube image load spnego-ranger-om:dev
+```
+
+### Run
+
+`deploy.sh` now also applies `60-ranger-db.yaml`, `61-ranger-admin.yaml`,
+`62-ranger-bootstrap.yaml`, `64-ranger-ozone-security-configmap.yaml`,
+and runs `63-tgt-renewal-test.yaml` after the existing client Job.
+
+The test:
+
+1. Waits 120s past two ticket lifetimes
+   (`ticket_lifetime=5m`, see `20-krb5-configmap.yaml`).
+2. Pulls the `ozonedev` policy bundle from ranger-admin via basic auth
+   to confirm the service is registered with `policy.download.auth.users`
+   = `om,admin` (without that, OM gets 403 on its SPNEGO poll).
+3. Extends the default ranger policy to grant `testuser`, waits one
+   plugin poll cycle (5s × 3 + buffer), then proves `testuser` can
+   create a volume.
+
+Final line: `RESULT: TGT renewal + SPNEGO round-trip verified`.

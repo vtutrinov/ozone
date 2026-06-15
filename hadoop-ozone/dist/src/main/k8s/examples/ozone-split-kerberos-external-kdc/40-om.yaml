@@ -77,7 +77,10 @@ spec:
       # run `ozone om --bootstrap` to join the existing Ratis ring.
       # Detection by hostname instead of an env var per pod.
       - name: om-init
-        image: ozone-split-kerberos:dev
+        # OM-only variant with the Ranger Ozone plugin baked in (see
+        # Dockerfile.spnego-ranger-om). Other daemons keep the stock
+        # ozone-split-kerberos:dev image.
+        image: spnego-ranger-om:dev
         imagePullPolicy: IfNotPresent
         command: ["/bin/bash", "-c"]
         args:
@@ -110,9 +113,20 @@ spec:
           mountPath: /etc/krb5.conf
           subPath: krb5.conf
           readOnly: true
+        - name: ranger-ozone-security
+          mountPath: /opt/ozone/etc/hadoop/ranger-ozone-security.xml
+          subPath: ranger-ozone-security.xml
+          readOnly: true
+        - name: ranger-ozone-security
+          mountPath: /opt/ozone/etc/hadoop/ranger-ozone-audit.xml
+          subPath: ranger-ozone-audit.xml
+          readOnly: true
       containers:
       - name: om
-        image: ozone-split-kerberos:dev
+        # OM-only variant with the Ranger Ozone plugin baked in (see
+        # Dockerfile.spnego-ranger-om). Other daemons keep the stock
+        # ozone-split-kerberos:dev image.
+        image: spnego-ranger-om:dev
         imagePullPolicy: IfNotPresent
         args: [ozone, om]
         env:
@@ -142,6 +156,14 @@ spec:
           mountPath: /etc/krb5.conf
           subPath: krb5.conf
           readOnly: true
+        - name: ranger-ozone-security
+          mountPath: /opt/ozone/etc/hadoop/ranger-ozone-security.xml
+          subPath: ranger-ozone-security.xml
+          readOnly: true
+        - name: ranger-ozone-security
+          mountPath: /opt/ozone/etc/hadoop/ranger-ozone-audit.xml
+          subPath: ranger-ozone-audit.xml
+          readOnly: true
       volumes:
       - name: keytabs
         secret:
@@ -149,6 +171,9 @@ spec:
       - name: krb5
         configMap:
           name: krb5
+      - name: ranger-ozone-security
+        configMap:
+          name: ranger-ozone-security
   volumeClaimTemplates:
   - metadata:
       name: data

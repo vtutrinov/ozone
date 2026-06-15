@@ -25,8 +25,11 @@ data:
     [libdefaults]
       dns_canonicalize_hostname = false
       dns_lookup_realm  = false
-      ticket_lifetime   = 24h
-      renew_lifetime    = 7d
+      # Short for tgt-renewal-test (Step P regression). 5m TGT with 30m
+      # max-renewable lets Hadoop's auto-renewer fire every ~4m; the
+      # test waits 2m past startup to verify the renewer is alive.
+      ticket_lifetime   = 5m
+      renew_lifetime    = 30m
       forwardable       = true
       rdns              = false
       default_realm     = EXAMPLE.COM
@@ -53,8 +56,11 @@ data:
     [libdefaults]
       dns_canonicalize_hostname = false
       dns_lookup_realm  = false
-      ticket_lifetime   = 24h
-      renew_lifetime    = 7d
+      # Short for tgt-renewal-test (Step P regression). 5m TGT with 30m
+      # max-renewable lets Hadoop's auto-renewer fire every ~4m; the
+      # test waits 2m past startup to verify the renewer is alive.
+      ticket_lifetime   = 5m
+      renew_lifetime    = 30m
       forwardable       = true
       rdns              = false
       default_realm     = EXAMPLE.COM

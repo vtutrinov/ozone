@@ -62,6 +62,19 @@ data:
   OZONE-SITE.XML_ozone.security.kerberos.external.enabled: "true"
   OZONE-SITE.XML_ozone.security.kerberos.interservice.enabled: "false"
 
+  # ── Step P: acceptor-only override ────────────────────────────────
+  # Default is "true" → flips Krb5LoginModule isInitiator=false (Step L).
+  # That works for daemons that only need to accept SPNEGO/RPC tickets
+  # — but the OM here has an outbound Kerberos consumer (Ranger plugin
+  # SPNEGO REST poll, see 64-ranger-ozone-security-configmap.yaml +
+  # 61-ranger-admin.yaml). Without a TGT the plugin can't sign its
+  # outbound calls and the policy poll silently 401s, freezing the ACL
+  # table. Set false to make every daemon do a normal AS-REQ at startup
+  # + run Hadoop's auto-renewer. SCM/DN/S3G/Recon pay one AS-REQ each at
+  # startup — a small cost in exchange for one config to keep across the
+  # whole cluster.
+  OZONE-SITE.XML_ozone.security.kerberos.acceptor-only.enabled: "false"
+
   # ── Step C-1 / Step N: SIMPLE sibling on OM ─────────────────────────
   # Port-only declaration (host portion is cosmetic — every OM pod binds
   # 0.0.0.0:9864 on its pod IP). Step N's OzoneClientCache rewrite reads
@@ -83,8 +96,12 @@ data:
   OZONE-SITE.XML_hdds.grpc.tls.enabled: "false"
 
   # ── ACLs ───────────────────────────────────────────────────────────
+  # RangerOzoneAuthorizer activates only on the OM that actually has the
+  # Ranger plugin JARs on classpath (the spnego-ranger-om:dev image built
+  # by Dockerfile.spnego-ranger-om). Other daemons see the class name in
+  # config but never instantiate it — only OM authorises requests.
   OZONE-SITE.XML_ozone.acl.enabled: "true"
-  OZONE-SITE.XML_ozone.acl.authorizer.class: org.apache.hadoop.ozone.security.acl.OzoneNativeAuthorizer
+  OZONE-SITE.XML_ozone.acl.authorizer.class: org.apache.ranger.authorization.ozone.authorizer.RangerOzoneAuthorizer
   OZONE-SITE.XML_ozone.administrators: "testuser,om,scm,dn,s3g,hadoop,root"
   OZONE-SITE.XML_ozone.s3.administrators: "testuser,s3g,hadoop,root"
 

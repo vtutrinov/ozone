@@ -1,0 +1,40 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Ranger plugin config consumed only by OM.
+# envtoconf.py's OZONE-SITE.XML_* prefix can't emit nested XML files like
+# ranger-ozone-security.xml, so this ConfigMap drops the file directly at
+# /opt/ozone/etc/hadoop/ranger-ozone-security.xml via a subPath mount on
+# 40-om.yaml.
+#
+# `forceNonKerberos=false` is the *default*, written explicitly so the
+# intent is visible. The plugin uses SPNEGO under OM's UGI — which is why
+# we need Step P's `acceptor-only.enabled=false` to give OM a TGT.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ranger-ozone-security
+  namespace: ozone-extkdc-cluster
+data:
+  ranger-ozone-security.xml: |
+    <?xml version="1.0"?>
+    <configuration>
+      <property><name>ranger.plugin.ozone.service.name</name><value>ozonedev</value></property>
+      <property><name>ranger.plugin.ozone.policy.source.impl</name><value>org.apache.ranger.admin.client.RangerAdminRESTClient</value></property>
+      <property><name>ranger.plugin.ozone.policy.rest.url</name><value>http://ranger-admin.ozone-extkdc-cluster.svc.cluster.local:6080</value></property>
+      <property><name>ranger.plugin.ozone.policy.pollIntervalMs</name><value>5000</value></property>
+      <property><name>ranger.plugin.ozone.policy.cache.dir</name><value>/tmp/ranger/policycache</value></property>
+      <property><name>ranger.plugin.ozone.forceNonKerberos</name><value>false</value></property>
+    </configuration>
+  ranger-ozone-audit.xml: |
+    <?xml version="1.0"?>
+    <configuration>
+      <property><name>xasecure.audit.is.enabled</name><value>false</value></property>
+    </configuration>
