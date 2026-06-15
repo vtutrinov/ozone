@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_ENABLED_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_KERBEROS_ACCEPTOR_ONLY_ENABLED_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -231,6 +232,47 @@ public class TestOzoneSecurityUtil {
           new OzoneConfiguration(), log);
       assertEquals("true", options.get("isInitiator"),
           "Insecure mode must leave isInitiator unchanged");
+
+      // (4) Split-Kerberos + acceptor-only.enabled=false — must NOT flip.
+      // This is the escape hatch operators set when the JVM has an
+      // outbound Kerberos consumer (Ranger plugin SPNEGO).
+      options.put("isInitiator", "true");
+      OzoneConfiguration withConsumer = new OzoneConfiguration();
+      withConsumer.setBoolean(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY,
+          true);
+      withConsumer.setBoolean(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY,
+          false);
+      withConsumer.setBoolean(
+          OZONE_SECURITY_KERBEROS_ACCEPTOR_ONLY_ENABLED_KEY, false);
+      OzoneSecurityUtil.useKerberosAcceptorOnlyMode(withConsumer, log);
+      assertEquals("true", options.get("isInitiator"),
+          "acceptor-only.enabled=false must skip the flip even in "
+              + "split-Kerberos mode");
+
+      // (5) Split-Kerberos + acceptor-only.enabled=true (default) — flips.
+      // Belt-and-braces with case (1): explicit true matches the default.
+      options.put("isInitiator", "true");
+      OzoneConfiguration explicit = new OzoneConfiguration();
+      explicit.setBoolean(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY, true);
+      explicit.setBoolean(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY,
+          false);
+      explicit.setBoolean(
+          OZONE_SECURITY_KERBEROS_ACCEPTOR_ONLY_ENABLED_KEY, true);
+      OzoneSecurityUtil.useKerberosAcceptorOnlyMode(explicit, log);
+      assertEquals("false", options.get("isInitiator"),
+          "acceptor-only.enabled=true must still flip in split-Kerberos");
+
+      // (6) acceptor-only.enabled=false but external Kerberos off — the
+      // existing precondition wins; no flip either way.
+      options.put("isInitiator", "true");
+      OzoneConfiguration noExternal = new OzoneConfiguration();
+      noExternal.setBoolean(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY,
+          false);
+      noExternal.setBoolean(
+          OZONE_SECURITY_KERBEROS_ACCEPTOR_ONLY_ENABLED_KEY, false);
+      OzoneSecurityUtil.useKerberosAcceptorOnlyMode(noExternal, log);
+      assertEquals("true", options.get("isInitiator"),
+          "external Kerberos off must short-circuit before the new gate");
     } finally {
       // Restore baseline so this test doesn't poison sibling tests in the
       // same JVM.

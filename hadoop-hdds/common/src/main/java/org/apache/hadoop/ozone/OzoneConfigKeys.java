@@ -471,6 +471,27 @@ public final class OzoneConfigKeys {
   public static final String OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY =
       "ozone.security.kerberos.interservice.enabled";
 
+  /**
+   * Controls whether the daemon switches Hadoop's {@code Krb5LoginModule} into
+   * acceptor-only mode ({@code isInitiator=false}) when it would otherwise
+   * qualify (external Kerberos on, inter-service Kerberos off). Default
+   * {@code true} preserves the SDPOZN-2458 Step L behaviour: the JVM reads its
+   * keytab without contacting the KDC and never acquires a TGT, which keeps
+   * the daemon's KDC traffic at exactly zero packets over its lifetime.
+   *
+   * <p>Set to {@code false} when the same JVM has an outbound Kerberos
+   * consumer that needs a TGT — for example, the Ranger plugin's SPNEGO REST
+   * poll against ranger-admin when {@code ranger.plugin.<service>.forceNonKerberos}
+   * is {@code false}. Without the override, that consumer can't sign its
+   * outbound calls (no TGT to derive a service ticket from) and silently
+   * loses functionality (policy refresh stops; ACLs freeze at the last-known
+   * snapshot).
+   */
+  public static final String OZONE_SECURITY_KERBEROS_ACCEPTOR_ONLY_ENABLED_KEY =
+      "ozone.security.kerberos.acceptor-only.enabled";
+  public static final boolean OZONE_SECURITY_KERBEROS_ACCEPTOR_ONLY_ENABLED_DEFAULT =
+      true;
+
   public static final String OZONE_HTTP_SECURITY_ENABLED_KEY =
       "ozone.security.http.kerberos.enabled";
   public static final boolean OZONE_HTTP_SECURITY_ENABLED_DEFAULT = false;

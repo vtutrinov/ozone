@@ -148,13 +148,20 @@ public final class OzoneSecurityUtil {
    * never spawns, so the daemon's KDC traffic over its entire lifetime is
    * exactly zero packets.
    *
-   * <p>No-op if either of:
+   * <p>No-op if any of:
    * <ul>
    *   <li>External Kerberos is off — the daemon won't run a Kerberos login
    *       at all, the optimisation is moot.</li>
    *   <li>Inter-service Kerberos is on — the daemon does need outbound
    *       Kerberos calls and therefore a TGT; leave the default initiator
    *       login alone.</li>
+   *   <li>{@link OzoneConfigKeys#OZONE_SECURITY_KERBEROS_ACCEPTOR_ONLY_ENABLED_KEY}
+   *       is explicitly {@code false} — the JVM has an in-process outbound
+   *       Kerberos consumer (e.g. the Ranger plugin's SPNEGO REST poll when
+   *       {@code ranger.plugin.<service>.forceNonKerberos=false}) that needs
+   *       a TGT to sign its outbound calls. Without that TGT the consumer
+   *       silently breaks — typically the Ranger plugin keeps 401-ing
+   *       ranger-admin and ACL policies freeze at the boot snapshot.</li>
    * </ul>
    *
    * <p>Reflection failure (Hadoop UGI internals change) downgrades to a
@@ -166,6 +173,16 @@ public final class OzoneSecurityUtil {
       return;
     }
     if (isInterServiceKerberosEnabled(conf)) {
+      return;
+    }
+    if (!conf.getBoolean(
+        OzoneConfigKeys.OZONE_SECURITY_KERBEROS_ACCEPTOR_ONLY_ENABLED_KEY,
+        OzoneConfigKeys.OZONE_SECURITY_KERBEROS_ACCEPTOR_ONLY_ENABLED_DEFAULT)) {
+      daemonLog.info("Kerberos acceptor-only mode disabled by config "
+              + "({}=false); daemon will perform a normal AS-REQ at startup "
+              + "+ TGT renewer. Set this when a kerberized in-JVM consumer "
+              + "(e.g. Ranger plugin SPNEGO) needs an outbound TGT.",
+          OzoneConfigKeys.OZONE_SECURITY_KERBEROS_ACCEPTOR_ONLY_ENABLED_KEY);
       return;
     }
     try {

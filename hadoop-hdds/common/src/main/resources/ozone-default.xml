@@ -1953,6 +1953,25 @@
     </description>
   </property>
   <property>
+    <name>ozone.security.kerberos.acceptor-only.enabled</name>
+    <value>true</value>
+    <tag>OZONE, SECURITY, KERBEROS</tag>
+    <description>Controls whether the daemon switches Hadoop's
+      Krb5LoginModule into acceptor-only mode (isInitiator=false) when it
+      would otherwise qualify (external Kerberos on, inter-service Kerberos
+      off). Default true preserves the zero-KDC-traffic behaviour: the JVM
+      reads its keytab without contacting the KDC and never acquires a TGT.
+
+      Set to false when the same JVM has an outbound Kerberos consumer that
+      needs a TGT — for example, the Ranger plugin's SPNEGO REST poll
+      against ranger-admin when
+      ranger.plugin.&lt;service&gt;.forceNonKerberos is false. Without the
+      override, that consumer can't sign its outbound calls and silently
+      loses functionality (policy refresh stops, ACLs freeze at the
+      last-known snapshot).
+    </description>
+  </property>
+  <property>
     <name>ozone.security.http.kerberos.enabled</name>
     <value>false</value>
     <tag>OZONE, SECURITY, KERBEROS</tag>
