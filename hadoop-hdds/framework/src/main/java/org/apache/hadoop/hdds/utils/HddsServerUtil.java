@@ -460,12 +460,28 @@ public final class HddsServerUtil {
   public static SCMSecurityProtocolClientSideTranslatorPB
       getScmSecurityClientWithMaxRetry(OzoneConfiguration conf,
       UserGroupInformation ugi) throws IOException {
+    return getScmSecurityClientWithMaxRetry(conf, ugi, false);
+  }
+
+  /**
+   * Step Q — internal-caller variant. When {@code internalCaller} is true
+   * and {@link org.apache.hadoop.hdds.scm.ScmConfigKeys
+   * #OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY} is configured on SCM,
+   * route through SCM's SIMPLE sibling instead of the Kerberos main port.
+   * Mirrors {@code HAUtils.getScmContainerClient(conf, ugi, true)}.
+   */
+  public static SCMSecurityProtocolClientSideTranslatorPB
+      getScmSecurityClientWithMaxRetry(OzoneConfiguration conf,
+      UserGroupInformation ugi, boolean internalCaller) throws IOException {
     // Certificate from SCM is required for DN startup to succeed, so retry
     // for ever. In this way DN start up is resilient to SCM service running
     // status.
-    OzoneConfiguration configuration = new OzoneConfiguration(conf);
+    OzoneConfiguration configuration =
+        internalCaller
+            ? withScmSecuritySiblingPortIfConfigured(conf)
+            : new OzoneConfiguration(conf);
     SCMClientConfig scmClientConfig =
-        conf.getObject(SCMClientConfig.class);
+        configuration.getObject(SCMClientConfig.class);
     int retryCount = Integer.MAX_VALUE;
     scmClientConfig.setRetryCount(retryCount);
     configuration.setFromObject(scmClientConfig);
@@ -473,6 +489,40 @@ public final class HddsServerUtil {
     return new SCMSecurityProtocolClientSideTranslatorPB(
         new SCMSecurityProtocolFailoverProxyProvider(configuration,
             ugi == null ? UserGroupInformation.getCurrentUser() : ugi));
+  }
+
+  /**
+   * If {@link org.apache.hadoop.hdds.scm.ScmConfigKeys
+   * #OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY} is set, return a cloned
+   * configuration with {@link org.apache.hadoop.hdds.scm.ScmConfigKeys
+   * #OZONE_SCM_SECURITY_SERVICE_PORT_KEY} rewritten to the sibling port
+   * — SCMNodeInfo + the failover proxy provider then build proxies
+   * pointing at the SCM SCMSecurityProtocol SIMPLE sibling instead of the
+   * Kerberos main port (9961). Falls back to the input conf when no
+   * sibling is configured.
+   */
+  private static OzoneConfiguration withScmSecuritySiblingPortIfConfigured(
+      OzoneConfiguration conf) {
+    String siblingAddr = conf.get(
+        org.apache.hadoop.hdds.scm.ScmConfigKeys
+            .OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY);
+    if (siblingAddr == null || siblingAddr.isEmpty()) {
+      return new OzoneConfiguration(conf);
+    }
+    int port = org.apache.hadoop.hdds.scm.ScmConfigKeys
+        .OZONE_SCM_SECURITY_SERVICE_RPC_PORT_DEFAULT;
+    int colon = siblingAddr.lastIndexOf(':');
+    if (colon > 0 && colon < siblingAddr.length() - 1) {
+      try {
+        port = Integer.parseInt(siblingAddr.substring(colon + 1));
+      } catch (NumberFormatException ignored) {
+        // fall through with default port
+      }
+    }
+    OzoneConfiguration clone = new OzoneConfiguration(conf);
+    clone.setInt(org.apache.hadoop.hdds.scm.ScmConfigKeys
+        .OZONE_SCM_SECURITY_SERVICE_PORT_KEY, port);
+    return clone;
   }
 
   /**

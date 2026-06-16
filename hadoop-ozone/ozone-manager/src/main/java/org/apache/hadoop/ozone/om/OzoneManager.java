@@ -720,7 +720,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
             "doesn't have SCM signed certificate.");
       }
       SCMSecurityProtocolClientSideTranslatorPB scmSecurityClient =
-          getScmSecurityClientWithMaxRetry(configuration, getCurrentUser());
+          getScmSecurityClientWithMaxRetry(configuration, getCurrentUser(),
+              true);
       certClient = new OMCertificateClient(secConfig, scmSecurityClient,
           omStorage, omInfo, "",
           scmInfo == null ? null : scmInfo.getScmId(),
@@ -1792,7 +1793,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         getOmDetailsProto(conf, omStore.getOmId());
 
     SCMSecurityProtocolClientSideTranslatorPB scmSecurityClient =
-        getScmSecurityClientWithMaxRetry(conf, getCurrentUser());
+        getScmSecurityClientWithMaxRetry(conf, getCurrentUser(), true);
 
     OMCertificateClient certClient =
         new OMCertificateClient(

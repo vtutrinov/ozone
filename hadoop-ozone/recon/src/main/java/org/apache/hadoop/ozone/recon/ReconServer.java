@@ -183,7 +183,8 @@ public class ReconServer extends GenericCli {
       throws IOException {
     LOG.info("Initializing secure Recon.");
     SCMSecurityProtocolClientSideTranslatorPB scmSecurityClient =
-        getScmSecurityClientWithMaxRetry(configuration, getCurrentUser());
+        getScmSecurityClientWithMaxRetry(configuration, getCurrentUser(),
+            true);
     SecurityConfig secConf = new SecurityConfig(configuration);
     certClient = new ReconCertificateClient(secConf, scmSecurityClient,
         reconStorage, this::saveNewCertId, this::terminateRecon);

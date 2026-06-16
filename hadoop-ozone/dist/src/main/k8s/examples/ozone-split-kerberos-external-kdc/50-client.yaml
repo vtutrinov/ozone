@@ -50,7 +50,17 @@ data:
   CORE-SITE.XML_hadoop.security.authentication: kerberos
   CORE-SITE.XML_hadoop.security.authorization: "false"
   CORE-SITE.XML_hadoop.security.auth_to_local: "DEFAULT"
-  CORE-SITE.XML_ipc.client.fallback-to-simple-auth-allowed: "true"
+  # ipc.client.fallback-to-simple-auth-allowed INTENTIONALLY OMITTED on
+  # the client side. Setting it to "true" makes the IPC client silently
+  # downgrade to SIMPLE when a server answers "I only accept SIMPLE",
+  # which is what cluster-internal daemons need (OM → SCM:9863 etc., set
+  # automatically by OzoneSecurityUtil.validateKerberosFlags). For an
+  # external admin client like this Job, however, the flag would hide
+  # bugs: if SCM:9860 were ever misconfigured to SIMPLE the client would
+  # appear to "work" but reach SCM as user `hadoop` (the OS user) instead
+  # of testuser@REALM. Omitting it forces the IPC layer to honour the
+  # client's TGT — every Kerberos-served port (OM:9862, SCM:9860) must
+  # genuinely Kerberos-authenticate or the call fails fast.
   LOG4J.PROPERTIES_log4j.rootLogger: INFO, stdout
   LOG4J.PROPERTIES_log4j.appender.stdout: org.apache.log4j.ConsoleAppender
   LOG4J.PROPERTIES_log4j.appender.stdout.layout: org.apache.log4j.PatternLayout
@@ -126,16 +136,33 @@ spec:
           # 9860) for `scm roles`, the same for `safemode status` and
           # `datanode list` which both go through StorageContainerLocation.
           ozone admin scm roles
-          # The test asserts the COMMAND works (Kerberos→SIMPLE downgrade engaged),
-          # not the cluster's safemode state — DN registration timing makes the
-          # latter flaky right after a roll.
+          # The test asserts the COMMAND works (genuine Kerberos handshake
+          # against SCM:9860 — no SIMPLE fallback because the client conf
+          # no longer carries ipc.client.fallback-to-simple-auth-allowed).
+          # Cluster safemode state is not asserted — DN registration timing
+          # makes the latter flaky right after a roll.
           ozone admin safemode status | tee /tmp/safe.out
           grep -qE "safe mode" /tmp/safe.out \
             || { echo "FAIL: safemode status returned unexpected output" >&2; cat /tmp/safe.out >&2; exit 1; }
           ozone admin datanode list >/tmp/dn.out 2>&1
           grep -qE "Datanode|datanode" /tmp/dn.out \
             || { echo "FAIL: ozone admin datanode list returned no Datanode entries" >&2; cat /tmp/dn.out >&2; exit 1; }
-          echo "PASS: SCM admin chain via SIMPLE downgrade"
+          echo "PASS: SCM admin chain over Kerberos (no SIMPLE fallback)"
+
+          echo "=== Step 4b-cert: ozone admin cert list (Step Q: SCMSecurityProtocol Kerberos on 9961)"
+          # Pre-Step-Q this command failed with "Server asks us to fall back
+          # to SIMPLE auth" because SCMSecurityProtocolServer at 9961 was
+          # unconditionally SIMPLE in interservice=false mode (Step D). Step Q
+          # restored 9961 to Kerberos when external.enabled=true and added a
+          # SIMPLE sibling on 9962 for internal callers (OM/DN/Recon cert
+          # issuance). With the client running without
+          # ipc.client.fallback-to-simple-auth-allowed, this proves a genuine
+          # Kerberos handshake against scm/scm@EXAMPLE.COM on 9961.
+          ozone admin cert list >/tmp/cert.out 2>&1 \
+            || { echo "FAIL: ozone admin cert list errored:"; cat /tmp/cert.out >&2; exit 1; }
+          grep -qE "Serial.*Subject|SubjectName|No certificates found" /tmp/cert.out \
+            || { echo "FAIL: cert list output unexpected:" >&2; cat /tmp/cert.out >&2; exit 1; }
+          echo "PASS: ozone admin cert list over Kerberos (Step Q)"
 
           echo "=== Step 4c: force the OM→SCM internal path (Step M, port 9866)"
           # ozone sh key list calls OM.listKeys → KeyManagerImpl which, for
@@ -209,6 +236,18 @@ spec:
           grep -qE "AccessControl|Client cannot authenticate|GSS|SASL|Kerberos" /tmp/scm.out \
             || { echo "FAIL: ozone admin scm rejected for non-Kerberos reason:" >&2; cat /tmp/scm.out >&2; exit 1; }
           echo "PASS: ozone admin scm rejected without TGT (Kerberos-shaped error)"
+
+          echo "=== Step 7c: ozone admin cert list WITHOUT TGT must be REJECTED"
+          # Step Q symmetry — SCM:9961 is Kerberos, so a TGT-less client must
+          # be rejected, exactly as 9860 is in Step 7b.
+          if ozone admin cert list >/tmp/cert-no.out 2>&1 ; then
+            echo "FAIL: ozone admin cert list succeeded without TGT" >&2
+            cat /tmp/cert-no.out >&2
+            exit 1
+          fi
+          grep -qE "AccessControl|Client cannot authenticate|GSS|SASL|Kerberos" /tmp/cert-no.out \
+            || { echo "FAIL: cert list rejected for non-Kerberos reason:" >&2; cat /tmp/cert-no.out >&2; exit 1; }
+          echo "PASS: ozone admin cert list rejected without TGT (Kerberos-shaped error)"
 
           # Sig V4 / getsecret / PutObject all go through the OM multi-raft
           # write path which is currently blocked by the pre-existing

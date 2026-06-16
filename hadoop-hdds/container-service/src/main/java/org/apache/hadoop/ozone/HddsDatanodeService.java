@@ -444,7 +444,7 @@ public class HddsDatanodeService extends GenericCli implements ServicePlugin {
   @VisibleForTesting
   SCMSecurityProtocolClientSideTranslatorPB createScmSecurityClient()
       throws IOException {
-    return getScmSecurityClientWithMaxRetry(conf, getCurrentUser());
+    return getScmSecurityClientWithMaxRetry(conf, getCurrentUser(), true);
   }
 
   /**

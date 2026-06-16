@@ -589,7 +589,8 @@ public final class StorageContainerManager extends ServiceRuntimeInfoImpl
     if (OzoneSecurityUtil.isSecurityEnabled(configuration) &&
         scmStorageConfig.checkPrimarySCMIdInitialized()) {
       SCMSecurityProtocolClientSideTranslatorPB scmSecurityClient =
-          getScmSecurityClientWithMaxRetry(configuration, getCurrentUser());
+          getScmSecurityClientWithMaxRetry(configuration, getCurrentUser(),
+              true);
       scmCertificateClient = new SCMCertificateClient(
           securityConfig, scmSecurityClient, scmStorageConfig.getScmId(),
           scmStorageConfig.getClusterID(),
@@ -1017,7 +1018,8 @@ public final class StorageContainerManager extends ServiceRuntimeInfoImpl
         throw ex;
       }
       SCMSecurityProtocolClientSideTranslatorPB scmSecurityClient =
-          getScmSecurityClientWithMaxRetry(configuration, getCurrentUser());
+          getScmSecurityClientWithMaxRetry(configuration, getCurrentUser(),
+              true);
       scmCertificateClient = new SCMCertificateClient(securityConfig,
           scmSecurityClient, certSerialNumber, getScmId(),
           SCM_ROOT_CA_COMPONENT_NAME);

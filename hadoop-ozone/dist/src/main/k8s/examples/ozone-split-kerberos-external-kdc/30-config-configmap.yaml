@@ -89,6 +89,15 @@ data:
   # ozone.scm.client.port to 9866 so refreshPipeline rides the SIMPLE
   # port across all three SCM pods.
   OZONE-SITE.XML_ozone.scm.service.rpc-address: 0.0.0.0:9866
+  # ── Step Q: SIMPLE sibling on SCM SCMSecurityProtocol ───────────────
+  # Same shape as Step M, but for the cert + secret-key protocol family.
+  # When this key is set, SCM binds a second SCMSecurityProtocol server
+  # at 0.0.0.0:9962 with SIMPLE auth, and the legacy 9961 reverts to
+  # Kerberos when external Kerberos is enabled — so external admin
+  # commands `ozone admin cert list/info/...` authenticate genuinely
+  # against scm/scm@. OM/DN/Recon's cert clients route to 9962 via
+  # HddsServerUtil.getScmSecurityClientWithMaxRetry(..., true).
+  OZONE-SITE.XML_ozone.scm.security.service.rpc-address: 0.0.0.0:9962
 
   # ── Tokens stay HMAC-verified ──────────────────────────────────────
   OZONE-SITE.XML_hdds.block.token.enabled: "true"
