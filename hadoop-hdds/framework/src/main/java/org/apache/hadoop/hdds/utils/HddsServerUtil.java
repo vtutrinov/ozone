@@ -511,7 +511,13 @@ public final class HddsServerUtil {
    * Mirrors Step N's per-node OM rewrite in
    * {@code OmTransportFactory.withOmServicePortAddressIfConfigured}.
    */
-  private static OzoneConfiguration withScmSecuritySiblingPortIfConfigured(
+  /**
+   * Made {@code public} so SCM bootstrap (HASecurityUtils) can route its
+   * own pre-cert-bootstrap call to the SIMPLE sibling — at bootstrap the
+   * SCM daemon has no TGT (acceptor-only Krb5 per Step L) so the Kerberos
+   * main port is unreachable.
+   */
+  public static OzoneConfiguration withScmSecuritySiblingPortIfConfigured(
       OzoneConfiguration conf) {
     String siblingAddr = conf.get(
         org.apache.hadoop.hdds.scm.ScmConfigKeys
