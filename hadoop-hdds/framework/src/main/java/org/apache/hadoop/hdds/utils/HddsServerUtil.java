@@ -494,12 +494,22 @@ public final class HddsServerUtil {
   /**
    * If {@link org.apache.hadoop.hdds.scm.ScmConfigKeys
    * #OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY} is set, return a cloned
-   * configuration with {@link org.apache.hadoop.hdds.scm.ScmConfigKeys
-   * #OZONE_SCM_SECURITY_SERVICE_PORT_KEY} rewritten to the sibling port
-   * — SCMNodeInfo + the failover proxy provider then build proxies
-   * pointing at the SCM SCMSecurityProtocol SIMPLE sibling instead of the
-   * Kerberos main port (9961). Falls back to the input conf when no
-   * sibling is configured.
+   * configuration with every {@code OZONE_SCM_SECURITY_SERVICE_ADDRESS_KEY}
+   * variant (non-HA and per-node HA) port-rewritten to the sibling port —
+   * SCMNodeInfo + the failover proxy provider then build proxies pointing
+   * at the SCM SCMSecurityProtocol SIMPLE sibling instead of the Kerberos
+   * main port (9961). Falls back to the input conf when no sibling is
+   * configured.
+   *
+   * <p>Why both keys are touched: {@code SCMNodeInfo.getPort} reads the
+   * per-node {@code OZONE_SCM_SECURITY_SERVICE_ADDRESS_KEY.<svc>.<node>}
+   * key first and only falls back to {@code OZONE_SCM_SECURITY_SERVICE_PORT_KEY}
+   * when no per-node address is present. In real HA deployments the
+   * per-node addresses are populated with explicit ports
+   * ({@code host:9961}), so a port-key-only substitution is silently
+   * ignored and the failover proxy still dials the Kerberos main port.
+   * Mirrors Step N's per-node OM rewrite in
+   * {@code OmTransportFactory.withOmServicePortAddressIfConfigured}.
    */
   private static OzoneConfiguration withScmSecuritySiblingPortIfConfigured(
       OzoneConfiguration conf) {
@@ -520,9 +530,62 @@ public final class HddsServerUtil {
       }
     }
     OzoneConfiguration clone = new OzoneConfiguration(conf);
+    // Port-key substitution — used in non-HA topologies and as the
+    // SCMNodeInfo fallback when per-node addresses lack a port suffix.
     clone.setInt(org.apache.hadoop.hdds.scm.ScmConfigKeys
         .OZONE_SCM_SECURITY_SERVICE_PORT_KEY, port);
+
+    // Non-HA fallback: single ozone.scm.security.service.address — rewrite
+    // its port if it has one.
+    String nonHaAddr = conf.get(
+        org.apache.hadoop.hdds.scm.ScmConfigKeys
+            .OZONE_SCM_SECURITY_SERVICE_ADDRESS_KEY);
+    if (nonHaAddr != null && !nonHaAddr.isEmpty()) {
+      clone.set(org.apache.hadoop.hdds.scm.ScmConfigKeys
+              .OZONE_SCM_SECURITY_SERVICE_ADDRESS_KEY,
+          replacePortPreservingHost(nonHaAddr, port));
+    }
+
+    // HA: enumerate every ozone.scm.security.service.address.<svc>.<node>
+    // and rewrite its port so the SCMSecurityProtocolFailoverProxyProvider
+    // hits the SIMPLE sibling on every SCM pod. Iterating every declared
+    // service ID is safe — the per-node keys are namespaced.
+    java.util.Collection<String> serviceIds = conf.getTrimmedStringCollection(
+        org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_SERVICE_IDS_KEY);
+    for (String serviceId : serviceIds) {
+      if (serviceId == null || serviceId.isEmpty()) {
+        continue;
+      }
+      String nodesKey = org.apache.hadoop.ozone.ha.ConfUtils.addKeySuffixes(
+          org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_NODES_KEY,
+          serviceId);
+      java.util.Collection<String> nodeIds =
+          conf.getTrimmedStringCollection(nodesKey);
+      for (String nodeId : nodeIds) {
+        String addrKey = org.apache.hadoop.ozone.ha.ConfUtils.addKeySuffixes(
+            org.apache.hadoop.hdds.scm.ScmConfigKeys
+                .OZONE_SCM_SECURITY_SERVICE_ADDRESS_KEY,
+            serviceId, nodeId);
+        String addr = conf.get(addrKey);
+        if (addr != null && !addr.isEmpty()) {
+          clone.set(addrKey, replacePortPreservingHost(addr, port));
+        }
+      }
+    }
     return clone;
+  }
+
+  /**
+   * Return {@code addr} with any port suffix replaced by {@code newPort}.
+   * Bare hostnames get {@code :newPort} appended; host:port replaces the
+   * suffix; IPv6 bracketed forms ({@code [::1]:9961}) honour the bracket.
+   */
+  private static String replacePortPreservingHost(String addr, int newPort) {
+    int closingBracket = addr.lastIndexOf(']');
+    int colon = addr.lastIndexOf(':');
+    String host = (colon > closingBracket && colon > 0)
+        ? addr.substring(0, colon) : addr;
+    return host + ":" + newPort;
   }
 
   /**
