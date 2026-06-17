@@ -675,8 +675,19 @@ public final class HddsServerUtil {
   public static SecretKeyProtocolClientSideTranslatorPB
       getSecretKeyClientForScm(ConfigurationSource conf,
       String scmNodeId, UserGroupInformation ugi) {
+    // Step Q follow-up: this helper is called by SCMHAManagerImpl
+    // .getSecretKeysFromLeader (a follower SCM fetching keys from the
+    // leader). The destination is SCMSecurityProtocol on port 9961, which
+    // becomes Kerberos under Step Q when external Kerberos is enabled. In
+    // acceptor-only Krb5 mode (Step L) the SCM daemon has no TGT and
+    // cannot initiate Kerberos against the peer — route through the
+    // SIMPLE sibling (port 9962) when configured. Same pattern as the
+    // Step Q runtime + bootstrap cert-client paths.
+    ConfigurationSource effectiveConf =
+        HddsServerUtil.withScmSecuritySiblingPortIfConfigured(
+            OzoneConfiguration.of(conf));
     return new SecretKeyProtocolClientSideTranslatorPB(
-        new SingleSecretKeyProtocolProxyProvider(conf, ugi,
+        new SingleSecretKeyProtocolProxyProvider(effectiveConf, ugi,
             SecretKeyProtocolScmPB.class, scmNodeId),
         SecretKeyProtocolScmPB.class);
   }
