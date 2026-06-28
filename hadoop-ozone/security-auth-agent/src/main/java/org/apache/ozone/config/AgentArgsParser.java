@@ -95,6 +95,9 @@ public final class AgentArgsParser {
     case "auth-log-level":
       config.setLogLevel(value);
       break;
+    case "auth-token-renewal":
+      config.setTokenRenewalMode(value);
+      break;
     default:
       org.apache.ozone.AgentLog.warn("Unknown arg: " + key);
       break;

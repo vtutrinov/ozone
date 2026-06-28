@@ -64,6 +64,25 @@ public class AgentConfig {
    * {@code INFO}, {@code DEBUG}.
    */
   private String logLevel;
+  /**
+   * How the agent keeps OAuth tokens alive in long-running JVMs.
+   * <ul>
+   *   <li>{@code on-demand} — reactive: refresh only when an
+   *       outbound RPC observes the cached token is expired.
+   *       Cheap but fails for long-idle services because Keycloak's
+   *       SSO session times out before the next RPC and the
+   *       refresh token comes back {@code invalid_grant}.</li>
+   *   <li>{@code proactive} — background scheduler refreshes the
+   *       cached token shortly before {@code expires_in}. Survives
+   *       arbitrarily long idle periods as long as either the
+   *       refresh token TTL or {@link #offlineAccess} keeps the
+   *       refresh grant valid.</li>
+   *   <li>{@code both} — proactive scheduling and reactive
+   *       fallback. Recommended for production services.</li>
+   * </ul>
+   * Default: {@code on-demand} (backwards-compatible).
+   */
+  private String tokenRenewalMode = "on-demand";
 
   public String getProviderName() {
     return providerName;
@@ -161,6 +180,14 @@ public class AgentConfig {
     this.logLevel = logLevel;
   }
 
+  public String getTokenRenewalMode() {
+    return tokenRenewalMode;
+  }
+
+  public void setTokenRenewalMode(String tokenRenewalMode) {
+    this.tokenRenewalMode = tokenRenewalMode;
+  }
+
   @Override
   public String toString() {
     return "AgentConfig{"
@@ -175,6 +202,7 @@ public class AgentConfig {
         + ", kerberosRealm='" + kerberosRealm + '\''
         + ", kerberosHost='" + kerberosHost + '\''
         + ", logLevel='" + logLevel + '\''
+        + ", tokenRenewalMode='" + tokenRenewalMode + '\''
         + '}';
   }
 }

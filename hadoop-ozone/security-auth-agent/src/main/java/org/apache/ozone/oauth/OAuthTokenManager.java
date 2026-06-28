@@ -26,6 +26,10 @@ import org.apache.ozone.provider.AuthDataProvider;
 
 import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Manages OAuth token lifecycle: acquisition, caching, and refresh.
@@ -64,6 +68,32 @@ public final class OAuthTokenManager {
 
   /** Flag — has the UGI credentials been scanned for a bundled OAuth token. */
   private static volatile boolean ugiCredentialsScanned;
+
+  /**
+   * Lazy-initialised single-threaded scheduler that drives proactive
+   * token refresh. Created only when {@code auth-token-renewal} is
+   * {@code proactive} or {@code both} — keeps idle JVMs free of an
+   * extra daemon thread.
+   */
+  private static volatile ScheduledExecutorService REFRESH_SCHEDULER;
+
+  /**
+   * Per-user pending proactive-refresh future. When a new token is
+   * obtained for a user the previous future is cancelled so we hold
+   * at most one scheduled refresh per user.
+   */
+  private static final ConcurrentHashMap<String, ScheduledFuture<?>>
+      REFRESH_FUTURES = new ConcurrentHashMap<>();
+
+  /**
+   * Buffer before {@code expiresAt} at which proactive refresh fires.
+   * Chosen so the new token is in hand well before the in-flight one
+   * expires, even on slow Keycloak round-trips.
+   */
+  private static final long PROACTIVE_REFRESH_BUFFER_MS = 30_000L;
+
+  /** Minimum delay between proactive refreshes — clamp the schedule. */
+  private static final long PROACTIVE_REFRESH_MIN_DELAY_MS = 1_000L;
 
   private OAuthTokenManager() {
   }
@@ -118,6 +148,9 @@ public final class OAuthTokenManager {
         if (isBundleCredsEnabled()) {
           bundleIntoUgiCredentials(token);
         }
+        // Schedule a background refresh ahead of expiry. No-op when
+        // auth-token-renewal is "on-demand" (default).
+        scheduleProactiveRefreshIfEnabled(user, token);
       }
       return token;
     } finally {
@@ -137,12 +170,14 @@ public final class OAuthTokenManager {
     }
 
     String clientId = provider.getClientId();
+    AgentConfig agentConfig = SecurityAuthAgent.getAgentConfig();
+    boolean offline = agentConfig != null && agentConfig.isOfflineAccess();
 
     // Try refresh first if we have a refresh token
     if (existing != null && existing.getRefreshToken() != null) {
       try {
         OAuthToken refreshed = CLIENT.refreshToken(serverUrl,
-            clientId, existing.getRefreshToken());
+            clientId, existing.getRefreshToken(), offline);
         replaceLoginUser(refreshed.getAccessToken());
         return refreshed;
       } catch (IOException e) {
@@ -154,7 +189,7 @@ public final class OAuthTokenManager {
     // Obtain new token with credentials
     if (provider.hasCredentials()) {
       OAuthToken token = CLIENT.obtainToken(serverUrl, clientId,
-          provider.getLogin(), provider.getPassword());
+          provider.getLogin(), provider.getPassword(), offline);
       replaceLoginUser(token.getAccessToken());
       return token;
     }
@@ -469,6 +504,116 @@ public final class OAuthTokenManager {
           "org.apache.hadoop.security.UserGroupInformation", true, cl);
     } catch (Throwable t) {
       return null;
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Proactive token refresh — see AgentConfig.tokenRenewalMode.
+  // ---------------------------------------------------------------
+
+  private static boolean isProactiveRenewalEnabled() {
+    AgentConfig config = SecurityAuthAgent.getAgentConfig();
+    if (config == null) {
+      return false;
+    }
+    String mode = config.getTokenRenewalMode();
+    return "proactive".equals(mode) || "both".equals(mode);
+  }
+
+  private static ScheduledExecutorService refreshScheduler() {
+    ScheduledExecutorService s = REFRESH_SCHEDULER;
+    if (s != null) {
+      return s;
+    }
+    synchronized (OAuthTokenManager.class) {
+      s = REFRESH_SCHEDULER;
+      if (s == null) {
+        s = Executors.newSingleThreadScheduledExecutor(r -> {
+          Thread t = new Thread(r, "SecurityAuthAgent-TokenRefresher");
+          t.setDaemon(true);
+          return t;
+        });
+        REFRESH_SCHEDULER = s;
+      }
+    }
+    return s;
+  }
+
+  private static void scheduleProactiveRefreshIfEnabled(
+      String user, OAuthToken token) {
+    if (!isProactiveRenewalEnabled()) {
+      return;
+    }
+    if (token == null || token.getRefreshToken() == null) {
+      // Nothing to refresh proactively with — fall through to the
+      // reactive obtain path next time getToken is called.
+      return;
+    }
+    long delay = token.getExpiresAt() - System.currentTimeMillis()
+        - PROACTIVE_REFRESH_BUFFER_MS;
+    if (delay < PROACTIVE_REFRESH_MIN_DELAY_MS) {
+      delay = PROACTIVE_REFRESH_MIN_DELAY_MS;
+    }
+    ScheduledFuture<?> next = refreshScheduler().schedule(
+        () -> proactiveRefresh(user), delay, TimeUnit.MILLISECONDS);
+    ScheduledFuture<?> prev = REFRESH_FUTURES.put(user, next);
+    if (prev != null) {
+      prev.cancel(false);
+    }
+  }
+
+  private static void proactiveRefresh(String user) {
+    try {
+      OAuthToken cached = TOKEN_CACHE.get(user);
+      if (cached == null) {
+        return;
+      }
+      AuthDataProvider provider = SecurityAuthAgent.getProvider();
+      if (provider == null) {
+        return;
+      }
+      String serverUrl = provider.getServerUrl();
+      if (serverUrl == null || serverUrl.isEmpty()) {
+        return;
+      }
+      String clientId = provider.getClientId();
+      AgentConfig config = SecurityAuthAgent.getAgentConfig();
+      boolean offline = config != null && config.isOfflineAccess();
+
+      OAuthToken refreshed = null;
+      if (cached.getRefreshToken() != null) {
+        try {
+          refreshed = CLIENT.refreshToken(serverUrl, clientId,
+              cached.getRefreshToken(), offline);
+        } catch (IOException e) {
+          org.apache.ozone.AgentLog.warn(
+              "Proactive refresh failed for " + user
+                  + ", re-authenticating: " + e.getMessage());
+        }
+      }
+      if (refreshed == null && provider.hasCredentials()) {
+        // Fallback: full re-auth with the env-provider credentials.
+        refreshed = CLIENT.obtainToken(serverUrl, clientId,
+            provider.getLogin(), provider.getPassword(), offline);
+      }
+      if (refreshed == null) {
+        org.apache.ozone.AgentLog.warn(
+            "Proactive refresh gave up for " + user
+                + " — no refresh token and no provider credentials");
+        return;
+      }
+      TOKEN_CACHE.put(user, refreshed);
+      CURRENT_ACCESS_TOKEN.set(refreshed.getAccessToken());
+      fallbackAccessToken = refreshed.getAccessToken();
+      org.apache.ozone.AgentLog.debug(
+          "Proactively refreshed OAuth token for: " + user);
+      // Chain the next refresh.
+      scheduleProactiveRefreshIfEnabled(user, refreshed);
+    } catch (Throwable t) {
+      // Never let an exception kill the scheduler thread.
+      org.apache.ozone.AgentLog.warn(
+          "Proactive refresh task crashed for " + user + ": "
+              + t.getMessage());
     }
   }
 }

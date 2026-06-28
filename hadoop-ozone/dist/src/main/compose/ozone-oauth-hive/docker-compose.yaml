@@ -15,16 +15,13 @@
 # limitations under the License.
 
 # ============================================================
-# Secure Ozone cluster with OAuth (via Keycloak) instead of KDC.
+# Secure Ozone + Hive Metastore (HMS) backed by Postgres.
 #
-# Security is fully enabled (ozone.security.enabled=true,
-# Kerberos principals configured, block/container tokens, etc.)
-# but there is NO KDC and NO keytab files. The security-auth-agent
-# intercepts all loginUserFromKeytab() calls and replaces them
-# with OAuth token acquisition from Keycloak.
-#
-# If the agent fails to intercept, Kerberos login fails
-# (no KDC reachable) — proving the agent works correctly.
+# Same OAuth-via-Keycloak setup as `ozone-oauth/`, with an
+# additional Postgres + HMS pair. HMS uses the security-auth-agent
+# in its JVM so its UGI.loginUserFromKeytab call is intercepted
+# (no KDC, no keytab files). HMS's warehouse points at
+# ofs://om/warehouse so its DDL operations write through Ozone.
 # ============================================================
 
 services:
@@ -52,10 +49,6 @@ services:
     dns_search: .
     volumes:
       - ../..:/opt/hadoop
-    ports:
-      - 9002:5005
-#      - 9876:9876
-#      - 9860:9860
     env_file:
       - docker-config
     environment:
@@ -76,9 +69,6 @@ services:
     dns_search: .
     volumes:
       - ../..:/opt/hadoop
-#    ports:
-#      - 9874:9874
-#      - 9862:9862
     env_file:
       - docker-config
     environment:
@@ -98,8 +88,6 @@ services:
     dns_search: .
     volumes:
       - ../..:/opt/hadoop
-#    ports:
-#      - 19864
     env_file:
       - docker-config
     environment:
@@ -150,5 +138,111 @@ services:
       AUTH_PASSWORD: recon
     command: ["/opt/hadoop/bin/ozone","recon"]
     depends_on:
+      keycloak:
+        condition: service_healthy
+
+  # ------------------------------------------------------------
+  # Hive Metastore stack
+  # ------------------------------------------------------------
+  postgres:
+    image: postgres:${POSTGRES_VERSION}
+    hostname: postgres
+    dns_search: .
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive
+      POSTGRES_DB: metastore
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive -d metastore"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  hms:
+    image: apache/hive:${HIVE_VERSION}
+    hostname: hms
+    dns_search: .
+    ports:
+      - 9083:9083
+    env_file:
+      - docker-config
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: postgres
+      SERVICE_OPTS: >-
+        -javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+        -Djava.security.krb5.realm=EXAMPLE.COM
+        -Djava.security.krb5.kdc=kdc.example.com
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/metastore
+        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
+        -Djavax.jdo.option.ConnectionUserName=hive
+        -Djavax.jdo.option.ConnectionPassword=hive
+      # security-auth-agent OAuth credentials — HMS authenticates
+      # to Ozone (OM/SCM) as user `hms` via the agent's env
+      # AuthDataProvider; no KDC, no keytab needed.
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: hms
+      AUTH_PASSWORD: hms
+      # Make the ozone-filesystem-hadoop3 shaded jar visible to
+      # Hive so HMS can address ofs:// warehouse paths.
+      HIVE_AUX_JARS_PATH: /opt/ozone/share/ozone/lib/ozone-filesystem-hadoop3-${HDDS_VERSION}.jar
+      # Expose Ozone's hadoop layout to HMS for ofs:// resolution
+      # and let the agent jar live alongside.
+      HADOOP_CLASSPATH: /opt/ozone/share/ozone/lib/ozone-filesystem-hadoop3-${HDDS_VERSION}.jar
+    volumes:
+      - ../..:/opt/ozone
+      - ./hive-site.xml:/opt/hive/conf/hive-site.xml
+      - ./core-site.xml:/opt/hive/conf/core-site.xml
+      - ./ozone-site.xml:/opt/hive/conf/ozone-site.xml
+      # Postgres JDBC driver — fetched by test.sh into ./jars/.
+      # Mounted into Hive's lib so schematool can load Driver early
+      # in the entrypoint, before any HIVE_AUX_JARS_PATH scanning.
+      - ./jars/postgresql.jar:/opt/hive/lib/postgresql.jar
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      om:
+        condition: service_started
+
+  hiveserver2:
+    image: apache/hive:${HIVE_VERSION}
+    hostname: hiveserver2
+    dns_search: .
+    ports:
+      - 10000:10000
+      - 10002:10002
+    env_file:
+      - docker-config
+    environment:
+      SERVICE_NAME: hiveserver2
+      # Don't try to (re)initialise schema — hms already did.
+      IS_RESUME: "true"
+      # Talk to the standalone metastore instead of running an
+      # embedded one. The default for hiveserver2 is embedded; the
+      # uri here is what makes it remote-mode.
+      SERVICE_OPTS: >-
+        -javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+        -Djava.security.krb5.realm=EXAMPLE.COM
+        -Djava.security.krb5.kdc=kdc.example.com
+        -Dhive.metastore.uris=thrift://hms:9083
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: hms
+      AUTH_PASSWORD: hms
+      HIVE_AUX_JARS_PATH: /opt/ozone/share/ozone/lib/ozone-filesystem-hadoop3-${HDDS_VERSION}.jar
+      HADOOP_CLASSPATH: /opt/ozone/share/ozone/lib/ozone-filesystem-hadoop3-${HDDS_VERSION}.jar
+    volumes:
+      - ../..:/opt/ozone
+      - ./hive-site.xml:/opt/hive/conf/hive-site.xml
+      - ./core-site.xml:/opt/hive/conf/core-site.xml
+      - ./ozone-site.xml:/opt/hive/conf/ozone-site.xml
+      - ./jars/postgresql.jar:/opt/hive/lib/postgresql.jar
+    depends_on:
+      hms:
+        condition: service_started
       keycloak:
         condition: service_healthy

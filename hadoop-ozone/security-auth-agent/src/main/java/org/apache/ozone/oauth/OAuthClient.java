@@ -44,6 +44,17 @@ public class OAuthClient {
    */
   public OAuthToken obtainToken(String serverUrl, String clientId,
       String login, String password) throws IOException {
+    return obtainToken(serverUrl, clientId, login, password, false);
+  }
+
+  /**
+   * Obtain an access token using the Resource Owner Password grant,
+   * optionally requesting {@code scope=offline_access} so Keycloak
+   * issues a refresh token that survives SSO session expiry.
+   */
+  public OAuthToken obtainToken(String serverUrl, String clientId,
+      String login, String password, boolean offlineAccess)
+      throws IOException {
     StringBuilder body = new StringBuilder();
     body.append("grant_type=password");
     if (clientId != null && !clientId.isEmpty()) {
@@ -51,6 +62,9 @@ public class OAuthClient {
     }
     body.append("&username=").append(urlEncode(login));
     body.append("&password=").append(urlEncode(password));
+    if (offlineAccess) {
+      body.append("&scope=offline_access");
+    }
     return executeTokenRequest(serverUrl, body.toString());
   }
 
@@ -59,12 +73,26 @@ public class OAuthClient {
    */
   public OAuthToken refreshToken(String serverUrl, String clientId,
       String refreshToken) throws IOException {
+    return refreshToken(serverUrl, clientId, refreshToken, false);
+  }
+
+  /**
+   * Refresh an access token, optionally re-requesting
+   * {@code scope=offline_access}. Re-requesting on refresh matters
+   * when the OAuth server rotates the refresh token and we want the
+   * new one to keep the offline lifetime.
+   */
+  public OAuthToken refreshToken(String serverUrl, String clientId,
+      String refreshToken, boolean offlineAccess) throws IOException {
     StringBuilder body = new StringBuilder();
     body.append("grant_type=refresh_token");
     if (clientId != null && !clientId.isEmpty()) {
       body.append("&client_id=").append(urlEncode(clientId));
     }
     body.append("&refresh_token=").append(urlEncode(refreshToken));
+    if (offlineAccess) {
+      body.append("&scope=offline_access");
+    }
     return executeTokenRequest(serverUrl, body.toString());
   }
 

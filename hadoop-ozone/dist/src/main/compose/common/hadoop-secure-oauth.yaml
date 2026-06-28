@@ -36,7 +36,7 @@ services:
       YARN-SITE.XML_yarn.app.mapreduce.am.staging-dir: /volume1/bucket1/mr-staging
       AUTH_LOGIN: rm
       AUTH_PASSWORD: rm
-      HADOOP_OPTS: -javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none
+      HADOOP_OPTS: -javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
     command: ["yarn", "resourcemanager"]
     profiles:
       - hadoop
@@ -63,7 +63,7 @@ services:
       YARN-SITE.XML_yarn.app.mapreduce.am.staging-dir: /volume1/bucket1/mr-staging
       AUTH_LOGIN: nm
       AUTH_PASSWORD: nm
-      HADOOP_OPTS: -javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none
+      HADOOP_OPTS: -javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
     command: ["yarn","nodemanager"]
     profiles:
       - hadoop
@@ -87,7 +87,7 @@ services:
       YARN-SITE.XML_yarn.app.mapreduce.am.staging-dir: /volume1/bucket1/mr-staging
       AUTH_LOGIN: jhs
       AUTH_PASSWORD: jhs
-      HADOOP_OPTS: -javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none
+      HADOOP_OPTS: -javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
     command: ["yarn","timelineserver"]
     profiles:
       - hadoop

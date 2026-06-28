@@ -76,7 +76,8 @@ treated as boolean flags (set to true).
 | `auth-token-validation` | `none` | server-side validator: `none`, `jwt`, `introspect` |
 | `auth-qr` | `false` | print ASCII QR for device-flow URI |
 | `auth-bundle-creds` | `false` | bundle OAuth token into UGI credentials (YARN propagation) |
-| `auth-offline-access` | `false` | request `scope=openid offline_access` in device flow |
+| `auth-offline-access` | `false` | request `scope=offline_access` on every token request — interactive flow, password grant, **and** refresh. Keycloak issues a refresh token that survives SSO session expiry. Needs the OAuth client to allow the `offline_access` scope. |
+| `auth-token-renewal` | `on-demand` | how the agent keeps tokens alive in long-running JVMs. `on-demand` — reactive only (refresh when an outbound RPC sees the cached token is expired; fine for short-lived clients). `proactive` — background scheduler refreshes shortly before `expires_in`; survives long-idle periods. `both` — both. Recommended for any long-running service (HMS, HS2, RM, NM, OM, SCM, DN, …). |
 | `auth-kerberos-realm` | derived from JWT `iss` | realm component of the synthesized `user/host@REALM` principal |
 | `auth-kerberos-host` | local canonical hostname | host component of the synthesized principal |
 | `auth-log-level` | env `OZONE_AGENT_LOG_LEVEL` or `INFO` | `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`. `INFO` keeps startup messages and successful login replacements; `DEBUG` adds per-SASL-call traces; `OFF` silences the agent entirely. |

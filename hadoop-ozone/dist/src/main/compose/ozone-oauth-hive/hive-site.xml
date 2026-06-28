@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one
+  or more contributor license agreements.  See the NOTICE file
+  distributed with this work for additional information
+  regarding copyright ownership.  The ASF licenses this file
+  to you under the Apache License, Version 2.0 (the
+  "License"); you may not use this file except in compliance
+  with the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing,
+  software distributed under the License is distributed on an
+  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+  either express or implied. See the License for the specific
+  language governing permissions and limitations under the
+  License.
+-->
+<configuration>
+  <!-- Warehouse on Ozone — every CREATE DATABASE/TABLE without
+       an explicit LOCATION lands here. -->
+  <property>
+    <name>metastore.warehouse.dir</name>
+    <value>ofs://om/volume1/bucket1/warehouse</value>
+  </property>
+  <property>
+    <name>hive.metastore.warehouse.dir</name>
+    <value>ofs://om/volume1/bucket1/warehouse</value>
+  </property>
+
+  <!-- HMS Thrift endpoint -->
+  <property>
+    <name>metastore.thrift.uris</name>
+    <value>thrift://hms:9083</value>
+  </property>
+  <property>
+    <name>hive.metastore.uris</name>
+    <value>thrift://hms:9083</value>
+  </property>
+  <property>
+    <name>metastore.thrift.port</name>
+    <value>9083</value>
+  </property>
+
+  <!-- Postgres backend (also passed via SERVICE_OPTS as -D, but
+       repeated here so schematool reads them when initialising). -->
+  <property>
+    <name>javax.jdo.option.ConnectionURL</name>
+    <value>jdbc:postgresql://postgres:5432/metastore</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionDriverName</name>
+    <value>org.postgresql.Driver</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionUserName</name>
+    <value>hive</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionPassword</name>
+    <value>hive</value>
+  </property>
+
+  <!-- Security: HMS uses Kerberos SASL on its Thrift port.
+       The security-auth-agent intercepts UGI.loginUserFromKeytab,
+       acquires an OAuth JWT (AUTH_LOGIN=hms), and synthesises a
+       Kerberos-shaped UGI from the JWT. The keytab path below
+       never gets read. -->
+  <property>
+    <name>metastore.kerberos.principal</name>
+    <value>hms/hms@EXAMPLE.COM</value>
+  </property>
+  <property>
+    <name>hive.metastore.kerberos.principal</name>
+    <value>hms/hms@EXAMPLE.COM</value>
+  </property>
+  <property>
+    <name>metastore.kerberos.keytab.file</name>
+    <value>/etc/security/keytabs/hms.keytab</value>
+  </property>
+  <property>
+    <name>hive.metastore.kerberos.keytab.file</name>
+    <value>/etc/security/keytabs/hms.keytab</value>
+  </property>
+  <!-- HMS thrift SASL is currently disabled: Hive's thrift server
+       uses HadoopThriftAuthBridge / TSaslServerTransport, which is
+       a different SASL pipeline than Hadoop IPC's SaslRpcServer
+       that the security-auth-agent intercepts today. Enabling SASL
+       here makes HS2 → HMS handshakes hang. Hive-thrift SASL
+       interception is tracked as a follow-up commit; for now HMS
+       still authenticates outbound to OM via OAuth (the path our
+       agent does cover). -->
+  <property>
+    <name>metastore.use.thrift.sasl</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>hive.metastore.sasl.enabled</name>
+    <value>false</value>
+  </property>
+
+  <!-- Disable HMS schema auto-creation — we run schematool
+       explicitly in init-schema.sh against postgres. -->
+  <property>
+    <name>datanucleus.schema.autoCreateAll</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>hive.metastore.schema.verification</name>
+    <value>true</value>
+  </property>
+
+  <!-- HiveServer2 — its own Kerberos principal/keytab. With
+       hadoop.security.authentication=kerberos (core-site.xml) HS2
+       requires a configured keytab login for itself even when it
+       accepts plain-TCP clients. The agent intercepts the
+       loginUserFromKeytab call before Hadoop ever reads the
+       (non-existent) keytab file. Client-facing auth is set to
+       NONE because the Hive thrift SASL path isn't intercepted
+       by the agent yet — beeline connects plain-TCP. -->
+  <property>
+    <name>hive.server2.authentication</name>
+    <value>NONE</value>
+  </property>
+  <property>
+    <name>hive.server2.authentication.kerberos.principal</name>
+    <value>hms/_HOST@EXAMPLE.COM</value>
+  </property>
+  <property>
+    <name>hive.server2.authentication.kerberos.keytab</name>
+    <value>/etc/security/keytabs/hms.keytab</value>
+  </property>
+  <property>
+    <name>hive.server2.enable.doAs</name>
+    <value>false</value>
+  </property>
+</configuration>
