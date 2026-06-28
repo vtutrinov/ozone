@@ -22,13 +22,9 @@ import net.bytebuddy.implementation.bind.annotation.RuntimeType;
 import net.bytebuddy.implementation.bind.annotation.SuperCall;
 import net.bytebuddy.implementation.bind.annotation.This;
 import org.apache.ozone.SecurityAuthAgent;
-import org.apache.ozone.config.AgentConfig;
-import org.apache.ozone.oauth.IntrospectTokenValidator;
-import org.apache.ozone.oauth.JwtTokenValidator;
-import org.apache.ozone.oauth.NoneTokenValidator;
 import org.apache.ozone.oauth.OAuthSaslServer;
 import org.apache.ozone.oauth.TokenValidator;
-import org.apache.ozone.provider.AuthDataProvider;
+import org.apache.ozone.oauth.TokenValidatorFactory;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -84,36 +80,6 @@ public class SaslServerInterceptor {
   }
 
   private static TokenValidator createValidator() {
-    AgentConfig config = SecurityAuthAgent.getAgentConfig();
-    AuthDataProvider provider = SecurityAuthAgent.getProvider();
-    String mode = config != null
-        ? config.getTokenValidation() : "none";
-
-    switch (mode) {
-    case "introspect":
-      String tokenUrl = provider != null
-          ? provider.getServerUrl() : null;
-      String clientId = provider != null
-          ? provider.getClientId() : null;
-      if (tokenUrl == null || clientId == null) {
-        org.apache.ozone.AgentLog.warn(
-            "introspect mode requires server URL and client ID, "
-                + "falling back to none");
-        return new NoneTokenValidator();
-      }
-      return new IntrospectTokenValidator(tokenUrl, clientId);
-    case "jwt":
-      String jwtTokenUrl = provider != null
-          ? provider.getServerUrl() : null;
-      if (jwtTokenUrl == null) {
-        org.apache.ozone.AgentLog.warn(
-            "jwt mode requires server URL, falling back to none");
-        return new NoneTokenValidator();
-      }
-      return new JwtTokenValidator(jwtTokenUrl);
-    case "none":
-    default:
-      return new NoneTokenValidator();
-    }
+    return TokenValidatorFactory.create();
   }
 }

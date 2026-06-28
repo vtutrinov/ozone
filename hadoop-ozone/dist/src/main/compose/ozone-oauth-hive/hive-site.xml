@@ -83,21 +83,19 @@
     <name>hive.metastore.kerberos.keytab.file</name>
     <value>/etc/security/keytabs/hms.keytab</value>
   </property>
-  <!-- HMS thrift SASL is currently disabled: Hive's thrift server
-       uses HadoopThriftAuthBridge / TSaslServerTransport, which is
-       a different SASL pipeline than Hadoop IPC's SaslRpcServer
-       that the security-auth-agent intercepts today. Enabling SASL
-       here makes HS2 → HMS handshakes hang. Hive-thrift SASL
-       interception is tracked as a follow-up commit; for now HMS
-       still authenticates outbound to OM via OAuth (the path our
-       agent does cover). -->
+  <!-- HMS thrift SASL is on. The security-auth-agent registers a
+       JCA SASL provider (OAuthSaslProvider) at premain so Hive's
+       TSaslServerTransport gets our OAuthSaslServer instead of
+       the JDK default GSSAPI server, and TSaslClientTransport
+       gets OAuthSaslClient on the HS2 side. JWT carried in the
+       SASL initial response replaces the Kerberos ticket. -->
   <property>
     <name>metastore.use.thrift.sasl</name>
-    <value>false</value>
+    <value>true</value>
   </property>
   <property>
     <name>hive.metastore.sasl.enabled</name>
-    <value>false</value>
+    <value>true</value>
   </property>
 
   <!-- Disable HMS schema auto-creation — we run schematool

@@ -70,10 +70,34 @@ public class SecurityAuthAgent {
       AgentLog.setLevel(agentConfig.getLogLevel());
       AgentLog.info("Config: " + agentConfig);
       resolveProvider();
+      registerSaslProvider();
       installAgent(inst);
       prewarmAuth();
     } catch (Throwable t) {
       AgentLog.error("Failed to initialize!", t);
+    }
+  }
+
+  /**
+   * Register a JCA SASL provider so every {@code Sasl.createSasl*}
+   * caller — including Hive's thrift {@code TSaslClientTransport}
+   * / {@code TSaslServerTransport} — picks up the OAuth factories.
+   * Inserted at position 1 so we're tried before the JDK default
+   * GSSAPI provider. Idempotent: if a provider with the same name
+   * is already present (e.g. agent loaded twice), we leave it alone.
+   */
+  private static void registerSaslProvider() {
+    try {
+      if (java.security.Security.getProvider(
+          org.apache.ozone.oauth.OAuthSaslProvider.NAME) == null) {
+        java.security.Security.insertProviderAt(
+            new org.apache.ozone.oauth.OAuthSaslProvider(), 1);
+        AgentLog.debug(
+            "Registered OAuth SASL provider for GSSAPI");
+      }
+    } catch (Throwable t) {
+      AgentLog.warn(
+          "Failed to register OAuth SASL provider: " + t.getMessage());
     }
   }
 
