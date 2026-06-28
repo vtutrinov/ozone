@@ -38,6 +38,9 @@ materialises the warehouse paths on Ozone (`ofs://om/volume1/bucket1
 - `CREATE DATABASE LOCATION 'ofs://…'` materialises the DB dir on
   Ozone (owner = `hms`, the OAuth identity)
 - `CREATE TABLE` materialises the table dir
+- `INSERT` writes a data file (`{table_dir}/000000_0`) via the
+  HS2-local MR engine — proves the end-to-end write path:
+  HS2 → OzoneClient → OM (OAuth) → DN block write → ofs commit
 - `DROP DATABASE CASCADE` removes everything cleanly
 
 ## Run
@@ -50,14 +53,22 @@ OZONE_REPLICATION_FACTOR=3 ./test.sh
 `test.sh` will fetch the postgres JDBC driver to `./jars/` on first
 run (gitignored). No KDC needed.
 
+## Caveats
+
+- **`hdds.grpc.tls.enabled=false`** in this suite's docker-config.
+  Default secure-cluster setting puts TLS on the client→DN Ratis
+  gRPC channel, which requires the client to trust SCM's root CA.
+  The apache/hive image isn't an ozone-runner — it has no
+  SCM-issued certs and no truststore — so the TLS handshake closes
+  silently and any `INSERT` hangs at 67% map with
+  `UNAVAILABLE: Network closed for unknown reason`. We drop TLS
+  here; block-token auth at the application layer is still on.
+  Proper fix: a sidecar that fetches SCM's root CA into a
+  bind-mounted truststore the Hive containers can read. Tracked
+  as a followup.
+
 ## Followups (separate commits)
 
-- **`INSERT` round-trip through HS2 local MR** — currently hangs
-  in `KeyOutputStream → RatisBlockOutputStream` with the DN-side
-  gRPC channel reporting `UNAVAILABLE: Network closed for unknown
-  reason` after 18 retries. Not an auth issue (agent token-refresh
-  is clean), but a streamed-write path issue in the Ozone client
-  used by HS2's local MR. Tracked as a separate fix.
 - **Tez execution engine** — Hive-on-Tez SQL workloads. The image
   already ships `/opt/tez/*` on the classpath; needs local-mode
   config in hive-site.xml plus tez-site.xml.
@@ -72,3 +83,5 @@ run (gitignored). No KDC needed.
   is the prerequisite).
 - **HMS impersonation (`doAs`)** — verify ACL is checked against
   the client identity, not HMS's service identity.
+- **Re-enable `hdds.grpc.tls.enabled`** for the Hive containers
+  via a CA-distribution sidecar — see Caveats above.

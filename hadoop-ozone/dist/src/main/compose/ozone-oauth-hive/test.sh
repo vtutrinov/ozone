@@ -117,6 +117,8 @@ echo "Setup: CREATE DATABASE ${TEST_DB} on Ozone-backed warehouse..."
 beeline_exec "DROP DATABASE IF EXISTS ${TEST_DB} CASCADE; CREATE DATABASE ${TEST_DB} LOCATION '${WAREHOUSE}/${TEST_DB}.db';"
 echo "Setup: CREATE TABLE ${TEST_DB}.${TEST_TABLE}..."
 beeline_exec "USE ${TEST_DB}; CREATE TABLE ${TEST_TABLE} (msg STRING) STORED AS TEXTFILE;"
+echo "Setup: INSERT a row through HS2's local MR engine..."
+beeline_exec "INSERT INTO ${TEST_DB}.${TEST_TABLE} VALUES ('hello-oauth');"
 
 # Robot tests run inside scm — they verify the Ozone-side state
 # we just set up (port reachability + warehouse dirs materialised).
