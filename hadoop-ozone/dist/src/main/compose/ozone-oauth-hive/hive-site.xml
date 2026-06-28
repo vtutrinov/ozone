@@ -133,4 +133,18 @@
     <name>hive.server2.enable.doAs</name>
     <value>false</value>
   </property>
+
+  <!-- Tez execution engine. mr was removed in Hive 4 and would
+       otherwise fall back to LocalJobRunner; we point at Tez in
+       local mode (see tez-site.xml) so the in-JVM Tez AM/tasks
+       drive query execution. -->
+  <property>
+    <name>hive.execution.engine</name>
+    <value>tez</value>
+  </property>
+  <!-- Tez session reuse — keeps the AM warm across queries. -->
+  <property>
+    <name>hive.tez.exec.print.summary</name>
+    <value>true</value>
+  </property>
 </configuration>

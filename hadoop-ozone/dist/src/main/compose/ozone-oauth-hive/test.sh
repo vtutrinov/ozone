@@ -117,8 +117,29 @@ echo "Setup: CREATE DATABASE ${TEST_DB} on Ozone-backed warehouse..."
 beeline_exec "DROP DATABASE IF EXISTS ${TEST_DB} CASCADE; CREATE DATABASE ${TEST_DB} LOCATION '${WAREHOUSE}/${TEST_DB}.db';"
 echo "Setup: CREATE TABLE ${TEST_DB}.${TEST_TABLE}..."
 beeline_exec "USE ${TEST_DB}; CREATE TABLE ${TEST_TABLE} (msg STRING) STORED AS TEXTFILE;"
-echo "Setup: INSERT a row through HS2's local MR engine..."
-beeline_exec "INSERT INTO ${TEST_DB}.${TEST_TABLE} VALUES ('hello-oauth');"
+echo "Setup: INSERT three rows via Tez (engine=tez, local mode)..."
+beeline_exec "INSERT INTO ${TEST_DB}.${TEST_TABLE} VALUES ('hello-oauth'), ('hello-tez'), ('hello-ofs');"
+echo "Setup: aggregation query (multi-vertex Tez DAG)..."
+COUNT_OUT=$(beeline_exec "SELECT COUNT(*) AS n FROM ${TEST_DB}.${TEST_TABLE};")
+echo "${COUNT_OUT}"
+# The aggregation must return 3 — every insert path goes through
+# Tez in Hive 4 (mr engine was removed) so a correct count is also
+# evidence Tez actually executed the DAG.
+if ! echo "${COUNT_OUT}" | grep -qE "\| *3 *\|"; then
+  echo "FAIL: expected COUNT(*) = 3 from Tez DAG"
+  exit 1
+fi
+
+# Verify Tez actually drove the query (not a legacy fallback engine).
+# Hive 4 logs "tez.TezTask" + a TezSession id for every Tez-executed
+# query; we grep hive.log inside HS2.
+echo "Asserting Tez executed at least one DAG..."
+TEZ_HITS=$(docker exec ozone-oauth-hive-hiveserver2-1 grep -c "tez.TezTask" /tmp/hive/hive.log || echo 0)
+echo "  tez.TezTask log hits: ${TEZ_HITS}"
+if [[ "${TEZ_HITS}" -lt 1 ]]; then
+  echo "FAIL: Tez did not run any DAG — engine likely fell back to MR/local."
+  exit 1
+fi
 
 # Robot tests run inside scm — they verify the Ozone-side state
 # we just set up (port reachability + warehouse dirs materialised).

@@ -75,11 +75,12 @@ Table Dir Materialised On Ozone
     Should Be Equal    ${output}    OK
 
 INSERT Wrote A Data File On Ozone
-    [documentation]    test.sh INSERT'd a row through HS2's local
-    ...                MR engine. The MR FileSinkOperator writes a
-    ...                {table_dir}/000000_0 part file via the
-    ...                Ozone client. Proves end-to-end write path:
-    ...                HS2 → OzoneClient → OM (OAuth) → DN block
-    ...                write → ofs:// commit.
+    [documentation]    test.sh INSERT'd three rows through Tez
+    ...                (engine=tez, local mode). The Tez FileSink
+    ...                writes a {table_dir}/000000_0 part file via
+    ...                the Ozone client. Proves end-to-end write
+    ...                path: HS2 → Tez AM/task → OzoneClient → OM
+    ...                (OAuth) → DN block write → ofs:// commit.
     ${output} =    Execute    OZONE_AGENT_LOG_LEVEL=OFF ozone fs -ls ${WAREHOUSE}/${TEST_DB}.db/${TEST_TABLE}/ 2>&1 | grep -v staging | grep -c "000000_0" || true
     Should Be Equal As Integers    ${output}    1
+

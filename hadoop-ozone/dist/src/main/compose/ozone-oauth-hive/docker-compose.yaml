@@ -240,6 +240,7 @@ services:
       - ./hive-site.xml:/opt/hive/conf/hive-site.xml
       - ./core-site.xml:/opt/hive/conf/core-site.xml
       - ./ozone-site.xml:/opt/hive/conf/ozone-site.xml
+      - ./tez-site.xml:/opt/tez/conf/tez-site.xml
       - ./jars/postgresql.jar:/opt/hive/lib/postgresql.jar
     depends_on:
       hms:

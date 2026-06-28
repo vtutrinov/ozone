@@ -38,9 +38,13 @@ materialises the warehouse paths on Ozone (`ofs://om/volume1/bucket1
 - `CREATE DATABASE LOCATION 'ofs://…'` materialises the DB dir on
   Ozone (owner = `hms`, the OAuth identity)
 - `CREATE TABLE` materialises the table dir
-- `INSERT` writes a data file (`{table_dir}/000000_0`) via the
-  HS2-local MR engine — proves the end-to-end write path:
-  HS2 → OzoneClient → OM (OAuth) → DN block write → ofs commit
+- `INSERT` writes a data file (`{table_dir}/000000_0`) via Tez —
+  the Hive 4 default execution engine, running in local mode
+  (`tez.local.mode=true`, no YARN needed). Proves the end-to-end
+  write path: HS2 → Tez AM/task in-JVM → OzoneClient → OM (OAuth)
+  → DN block write → ofs commit
+- A `COUNT(*)` follow-up query exercises a multi-vertex Tez DAG
+  and asserts the row count matches the inserts
 - `DROP DATABASE CASCADE` removes everything cleanly
 
 ## Run
@@ -69,18 +73,10 @@ run (gitignored). No KDC needed.
 
 ## Followups (separate commits)
 
-- **Tez execution engine** — Hive-on-Tez SQL workloads. The image
-  already ships `/opt/tez/*` on the classpath; needs local-mode
-  config in hive-site.xml plus tez-site.xml.
-- **Hive thrift SASL interception** — HMS↔HS2 currently runs
-  unauthenticated thrift because the agent's SASL hooks target
-  Hadoop IPC's `SaslRpcServer`, not Hive's `HadoopThriftAuthBridge
-  / TSaslServerTransport`. Adding interceptors for those classes
-  is its own commit.
 - **Delegation-token renewal probe** — long-running query that
   outlives the access-token TTL, asserts the proactive refresh
-  keeps it alive (the `auth-token-renewal` change in this commit
-  is the prerequisite).
+  keeps it alive (the `auth-token-renewal` change is the
+  prerequisite).
 - **HMS impersonation (`doAs`)** — verify ACL is checked against
   the client identity, not HMS's service identity.
 - **Re-enable `hdds.grpc.tls.enabled`** for the Hive containers
