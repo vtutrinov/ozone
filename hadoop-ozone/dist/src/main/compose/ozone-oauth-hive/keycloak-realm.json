@@ -7,6 +7,9 @@
   "loginWithEmailAllowed": false,
   "requiredActions": [],
   "defaultDefaultClientScopes": ["web-origins", "acr", "roles", "profile", "email"],
+  "accessTokenLifespan": 90,
+  "ssoSessionIdleTimeout": 600,
+  "ssoSessionMaxLifespan": 3600,
   "clients": [
     {
       "clientId": "ozone-client",

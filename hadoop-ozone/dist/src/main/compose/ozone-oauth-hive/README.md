@@ -45,6 +45,11 @@ materialises the warehouse paths on Ozone (`ofs://om/volume1/bucket1
   → DN block write → ofs commit
 - A `COUNT(*)` follow-up query exercises a multi-vertex Tez DAG
   and asserts the row count matches the inserts
+- **DT-renewal probe**: a 100-second sleep query (via
+  `reflect('java.lang.Thread','sleep',…)`) straddles the realm's
+  90-second access-token TTL. The agent's proactive refresher must
+  swap in a fresh token mid-flight; the smoketest asserts at least
+  one `"Proactively refreshed OAuth token"` line in HS2's docker log
 - `DROP DATABASE CASCADE` removes everything cleanly
 
 ## Run
@@ -73,10 +78,6 @@ run (gitignored). No KDC needed.
 
 ## Followups (separate commits)
 
-- **Delegation-token renewal probe** — long-running query that
-  outlives the access-token TTL, asserts the proactive refresh
-  keeps it alive (the `auth-token-renewal` change is the
-  prerequisite).
 - **HMS impersonation (`doAs`)** — verify ACL is checked against
   the client identity, not HMS's service identity.
 - **Re-enable `hdds.grpc.tls.enabled`** for the Hive containers

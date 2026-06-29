@@ -141,6 +141,25 @@ if [[ "${TEZ_HITS}" -lt 1 ]]; then
   exit 1
 fi
 
+# Delegation-token renewal probe. The realm's accessTokenLifespan
+# is 90s and the agent runs auth-token-renewal=both, so its
+# proactive scheduler fires a refresh at expiresAt-30s (= +60s).
+# A 100-second sleep query straddles that boundary: the SAME long
+# in-process Tez task runs through one token expiry and lives only
+# because the proactive refresh swapped in a fresh access token.
+# If the refresh broke (or was off), the next ofs:// RPC after +90s
+# would fail with "Token is not active".
+echo "DT-renewal probe: 100s sleep query that outlives the access TTL..."
+beeline_exec "SELECT reflect('java.lang.Thread', 'sleep', cast(100000 as bigint)) FROM ${TEST_DB}.${TEST_TABLE} LIMIT 1;"
+echo "Asserting proactive refresh fired during the long query..."
+REFRESH_HITS=$(docker logs ozone-oauth-hive-hiveserver2-1 2>&1 | grep -c "Proactively refreshed OAuth token" || echo 0)
+echo "  proactive refresh hits in HS2: ${REFRESH_HITS}"
+if [[ "${REFRESH_HITS}" -lt 1 ]]; then
+  echo "FAIL: no proactive refresh observed — long-running queries " \
+       "would have hit 'Token is not active'."
+  exit 1
+fi
+
 # Robot tests run inside scm — they verify the Ozone-side state
 # we just set up (port reachability + warehouse dirs materialised).
 execute_robot_test scm -v TEST_DB:"${TEST_DB}" -v TEST_TABLE:"${TEST_TABLE}" -v WAREHOUSE:"${WAREHOUSE}" security/hms.robot

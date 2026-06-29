@@ -605,7 +605,7 @@ public final class OAuthTokenManager {
       TOKEN_CACHE.put(user, refreshed);
       CURRENT_ACCESS_TOKEN.set(refreshed.getAccessToken());
       fallbackAccessToken = refreshed.getAccessToken();
-      org.apache.ozone.AgentLog.debug(
+      org.apache.ozone.AgentLog.info(
           "Proactively refreshed OAuth token for: " + user);
       // Chain the next refresh.
       scheduleProactiveRefreshIfEnabled(user, refreshed);
