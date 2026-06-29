@@ -195,6 +195,7 @@ services:
       - ../..:/opt/ozone
       - ./hive-site.xml:/opt/hive/conf/hive-site.xml
       - ./core-site.xml:/opt/hive/conf/core-site.xml
+      - ./core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
       - ./ozone-site.xml:/opt/hive/conf/ozone-site.xml
       # Postgres JDBC driver — fetched by test.sh into ./jars/.
       # Mounted into Hive's lib so schematool can load Driver early
@@ -212,9 +213,32 @@ services:
     image: apache/hive:${HIVE_VERSION}
     hostname: hiveserver2
     dns_search: .
-    ports:
-      - 10000:10000
-      - 10002:10002
+    user: "0:0"
+    # In Hive 4 local-mode Tez, DagUtils enforces that the session
+    # staging dir on the local filesystem is owned by either the
+    # submitter (e.g. "testuser") or the service UGI ("hms"). The
+    # apache/hive image's default OS user is "hive" so the check
+    # would fail under doAs. We start as root, useradd the
+    # hms/testuser/hadoop OS users so chown can name them, chown
+    # /tmp/hive*, then drop privileges via su to "hms" which keeps
+    # OAuth identity and POSIX owner aligned.
+    entrypoint:
+      - bash
+      - -lc
+      - |
+        set -e
+        for u in hms testuser hadoop; do
+          id -u "$$u" >/dev/null 2>&1 || useradd -m -s /bin/bash -u "$$(awk -v n=$$u 'BEGIN{print n=="hms"?1100:(n=="testuser"?1101:1102)}')" "$$u"
+        done
+        mkdir -p /tmp/hive /tmp/hive-local /home/hms /home/hms/wd
+        chown -R hms:hms /tmp/hive /tmp/hive-local /home/hms
+        chown -R hms:hms /opt/hive/conf 2>/dev/null || true
+        # /opt/tez/conf is read-only from the host bind mount but
+        # /opt/tez/lib needs to be readable by hms (it already is).
+        # Tez local mode creates ./tez-local-cache* in $PWD, so we
+        # cd into hms's home before the JVM starts.
+        cd /home/hms/wd
+        exec su -p -c "cd /home/hms/wd && /entrypoint.sh" hms
     env_file:
       - docker-config
     environment:
@@ -239,6 +263,7 @@ services:
       - ../..:/opt/ozone
       - ./hive-site.xml:/opt/hive/conf/hive-site.xml
       - ./core-site.xml:/opt/hive/conf/core-site.xml
+      - ./core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
       - ./ozone-site.xml:/opt/hive/conf/ozone-site.xml
       - ./tez-site.xml:/opt/tez/conf/tez-site.xml
       - ./jars/postgresql.jar:/opt/hive/lib/postgresql.jar

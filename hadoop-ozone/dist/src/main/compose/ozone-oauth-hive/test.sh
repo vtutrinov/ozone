@@ -108,8 +108,15 @@ TEST_TABLE="greetings"
 WAREHOUSE="ofs://om/volume1/bucket1/warehouse"
 
 beeline_exec() {
+  # Connect as testuser so HiveServer2's doAs path kicks in
+  # (hive.server2.enable.doAs=true). The OAuth-only suite runs HS2
+  # with hive.server2.authentication=NONE, so the -n username arg
+  # is taken on trust — no client-side OAuth handshake to beeline.
+  # HMS then proxies the operation to OM as testuser via the
+  # hadoop.proxyuser.hms.* chain in core-site.xml.
   docker-compose exec -T -e HOME=/tmp hiveserver2 \
     /opt/hive/bin/beeline -u "jdbc:hive2://localhost:10000/default" \
+    -n testuser \
     --silent=true -e "$1" 2>&1 | tail -5
 }
 
@@ -132,9 +139,14 @@ fi
 
 # Verify Tez actually drove the query (not a legacy fallback engine).
 # Hive 4 logs "tez.TezTask" + a TezSession id for every Tez-executed
-# query; we grep hive.log inside HS2.
+# query; we grep hive.log inside HS2. The log path follows the
+# container's runtime HOME — /tmp/<user>/hive.log — and that user
+# became hms (not hive) once the entrypoint wrapper kicked in for
+# the doAs followup. Glob the whole /tmp tree so the path stays
+# correct regardless of which user owns the JVM.
 echo "Asserting Tez executed at least one DAG..."
-TEZ_HITS=$(docker exec ozone-oauth-hive-hiveserver2-1 grep -c "tez.TezTask" /tmp/hive/hive.log || echo 0)
+TEZ_HITS=$(docker exec ozone-oauth-hive-hiveserver2-1 bash -c "grep -hc 'tez.TezTask' /tmp/*/hive.log 2>/dev/null | head -1" 2>/dev/null)
+TEZ_HITS=${TEZ_HITS:-0}
 echo "  tez.TezTask log hits: ${TEZ_HITS}"
 if [[ "${TEZ_HITS}" -lt 1 ]]; then
   echo "FAIL: Tez did not run any DAG — engine likely fell back to MR/local."

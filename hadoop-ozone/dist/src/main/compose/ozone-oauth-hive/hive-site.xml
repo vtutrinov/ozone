@@ -129,9 +129,15 @@
     <name>hive.server2.authentication.kerberos.keytab</name>
     <value>/etc/security/keytabs/hms.keytab</value>
   </property>
+  <!-- doAs ON: HS2 runs each query as the connecting user (via
+       UGI.doAs), so Ozone writes get the client's identity as
+       owner instead of the HS2 service principal. The proxyuser
+       chain (hms is allowed to impersonate any user per
+       core-site.xml's hadoop.proxyuser.hms.*) lets HMS forward
+       the proxied identity to OM. -->
   <property>
     <name>hive.server2.enable.doAs</name>
-    <value>false</value>
+    <value>true</value>
   </property>
 
   <!-- Tez execution engine. mr was removed in Hive 4 and would
@@ -142,9 +148,49 @@
     <name>hive.execution.engine</name>
     <value>tez</value>
   </property>
+
+  <!-- HMS proxy-user config. Same settings live in core-site.xml
+       too, but Hive 4's classpath puts /opt/hadoop/etc/hadoop
+       ahead of /opt/hive/conf, and the image's default
+       /opt/hadoop/etc/hadoop/core-site.xml is empty — so the
+       proxyuser entries effectively get masked out. Repeat them
+       here so the Hive Configuration always sees them. -->
+  <property>
+    <name>hadoop.proxyuser.hms.hosts</name>
+    <value>*</value>
+  </property>
+  <property>
+    <name>hadoop.proxyuser.hms.groups</name>
+    <value>*</value>
+  </property>
+  <property>
+    <name>hadoop.proxyuser.hms.users</name>
+    <value>*</value>
+  </property>
   <!-- Tez session reuse — keeps the AM warm across queries. -->
   <property>
     <name>hive.tez.exec.print.summary</name>
     <value>true</value>
+  </property>
+
+  <!-- Hive scratch lives on the LOCAL filesystem (file:// scheme)
+       inside the HS2 container, not on ofs://. Two reasons:
+         1. Tez in local mode wants its log/working dir under a
+            local path (file:/.../_tez_session_dir/<id>/.tez/
+            <app>_wd/localmode-log-dir) and stumbles when given an
+            ofs path.
+         2. The default /tmp/hive lands on ofs://om/tmp/hive in
+            this cluster (fs.defaultFS=ofs://om), and ofs decodes
+            that as volume=tmp, bucket=hive — which doesn't exist.
+       Real query output still goes to ofs:// (the database
+       LOCATION in CREATE DATABASE is on Ozone); only scratch is
+       container-local. -->
+  <property>
+    <name>hive.exec.scratchdir</name>
+    <value>file:///tmp/hive</value>
+  </property>
+  <property>
+    <name>hive.exec.local.scratchdir</name>
+    <value>/tmp/hive-local</value>
   </property>
 </configuration>

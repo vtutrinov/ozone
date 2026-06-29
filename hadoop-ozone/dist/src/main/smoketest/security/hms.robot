@@ -84,3 +84,13 @@ INSERT Wrote A Data File On Ozone
     ${output} =    Execute    OZONE_AGENT_LOG_LEVEL=OFF ozone fs -ls ${WAREHOUSE}/${TEST_DB}.db/${TEST_TABLE}/ 2>&1 | grep -v staging | grep -c "000000_0" || true
     Should Be Equal As Integers    ${output}    1
 
+Data File Owner Is testuser Not HMS
+    [documentation]    test.sh connected to HS2 with -n testuser
+    ...                and hive.server2.enable.doAs=true. The OFS
+    ...                file owner must be testuser (the proxied
+    ...                client), not hms (the HS2 service identity).
+    ...                Proves doAs flows from beeline -> HS2 ->
+    ...                HMS -> OM all the way to the block write.
+    ${output} =    Execute    OZONE_AGENT_LOG_LEVEL=OFF ozone fs -ls ${WAREHOUSE}/${TEST_DB}.db/${TEST_TABLE}/ 2>&1 | grep -v staging | grep "000000_0" | awk '{print $3}'
+    Should Be Equal    ${output}    testuser
+

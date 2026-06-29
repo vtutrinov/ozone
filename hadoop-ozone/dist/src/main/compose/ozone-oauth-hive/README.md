@@ -50,6 +50,13 @@ materialises the warehouse paths on Ozone (`ofs://om/volume1/bucket1
   90-second access-token TTL. The agent's proactive refresher must
   swap in a fresh token mid-flight; the smoketest asserts at least
   one `"Proactively refreshed OAuth token"` line in HS2's docker log
+- **HMS impersonation (`doAs`)**: beeline connects as `testuser`
+  with `hive.server2.enable.doAs=true`. HS2 (running as `hms`)
+  does `UGI.doAs(testuser)` for the operation; HMS proxies
+  through to OM as `testuser via hms` (per
+  `hadoop.proxyuser.hms.*=*` in `docker-config`). The resulting
+  Ozone data file is owned by `testuser`, NOT `hms` — proven by
+  a robot assertion on `ozone fs -ls` output
 - `DROP DATABASE CASCADE` removes everything cleanly
 
 ## Run
@@ -78,7 +85,5 @@ run (gitignored). No KDC needed.
 
 ## Followups (separate commits)
 
-- **HMS impersonation (`doAs`)** — verify ACL is checked against
-  the client identity, not HMS's service identity.
 - **Re-enable `hdds.grpc.tls.enabled`** for the Hive containers
   via a CA-distribution sidecar — see Caveats above.

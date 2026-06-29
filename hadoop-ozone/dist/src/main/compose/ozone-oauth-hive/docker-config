@@ -71,6 +71,16 @@ HDFS-SITE.XML_dfs.datanode.address=0.0.0.0:1019
 HDFS-SITE.XML_dfs.datanode.http.address=0.0.0.0:1012
 CORE-SITE.XML_dfs.data.transfer.protection=authentication
 CORE-SITE.XML_hadoop.security.authentication=kerberos
+
+# Proxy-user config for the Hive Metastore service identity.
+# HMS authenticates to OM as user "hms" via OAuth and then does
+# UGI.doAs(<client-user>) when forwarding HS2 client requests.
+# OM checks these settings to allow hms to impersonate other users.
+# *=* is appropriate for an OAuth-only test suite; production
+# would enumerate the real submitter pool.
+CORE-SITE.XML_hadoop.proxyuser.hms.hosts=*
+CORE-SITE.XML_hadoop.proxyuser.hms.groups=*
+CORE-SITE.XML_hadoop.proxyuser.hms.users=*
 # Standard Hadoop auth_to_local: strip the realm only if it matches
 # the local Kerberos realm. We pick EXAMPLE.COM (matching the cluster
 # service principals below) as the Keycloak realm name so the JWTs
