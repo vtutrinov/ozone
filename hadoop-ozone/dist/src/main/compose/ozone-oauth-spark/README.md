@@ -39,6 +39,10 @@ End-to-end Spark workloads against `ofs://`:
   three rows, runs `SELECT COUNT(*) = 3`. Proves the end-to-end
   write path: Spark driver -> OzoneClient -> OM (OAuth) -> DN
   block write (TLS) -> ofs commit.
+- **spark-shell REPL**: test.sh pipes a Scala snippet into
+  `spark-shell` and asserts the printed `SHELL_RESULT_COUNT=4`.
+  Verifies the REPL path through the agent is equivalent to
+  batch `spark-submit`.
 - Robot assertion that the resulting Parquet part files exist on
   Ozone and are owned by `spark` (the OAuth identity), not by
   whichever OS user the executor JVM happens to be.
@@ -62,6 +66,9 @@ No KDC needed. The first run pulls `apache/spark:3.5.3`.
 - **Standalone mode**, not YARN. Lets us run Spark with a single
   master + worker without bringing up RM/NM/JHS. Spark on YARN
   with OAuth is a separate (larger) integration.
-- **No spark-shell smoketest yet** — the batch path through
-  `spark-submit` + `spark-sql` already covers the same OAuth
-  driver/executor flow. The REPL probe is tracked as a followup.
+- **spark-shell** REPL probe is included too: test.sh pipes a
+  small Scala snippet (`Seq.toDF.write.parquet → read.parquet
+  → count`) into `spark-shell` and asserts the printed
+  `SHELL_RESULT_COUNT=4`. The REPL loads the same agent via
+  `spark.driver.extraJavaOptions`, so it exercises the same
+  OAuth-authenticated driver path as `spark-submit` does.

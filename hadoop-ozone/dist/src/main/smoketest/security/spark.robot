@@ -52,3 +52,13 @@ Data File Owner Is Spark
     ...                "spark"; the Ozone file owner must match.
     ${output} =    Execute    OZONE_AGENT_LOG_LEVEL=OFF ozone fs -ls ${WORKSPACE}/spark_oauth/ 2>&1 | grep -v staging | grep "part-" | head -1 | awk '{print $3}'
     Should Be Equal    ${output}    spark
+
+spark-shell REPL Wrote Parquet On Ozone
+    [documentation]    test.sh piped a Scala snippet into
+    ...                spark-shell that writes 4 rows + reads them
+    ...                back. Confirms the REPL goes through the
+    ...                same agent + OzoneClient flow as batch
+    ...                spark-submit. Robot just asserts the
+    ...                _SUCCESS marker is present.
+    ${output} =    Execute    OZONE_AGENT_LOG_LEVEL=OFF ozone fs -ls ${WORKSPACE}/shell_oauth/ 2>&1 | grep -v staging | grep -c "_SUCCESS"
+    Should Be Equal As Integers    ${output}    1

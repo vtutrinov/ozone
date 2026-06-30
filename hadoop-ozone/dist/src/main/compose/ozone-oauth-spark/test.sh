@@ -105,10 +105,33 @@ if ! grep -qE "^3$" /tmp/spark-sql.out; then
   exit 1
 fi
 
+# ----- spark-shell REPL probe -----
+# Pipes a small Scala snippet into spark-shell's stdin. The shell
+# initialises a SparkContext under the standalone master, writes a
+# 4-row parquet to ofs://, reads it back, and println's the count.
+# spark-shell ALSO loads the agent via
+# spark.driver.extraJavaOptions, so this is the REPL counterpart
+# to the spark-submit batch probe.
+SHELL_WORKSPACE="${WORKSPACE}/shell_oauth"
+echo "Running spark-shell REPL round-trip to ${SHELL_WORKSPACE}..."
+cat <<EOF | docker-compose exec -T spark-master /opt/spark/bin/spark-shell --master spark://spark-master:7077 > /tmp/spark-shell.out 2>&1 || true
+val data = Seq((1,"a"), (2,"b"), (3,"c"), (4,"d"))
+val df = spark.createDataFrame(data).toDF("n","label")
+df.write.mode("overwrite").parquet("${SHELL_WORKSPACE}")
+val cnt = spark.read.parquet("${SHELL_WORKSPACE}").count()
+println(s"SHELL_RESULT_COUNT=\$cnt")
+:quit
+EOF
+grep -E "SHELL_RESULT_COUNT|Exception" /tmp/spark-shell.out | head -3
+if ! grep -qE "SHELL_RESULT_COUNT=4" /tmp/spark-shell.out; then
+  echo "FAIL: spark-shell REPL did not print SHELL_RESULT_COUNT=4"
+  exit 1
+fi
+
 # Robot tests run inside scm — they verify the Ozone-side state.
 execute_robot_test scm -v WORKSPACE:"${WORKSPACE}" security/spark.robot
 
-echo "Teardown: drop the spark_oauth parquet dir..."
+echo "Teardown: drop the spark-test workspace..."
 docker-compose exec -T scm bash -c "
   OZONE_AGENT_LOG_LEVEL=OFF ozone fs -rm -r -f -skipTrash ${WORKSPACE} 2>&1 | tail -1
 "
