@@ -1,0 +1,214 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ============================================================
+# Secure Ozone (OAuth-only) + Apache Spark Standalone cluster.
+#
+# Same OAuth-via-Keycloak base as ozone-oauth/. Adds a Spark
+# standalone master + worker pair so spark-submit / spark-shell
+# can read/write ofs:// keys via the security-auth-agent's
+# OAuth-authenticated UGI.
+# ============================================================
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    hostname: keycloak
+    dns_search: .
+    ports:
+      - 8080:8080
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./keycloak-realm.json:/opt/keycloak/data/import/ozone-realm.json
+    command: ["start-dev", "--import-realm", "--health-enabled=true"]
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  scm:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: scm
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+    env_file:
+      - docker-config
+    environment:
+      ENSURE_SCM_INITIALIZED: /data/metadata/scm/current/VERSION
+      OZONE-SITE.XML_hdds.scm.safemode.min.datanode: "${OZONE_SAFEMODE_MIN_DATANODES:-1}"
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: scm
+      AUTH_PASSWORD: scm
+    command: ["/opt/hadoop/bin/ozone","scm"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  om:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: om
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+    env_file:
+      - docker-config
+    environment:
+      WAITFOR: scm:9876
+      ENSURE_OM_INITIALIZED: /data/metadata/om/current/VERSION
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: om
+      AUTH_PASSWORD: om
+    command: ["/opt/hadoop/bin/ozone","om"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  datanode:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: dn
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+    env_file:
+      - docker-config
+    environment:
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: dn
+      AUTH_PASSWORD: dn
+    command: ["/opt/hadoop/bin/ozone","datanode"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  s3g:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: s3g
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+    ports:
+      - 9878:9878
+    env_file:
+      - docker-config
+    environment:
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: s3g
+      AUTH_PASSWORD: s3g
+    command: ["/opt/hadoop/bin/ozone","s3g"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  recon:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: recon
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+    ports:
+      - 9888:9888
+    env_file:
+      - docker-config
+    environment:
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: recon
+      AUTH_PASSWORD: recon
+    command: ["/opt/hadoop/bin/ozone","recon"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  # ---- Spark Standalone cluster ----
+
+  spark-master:
+    image: apache/spark:${SPARK_VERSION}
+    hostname: spark-master
+    dns_search: .
+    ports:
+      - 7077:7077
+      - 8081:8081
+    user: "0:0"
+    # Spark runs as the image-default user (spark / 185); the agent
+    # writes per-user state under $HOME. Easiest to run as root for
+    # the test rig; production would set up an hms-like user.
+    volumes:
+      - ../..:/opt/ozone
+      - ./ozone-site.xml:/opt/spark/conf/ozone-site.xml
+      - ./core-site.xml:/opt/spark/conf/core-site.xml
+      - ./spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_MASTER_HOST: spark-master
+      SPARK_MASTER_PORT: 7077
+      SPARK_MASTER_WEBUI_PORT: 8081
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: spark
+      AUTH_PASSWORD: spark
+      SPARK_DAEMON_JAVA_OPTS: >-
+        -javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+        -Djava.security.krb5.realm=EXAMPLE.COM
+        -Djava.security.krb5.kdc=kdc.example.com
+      SPARK_DIST_CLASSPATH: /opt/ozone/share/ozone/lib/ozone-filesystem-hadoop3-${HDDS_VERSION}.jar
+    command: ["/opt/spark/sbin/start-master.sh"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      om:
+        condition: service_started
+
+  spark-worker:
+    image: apache/spark:${SPARK_VERSION}
+    hostname: spark-worker
+    dns_search: .
+    user: "0:0"
+    volumes:
+      - ../..:/opt/ozone
+      - ./ozone-site.xml:/opt/spark/conf/ozone-site.xml
+      - ./core-site.xml:/opt/spark/conf/core-site.xml
+      - ./spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 1g
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: spark
+      AUTH_PASSWORD: spark
+      SPARK_DAEMON_JAVA_OPTS: >-
+        -javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+        -Djava.security.krb5.realm=EXAMPLE.COM
+        -Djava.security.krb5.kdc=kdc.example.com
+      SPARK_DIST_CLASSPATH: /opt/ozone/share/ozone/lib/ozone-filesystem-hadoop3-${HDDS_VERSION}.jar
+    command: ["/opt/spark/sbin/start-worker.sh", "spark://spark-master:7077"]
+    depends_on:
+      spark-master:
+        condition: service_started
