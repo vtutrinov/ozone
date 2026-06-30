@@ -69,51 +69,23 @@ OZONE_REPLICATION_FACTOR=3 ./test.sh
 `test.sh` will fetch the postgres JDBC driver to `./jars/` on first
 run (gitignored). No KDC needed.
 
-## Caveats
+## Notes
 
-- **`hdds.grpc.tls.enabled=false`** in this suite's docker-config.
-  Default secure-cluster setting puts TLS on the client→DN Ratis
-  gRPC channel (DataNode listens with TLS on port 9856 by default
-  when this is on). The apache/hive image isn't an ozone-runner:
-  it has no SCM-issued certs and no truststore, so the TLS
-  handshake closes silently and `INSERT` hangs at 67% map with
-  `UNAVAILABLE: Network closed for unknown reason`.
-
-  The obvious fixes don't work for an OAuth-only client:
-    - **bind-mount SCM's root CA + point at it via config**: there
-      is no client-side truststore config key. The Ozone client
-      builds its trust manager programmatically in
-      `RpcClient.createXceiverClientFactory()`.
-    - **JVM cacerts**: with `ozone.security.enabled=true`
-      `RpcClient` always builds a non-null `ClientTrustManager`
-      and calls `SslContextBuilder.trustManager(...)` explicitly,
-      so Netty never falls back to the JVM default truststore.
-      Verified experimentally — `keytool -import` of SCM's root +
-      sub CAs into the Hive container's `$JAVA_HOME/lib/security/
-      cacerts` doesn't change anything; the channel still closes.
-    - **auto-fetch from OM**: `ClientTrustManager` is supposed to
-      pull the CA chain from OM via `getServiceInfo().provideCACerts()`
-      lazily. In our setup that path either returns empty or
-      isn't being triggered before the first DN gRPC connection;
-      the TLS handshake fails before any error surfaces in the
-      logs.
-
-  We drop transport TLS here; block-token / container-token auth
-  at the application layer (`hdds.block.token.enabled=true`,
-  `hdds.container.token.enabled=true`) is still on, so writes
-  remain gated by the OAuth-derived UGI's permission. Acceptable
-  for an OAuth-only test suite with no KDC.
-
-  Proper fix would extend the security-auth-agent with a
-  `CACertificateProvider` interceptor: read the root CA from a
-  bind-mounted path and inject it into `ClientTrustManager` via
-  ByteBuddy at premain. Tracked as a followup.
+- **TLS on the client→DN Ratis gRPC channel** is on
+  (`hdds.grpc.tls.enabled=true` both in `docker-config` for the
+  cluster side and in `ozone-site.xml` for the Hive containers).
+  Without the client-side flag, the Ozone client defaults to
+  plaintext gRPC against a TLS-listening DN port, the handshake
+  closes silently, and `INSERT` hangs at 67% map with
+  `UNAVAILABLE: Network closed for unknown reason`. The
+  ozone-runner containers pick up the cluster setting from
+  envtoconf, but the Hive containers don't run envtoconf — they
+  read the bind-mounted `ozone-site.xml` directly, which has to
+  carry the flag. CA distribution is handled by Ozone itself:
+  `ClientTrustManager` fetches the chain from OM via
+  `getServiceInfo().provideCACerts()`, so no truststore mount or
+  cacerts import is needed.
 
 ## Followups (separate commits)
 
-- **Re-enable `hdds.grpc.tls.enabled`** — would need an agent-side
-  `CACertificateProvider` interceptor (ByteBuddy-injected at
-  premain) that reads SCM's root CA from a bind-mounted path and
-  hands it to `ClientTrustManager` in the Ozone client. The
-  shallower fixes (mount + config key, JVM cacerts) don't work —
-  see Caveats above for the analysis.
+(none open)

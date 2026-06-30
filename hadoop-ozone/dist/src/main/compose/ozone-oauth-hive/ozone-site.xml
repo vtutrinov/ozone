@@ -44,4 +44,15 @@
     <name>ozone.administrators</name>
     <value>*</value>
   </property>
+  <!-- TLS on the client→DN Ratis gRPC channel. The cluster-side
+       containers (OM/SCM/DN) set this via envtoconf from
+       docker-config; the Hive containers don't run envtoconf so
+       this client-side flag must be set explicitly here. Without
+       it the client defaults to plaintext gRPC against a TLS-on
+       DN port, the handshake closes silently, and writes fail
+       with "UNAVAILABLE: Network closed for unknown reason". -->
+  <property>
+    <name>hdds.grpc.tls.enabled</name>
+    <value>true</value>
+  </property>
 </configuration>
