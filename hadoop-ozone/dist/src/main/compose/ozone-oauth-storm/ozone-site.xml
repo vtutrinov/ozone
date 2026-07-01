@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one
+  or more contributor license agreements.  See the NOTICE file
+  distributed with this work for additional information
+  regarding copyright ownership.  The ASF licenses this file
+  to you under the Apache License, Version 2.0 (the
+  "License"); you may not use this file except in compliance
+  with the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+-->
+<!--
+  Minimal Ozone client config for the HMS container. The Hive
+  image doesn't run envtoconf.py, so we ship this file pre-built
+  with the OM/SCM endpoints HMS needs to address ofs:// paths.
+-->
+<configuration>
+  <property>
+    <name>ozone.om.address</name>
+    <value>om:9862</value>
+  </property>
+  <property>
+    <name>ozone.scm.client.address</name>
+    <value>scm:9860</value>
+  </property>
+  <property>
+    <name>ozone.scm.names</name>
+    <value>scm</value>
+  </property>
+  <property>
+    <name>ozone.security.enabled</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>hdds.scm.kerberos.principal</name>
+    <value>scm/scm@EXAMPLE.COM</value>
+  </property>
+  <property>
+    <name>ozone.om.kerberos.principal</name>
+    <value>om/om@EXAMPLE.COM</value>
+  </property>
+  <property>
+    <name>ozone.administrators</name>
+    <value>*</value>
+  </property>
+  <!-- TLS on the client→DN Ratis gRPC channel. The cluster-side
+       containers (OM/SCM/DN) set this via envtoconf from
+       docker-config; the Hive containers don't run envtoconf so
+       this client-side flag must be set explicitly here. Without
+       it the client defaults to plaintext gRPC against a TLS-on
+       DN port, the handshake closes silently, and writes fail
+       with "UNAVAILABLE: Network closed for unknown reason". -->
+  <property>
+    <name>hdds.grpc.tls.enabled</name>
+    <value>true</value>
+  </property>
+</configuration>

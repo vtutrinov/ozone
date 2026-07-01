@@ -1,0 +1,32 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Bind-mounted at /conf/storm.yaml on each Storm container.
+# Points nimbus/supervisor/ui at ZooKeeper and each other.
+
+storm.zookeeper.servers:
+  - "zookeeper"
+nimbus.seeds:
+  - "nimbus"
+
+storm.local.dir: "/data/storm"
+supervisor.slots.ports:
+  - 6700
+  - 6701
+
+# Storm's UI listens on 8080 by default; the compose file remaps
+# to 8083 on the host to avoid clashing with the Spark UI (8081).
+ui.port: 8080
+
+# Give topologies a bit more room; the default 128m worker heap
+# is too small for HdfsBolt bringing along the ozone-filesystem
+# jar and all its transitive Hadoop deps on the classpath.
+worker.heap.memory.mb: 768
+topology.worker.max.heap.size.mb: 768

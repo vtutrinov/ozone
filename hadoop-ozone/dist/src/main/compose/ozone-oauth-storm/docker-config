@@ -1,0 +1,190 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ============================================================
+# This is a SECURE config identical to ozonesecure, but
+# without a KDC. The security-auth-agent intercepts all
+# Kerberos login calls and replaces them with OAuth via
+# Keycloak. If the agent fails to intercept, Kerberos auth
+# will fail (no KDC) — proving the interception works.
+# ============================================================
+
+CORE-SITE.XML_fs.defaultFS=ofs://om
+CORE-SITE.XML_fs.trash.interval=1
+
+OZONE-SITE.XML_ozone.om.address=om
+OZONE-SITE.XML_ozone.om.http-address=om:9874
+OZONE-SITE.XML_ozone.scm.http-address=scm:9876
+OZONE-SITE.XML_ozone.scm.container.size=1GB
+OZONE-SITE.XML_ozone.scm.pipeline.creation.interval=30s
+OZONE-SITE.XML_ozone.scm.pipeline.owner.container.count=1
+OZONE-SITE.XML_ozone.scm.ec.pipeline.minimum=1
+OZONE-SITE.XML_ozone.scm.names=scm
+OZONE-SITE.XML_ozone.scm.datanode.id.dir=/data/metadata
+OZONE-SITE.XML_ozone.scm.block.client.address=scm
+OZONE-SITE.XML_ozone.metadata.dirs=/data/metadata
+OZONE-SITE.XML_ozone.handler.type=distributed
+OZONE-SITE.XML_ozone.scm.client.address=scm
+OZONE-SITE.XML_hdds.block.token.enabled=true
+OZONE-SITE.XML_hdds.container.token.enabled=true
+OZONE-SITE.XML_hdds.grpc.tls.enabled=true
+OZONE-SITE.XML_ozone.server.default.replication=1
+OZONE-SITE.XML_ozone.datanode.pipeline.limit=1
+OZONE-SITE.XML_hdds.scmclient.max.retry.timeout=30s
+OZONE-SITE.XML_ozone.http.basedir=/tmp/ozone_http
+
+OZONE-SITE.XML_ozone.recon.om.snapshot.task.interval.delay=1m
+OZONE-SITE.XML_ozone.recon.db.dir=/data/metadata/recon
+OZONE-SITE.XML_ozone.recon.om.snapshot.task.initial.delay=20s
+OZONE-SITE.XML_ozone.recon.address=recon:9891
+
+# --- Security: ENABLED (same as ozonesecure) ---
+OZONE-SITE.XML_ozone.security.enabled=true
+OZONE-SITE.XML_ozone.acl.enabled=true
+OZONE-SITE.XML_ozone.acl.authorizer.class=org.apache.hadoop.ozone.security.acl.OzoneNativeAuthorizer
+# Wildcard: any authenticated user can create volumes. The smoketest
+# runs `createmrenv.robot` from the scm container (CLI runs as `scm`
+# per its AUTH_LOGIN), and submits MR jobs from rm with submitter
+# `hadoop` (via USER_PREFIX) — both need volume-create privilege to
+# bring up the test fixtures. Tighten this for production deployments.
+OZONE-SITE.XML_ozone.administrators=*
+OZONE-SITE.XML_ozone.s3.administrators="testuser,s3g"
+OZONE-SITE.XML_ozone.recon.administrators="testuser2"
+
+OZONE-SITE.XML_hdds.datanode.dir=/data/hdds
+OZONE-SITE.XML_hdds.datanode.volume.min.free.space=100MB
+OZONE-SITE.XML_hdds.datanode.volume.min.free.space.percent=0
+HDFS-SITE.XML_dfs.datanode.address=0.0.0.0:1019
+HDFS-SITE.XML_dfs.datanode.http.address=0.0.0.0:1012
+CORE-SITE.XML_dfs.data.transfer.protection=authentication
+CORE-SITE.XML_hadoop.security.authentication=kerberos
+
+# Proxy-user config for the Spark service identity. Storm driver
+# / executor JVMs run as user "spark" (per AUTH_LOGIN); when a job
+# is submitted through storm submit on behalf of another user OM
+# checks these to allow storm to impersonate them. *=* is fine for
+# the test suite; production would enumerate the real submitter
+# pool.
+CORE-SITE.XML_hadoop.proxyuser.storm.hosts=*
+CORE-SITE.XML_hadoop.proxyuser.storm.groups=*
+CORE-SITE.XML_hadoop.proxyuser.storm.users=*
+# Standard Hadoop auth_to_local: strip the realm only if it matches
+# the local Kerberos realm. We pick EXAMPLE.COM (matching the cluster
+# service principals below) as the Keycloak realm name so the JWTs
+# we issue carry iss=http://keycloak:8080/realms/EXAMPLE.COM, and the
+# agent's OAuthPrincipalBuilder derives the same EXAMPLE.COM realm
+# for the synthesized service/host@REALM principals — making DEFAULT
+# strip the realm correctly for both Kerberos-shaped and OAuth-shaped
+# principals.
+#
+# Alternative if you want to keep an arbitrary Keycloak realm name
+# (e.g. "ozone"): pass `auth-kerberos-realm=EXAMPLE.COM` in the
+# agent args (OZONE_OPTS / HADOOP_OPTS -javaagent params). The
+# agent then uses that realm in the synthesized principal regardless
+# of what the JWT iss claim says — same end result with one knob.
+CORE-SITE.XML_hadoop.security.auth_to_local="DEFAULT"
+
+# --- Kerberos principals (keytab files don't exist — no KDC) ---
+# The agent intercepts loginUserFromKeytab() BEFORE Hadoop reads these.
+# If interception fails, Kerberos login fails (no KDC) = test proves agent works.
+OZONE-SITE.XML_hdds.scm.kerberos.principal=scm/scm@EXAMPLE.COM
+OZONE-SITE.XML_hdds.scm.kerberos.keytab.file=/etc/security/keytabs/scm.keytab
+OZONE-SITE.XML_ozone.om.kerberos.principal=om/om@EXAMPLE.COM
+OZONE-SITE.XML_ozone.om.kerberos.keytab.file=/etc/security/keytabs/om.keytab
+OZONE-SITE.XML_ozone.recon.kerberos.keytab.file=/etc/security/keytabs/recon.keytab
+OZONE-SITE.XML_ozone.recon.kerberos.principal=recon/recon@EXAMPLE.COM
+OZONE-SITE.XML_ozone.s3g.kerberos.keytab.file=/etc/security/keytabs/s3g.keytab
+OZONE-SITE.XML_ozone.s3g.kerberos.principal=s3g/s3g@EXAMPLE.COM
+OZONE-SITE.XML_hdds.datanode.kerberos.principal=dn/dn@EXAMPLE.COM
+OZONE-SITE.XML_hdds.datanode.kerberos.keytab.file=/etc/security/keytabs/dn.keytab
+
+OZONE-SITE.XML_hdds.scm.replication.thread.interval=5s
+OZONE-SITE.XML_hdds.scm.replication.under.replicated.interval=5s
+OZONE-SITE.XML_hdds.scm.replication.over.replicated.interval=5s
+OZONE-SITE.XML_hdds.scm.wait.time.after.safemode.exit=30s
+OZONE-SITE.XML_ozone.scm.stale.node.interval=30s
+OZONE-SITE.XML_ozone.scm.dead.node.interval=45s
+OZONE-SITE.XML_hdds.heartbeat.interval=5s
+OZONE-SITE.XML_hdds.container.report.interval=60s
+OZONE-SITE.XML_ozone.scm.close.container.wait.duration=5s
+
+# --- HTTP auth: Kerberos configured but intercepted by agent ---
+OZONE-SITE.XML_ozone.security.http.kerberos.enabled=true
+OZONE-SITE.XML_ozone.http.filter.initializers=org.apache.hadoop.security.AuthenticationFilterInitializer
+
+OZONE-SITE.XML_ozone.om.http.auth.type=kerberos
+OZONE-SITE.XML_hdds.scm.http.auth.type=kerberos
+OZONE-SITE.XML_hdds.datanode.http.auth.type=kerberos
+OZONE-SITE.XML_ozone.s3g.http.auth.type=kerberos
+OZONE-SITE.XML_ozone.recon.http.auth.type=kerberos
+
+OZONE-SITE.XML_hdds.scm.http.auth.kerberos.principal=HTTP/scm@EXAMPLE.COM
+OZONE-SITE.XML_hdds.scm.http.auth.kerberos.keytab=/etc/security/keytabs/scm.keytab
+OZONE-SITE.XML_ozone.om.http.auth.kerberos.principal=HTTP/om@EXAMPLE.COM
+OZONE-SITE.XML_ozone.om.http.auth.kerberos.keytab=/etc/security/keytabs/om.keytab
+OZONE-SITE.XML_hdds.datanode.http.auth.kerberos.principal=HTTP/dn@EXAMPLE.COM
+OZONE-SITE.XML_hdds.datanode.http.auth.kerberos.keytab=/etc/security/keytabs/dn.keytab
+OZONE-SITE.XML_ozone.s3g.http.auth.kerberos.keytab=/etc/security/keytabs/s3g.keytab
+OZONE-SITE.XML_ozone.s3g.http.auth.kerberos.principal=HTTP/s3g@EXAMPLE.COM
+OZONE-SITE.XML_ozone.recon.http.auth.kerberos.principal=*
+OZONE-SITE.XML_ozone.recon.http.auth.kerberos.keytab=/etc/security/keytabs/recon.keytab
+
+CORE-SITE.XML_hadoop.http.authentication.simple.anonymous.allowed=false
+CORE-SITE.XML_hadoop.http.authentication.signature.secret.file=/etc/security/http_secret
+CORE-SITE.XML_hadoop.http.authentication.type=kerberos
+CORE-SITE.XML_hadoop.http.authentication.kerberos.principal=HTTP/ozone@EXAMPLE.COM
+CORE-SITE.XML_hadoop.http.authentication.kerberos.keytab=/etc/security/keytabs/HTTP.keytab
+
+CORE-SITE.XML_hadoop.security.authorization=true
+HADOOP-POLICY.XML_ozone.om.security.client.protocol.acl=*
+HADOOP-POLICY.XML_hdds.security.client.datanode.container.protocol.acl=*
+HADOOP-POLICY.XML_hdds.security.client.scm.container.protocol.acl=*
+HADOOP-POLICY.XML_hdds.security.client.scm.block.protocol.acl=*
+HADOOP-POLICY.XML_hdds.security.client.scm.certificate.protocol.acl=*
+HADOOP-POLICY.XML_ozone.security.reconfigure.protocol.acl=*
+
+HDFS-SITE.XML_rpc.metrics.quantile.enable=true
+HDFS-SITE.XML_rpc.metrics.percentiles.intervals=60,300
+
+OZONE_DATANODE_SECURE_USER=root
+JSVC_HOME=/usr/bin
+
+OZONE_CONF_DIR=/etc/hadoop
+OZONE_LOG_DIR=/var/log/hadoop
+
+no_proxy=om,scm,recon,s3g,keycloak,localhost,127.0.0.1
+
+# --- YARN container JVM opts ---
+# Load the agent inside the AM (and map/reduce tasks) so it can:
+#   1. Replace SaslRpcServer KERBEROS handling on the AM's client port
+#      (otherwise MR clients can't get job status — the AM throws
+#      AccessControlException because its UGI lacks a /host@REALM
+#      principal shape).
+#   2. Authenticate outbound RPCs from the AM to OM via OAuth SASL
+#      when no OzoneToken is in scope.
+#
+# Provider is "env" so the agent loads without an interactive flow;
+# the AM doesn't need its own OAuth credentials (it has the
+# OzoneToken propagated from the submitter via UGI credentials).
+#
+# Optional: append `,auth-bundle-creds=true` if you want the
+# client's OAuth access+refresh token bundled into UGI credentials
+# and propagated to the AM (e.g. for long-running jobs that outlive
+# the OzoneToken).
+MAPRED-SITE.XML_yarn.app.mapreduce.am.command-opts=-Xmx1024m -javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-2.2.0-SNAPSHOT.jar=auth-data-provider=env
+MAPRED-SITE.XML_mapreduce.map.java.opts=-javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-2.2.0-SNAPSHOT.jar=auth-data-provider=env
+MAPRED-SITE.XML_mapreduce.reduce.java.opts=-javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-2.2.0-SNAPSHOT.jar=auth-data-provider=env
+
