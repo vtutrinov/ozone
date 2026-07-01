@@ -1,0 +1,218 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ============================================================
+# Secure Ozone (OAuth-only) + Apache Spark Standalone cluster.
+#
+# Same OAuth-via-Keycloak base as ozone-oauth/. Adds a Spark
+# standalone master + worker pair so spark-submit / spark-shell
+# can read/write ofs:// keys via the security-auth-agent's
+# OAuth-authenticated UGI.
+# ============================================================
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    hostname: keycloak
+    dns_search: .
+    ports:
+      - 8080:8080
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./keycloak-realm.json:/opt/keycloak/data/import/ozone-realm.json
+    command: ["start-dev", "--import-realm", "--health-enabled=true"]
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  scm:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: scm
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+    env_file:
+      - docker-config
+    environment:
+      ENSURE_SCM_INITIALIZED: /data/metadata/scm/current/VERSION
+      OZONE-SITE.XML_hdds.scm.safemode.min.datanode: "${OZONE_SAFEMODE_MIN_DATANODES:-1}"
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: scm
+      AUTH_PASSWORD: scm
+    command: ["/opt/hadoop/bin/ozone","scm"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  om:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: om
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+    env_file:
+      - docker-config
+    environment:
+      WAITFOR: scm:9876
+      ENSURE_OM_INITIALIZED: /data/metadata/om/current/VERSION
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: om
+      AUTH_PASSWORD: om
+    command: ["/opt/hadoop/bin/ozone","om"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  datanode:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: dn
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+    env_file:
+      - docker-config
+    environment:
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: dn
+      AUTH_PASSWORD: dn
+    command: ["/opt/hadoop/bin/ozone","datanode"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  s3g:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: s3g
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+    ports:
+      - 9878:9878
+    env_file:
+      - docker-config
+    environment:
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: s3g
+      AUTH_PASSWORD: s3g
+    command: ["/opt/hadoop/bin/ozone","s3g"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  recon:
+    image: ${OZONE_RUNNER_IMAGE}:${OZONE_RUNNER_VERSION}
+    hostname: recon
+    dns_search: .
+    volumes:
+      - ../..:/opt/hadoop
+    ports:
+      - 9888:9888
+    env_file:
+      - docker-config
+    environment:
+      OZONE_OPTS: -javaagent:/opt/hadoop/share/ozone/lib/security-auth-agent-${HDDS_VERSION}.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: recon
+      AUTH_PASSWORD: recon
+    command: ["/opt/hadoop/bin/ozone","recon"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  # ---- Spark Standalone cluster ----
+
+  # ---- Apache Flink session cluster ----
+  #
+  # JobManager + TaskManager pair. Both load the security-auth-agent
+  # via env.java.opts.all (set in FLINK_PROPERTIES). flink run from
+  # the jobmanager container submits to itself, the JobManager hands
+  # tasks to the TaskManager. Both authenticate to Ozone as
+  # user "flink" over OAuth.
+
+  jobmanager:
+    image: apache/flink:${FLINK_VERSION}
+    hostname: jobmanager
+    dns_search: .
+    ports:
+      - 8082:8081  # Flink Web UI (8081 inside container; 8082 outside
+                   #   to avoid clashing with Spark's default)
+    user: "0:0"
+    volumes:
+      - ../..:/opt/ozone
+      - ./ozone-site.xml:/opt/hadoop/etc/hadoop/ozone-site.xml
+      - ./core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
+    environment:
+      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
+      HADOOP_CLASSPATH: /opt/ozone/share/ozone/lib/ozone-filesystem-hadoop3-${HDDS_VERSION}.jar:/opt/ozone/share/ozone/lib/*
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: flink
+      AUTH_PASSWORD: flink
+      # apache/flink docker-entrypoint appends
+      # `jobmanager.rpc.address: $(hostname -f)` when this env is
+      # unset — which on the taskmanager container becomes
+      # "taskmanager" and breaks JM lookup. Pin it here so both
+      # JM and TM point at the JM service name.
+      JOB_MANAGER_RPC_ADDRESS: jobmanager
+    command: ["jobmanager"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      om:
+        condition: service_started
+
+  taskmanager:
+    image: apache/flink:${FLINK_VERSION}
+    hostname: taskmanager
+    dns_search: .
+    user: "0:0"
+    volumes:
+      - ../..:/opt/ozone
+      - ./ozone-site.xml:/opt/hadoop/etc/hadoop/ozone-site.xml
+      - ./core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
+    environment:
+      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
+      HADOOP_CLASSPATH: /opt/ozone/share/ozone/lib/ozone-filesystem-hadoop3-${HDDS_VERSION}.jar:/opt/ozone/share/ozone/lib/*
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: flink
+      AUTH_PASSWORD: flink
+      # apache/flink docker-entrypoint appends
+      # `jobmanager.rpc.address: $(hostname -f)` when this env is
+      # unset — which on the taskmanager container becomes
+      # "taskmanager" and breaks JM lookup. Pin it here so both
+      # JM and TM point at the JM service name.
+      JOB_MANAGER_RPC_ADDRESS: jobmanager
+    command: ["taskmanager"]
+    depends_on:
+      jobmanager:
+        condition: service_started

@@ -1,0 +1,43 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Flink configuration for the ozone-oauth-flink suite.
+#
+# Bind-mounted into /opt/flink/conf/flink-conf.yaml so we get a
+# single, deterministic source of truth instead of relying on
+# FLINK_PROPERTIES env_var processing (which docker-compose was
+# folding our long env.java.opts.all line into a single
+# space-stripped argument, breaking the agent + krb5 sysprops).
+
+jobmanager.rpc.address: jobmanager
+rest.address: jobmanager
+rest.bind-address: 0.0.0.0
+taskmanager.numberOfTaskSlots: 2
+parallelism.default: 2
+jobmanager.memory.process.size: 1024m
+taskmanager.memory.process.size: 1536m
+
+# Every Flink JVM (JobManager, TaskManager, CLI) loads
+# security-auth-agent. The agent's premain replaces UGI's login
+# before Hadoop's UGI.initialize fires, so the
+# hadoop.security.authentication=kerberos requirement
+# (inherited from core-site.xml) is satisfied without a KDC.
+# Krb5 sysprops are still needed so the Hadoop UGI's realm
+# probe ("KrbException: Cannot locate default realm")
+# succeeds during early init, before the agent rewrites the
+# login. Pass them as separate -D args, not concatenated.
+env.java.opts.all: -javaagent:/opt/ozone/share/ozone/lib/security-auth-agent-2.2.0-SNAPSHOT.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both -Djava.security.krb5.realm=EXAMPLE.COM -Djava.security.krb5.kdc=kdc.example.com
+
+# Use parent classloader for user code too — Flink defaults to
+# child-first which would shadow Hadoop classes loaded from
+# HADOOP_CLASSPATH with whatever the user jar bundled. The
+# WordCount example doesn't ship Hadoop, but the Flink runtime
+# needs to load HadoopFileSystem from the parent (system) loader.
+classloader.resolve-order: parent-first

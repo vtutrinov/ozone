@@ -1,0 +1,246 @@
+{
+  "realm": "EXAMPLE.COM",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": false,
+  "requiredActions": [],
+  "defaultDefaultClientScopes": ["web-origins", "acr", "roles", "profile", "email"],
+  "accessTokenLifespan": 90,
+  "ssoSessionIdleTimeout": 600,
+  "ssoSessionMaxLifespan": 3600,
+  "clients": [
+    {
+      "clientId": "ozone-client",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "true"
+      },
+      "redirectUris": ["*"],
+      "webOrigins": ["*"]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "ozone-admin",
+        "description": "Ozone administrator role"
+      },
+      {
+        "name": "ozone-user",
+        "description": "Ozone regular user role"
+      }
+    ]
+  },
+  "requiredCredentials": ["password"],
+  "users": [
+    {
+      "username": "testuser",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "testuser@example.com",
+      "firstName": "Test",
+      "lastName": "User",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "testuser",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    },
+    {
+      "username": "testuser2",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "testuser2@example.com",
+      "firstName": "Test",
+      "lastName": "User2",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "testuser2",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-user"]
+    },
+    {
+      "username": "om",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "om@example.com",
+      "firstName": "Ozone",
+      "lastName": "Manager",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "om",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    },
+    {
+      "username": "scm",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "scm@example.com",
+      "firstName": "Storage",
+      "lastName": "ContainerManager",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "scm",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    },
+    {
+      "username": "dn",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "dn@example.com",
+      "firstName": "Data",
+      "lastName": "Node",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "dn",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    },
+    {
+      "username": "s3g",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "s3g@example.com",
+      "firstName": "S3",
+      "lastName": "Gateway",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "s3g",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    },
+    {
+      "username": "recon",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "recon@example.com",
+      "firstName": "Recon",
+      "lastName": "Service",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "recon",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    },
+    {
+      "username": "hadoop",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "hadoop@example.com",
+      "firstName": "Hadoop",
+      "lastName": "User",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "hadoop",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    },
+    {
+      "username": "rm",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "rm@example.com",
+      "firstName": "YARN",
+      "lastName": "ResourceManager",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "rm",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    },
+    {
+      "username": "nm",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "nm@example.com",
+      "firstName": "YARN",
+      "lastName": "NodeManager",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "nm",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    },
+    {
+      "username": "jhs",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "jhs@example.com",
+      "firstName": "MR",
+      "lastName": "JobHistoryServer",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "jhs",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    },
+    {
+      "username": "flink",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "flink@example.com",
+      "firstName": "Apache",
+      "lastName": "Flink",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "flink",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["ozone-admin"]
+    }
+  ]
+}
