@@ -69,7 +69,7 @@ public class RateLimiterManager {
       while (iter.hasNext()) {
         Table.KeyValue<String, RateLimiterInfo> kv = iter.next();
         RateLimiterInfo info = kv.getValue();
-        register(info);
+        createOrUpdate(info);
         count++;
       }
     }
@@ -205,20 +205,6 @@ public class RateLimiterManager {
     rateLimiterMetrics.updatePeriodMetrics(volume, bucket, type.name(), lastTotal, lastRejected, remainingRatio);
 
     return allowed;
-  }
-
-  private void register(RateLimiterInfo info) {
-    String bucketKey = metadataManager.getBucketKey(
-            info.getVolumeName(), info.getBucketName());
-
-    BucketLimiters limiters = limitersByBucket.computeIfAbsent(
-            bucketKey, k -> new BucketLimiters());
-
-    if (info.getType() == RateLimiterType.READ) {
-      limiters.setReadLimiter(new LeakyBucketRateLimiter(info.getRps()));
-    } else {
-      limiters.setWriteLimiter(new LeakyBucketRateLimiter(info.getRps()));
-    }
   }
 
   @VisibleForTesting

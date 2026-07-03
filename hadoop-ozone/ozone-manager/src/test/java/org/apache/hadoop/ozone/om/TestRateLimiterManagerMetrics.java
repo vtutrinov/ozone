@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.ozone.om;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hadoop.hdds.utils.db.Table;
 import org.apache.hadoop.hdds.utils.db.TableIterator;
 import org.apache.hadoop.ozone.om.helpers.RateLimiterInfo;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.io.IOException;
+import java.util.List;
 
 import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.RateLimiterType.READ;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -159,5 +161,69 @@ public class TestRateLimiterManagerMetrics {
     assertEquals(0, state2.getCurrentTotal());
     assertEquals(0, state2.getCurrentRejected());
     assertEquals(101, state2.getPeriodSecond());
+  }
+
+  @Test
+  public void testLoadFromDbUpdatesCurrentQuotaMetric() {
+    // setup() constructs the manager, which loads one limiter from the mocked DB table.
+    verify(metrics).updateCurrentQuota("vol1", "bucket1", READ.name(), 4);
+  }
+
+  @Test
+  public void testSnapshotAndRestoreRequestCounts() throws IOException {
+    OmRateLimiterMetrics source = new OmRateLimiterMetrics();
+    source.incAllowedRequests("vol1", "bucket1", "READ");
+    source.incAllowedRequests("vol1", "bucket1", "READ");
+    source.incRejectedRequests("vol1", "bucket1", "READ");
+    source.incRejectedRequests("vol2", "bucket2", "WRITE");
+
+    OmRateLimiterMetricsInfo metricsInfo = new OmRateLimiterMetricsInfo();
+    metricsInfo.setRateLimiterMetrics(source.snapshotRequestCounts());
+
+    // Round-trip through JSON the same way OzoneManager persists the rate limiter metrics file.
+    String json = new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(metricsInfo);
+    OmRateLimiterMetricsInfo loaded = new ObjectMapper().readerFor(OmRateLimiterMetricsInfo.class).readValue(json);
+
+    OmRateLimiterMetrics restored = new OmRateLimiterMetrics();
+    // Quota entries mark the limiters as still existing in the DB.
+    restored.updateCurrentQuota("vol1", "bucket1", "READ", 10);
+    restored.updateCurrentQuota("vol2", "bucket2", "WRITE", 20);
+    restored.restoreRequestCounts(loaded.getRateLimiterMetrics());
+
+    List<OmRateLimiterMetricsInfo.RateLimiterMetric> snapshot = restored.snapshotRequestCounts();
+    assertEquals(2, snapshot.size());
+    for (OmRateLimiterMetricsInfo.RateLimiterMetric metric : snapshot) {
+      if ("vol1".equals(metric.getVolume())) {
+        assertEquals("bucket1", metric.getBucket());
+        assertEquals("READ", metric.getType());
+        assertEquals(2, metric.getAllowedRequests());
+        assertEquals(1, metric.getRejectedRequests());
+      } else {
+        assertEquals("vol2", metric.getVolume());
+        assertEquals("bucket2", metric.getBucket());
+        assertEquals("WRITE", metric.getType());
+        assertEquals(0, metric.getAllowedRequests());
+        assertEquals(1, metric.getRejectedRequests());
+      }
+    }
+  }
+
+  @Test
+  public void testRestoreSkipsCountersOfDeletedLimiters() {
+    OmRateLimiterMetrics source = new OmRateLimiterMetrics();
+    source.incAllowedRequests("vol1", "bucket1", "READ");
+    source.incAllowedRequests("vol2", "bucket2", "WRITE");
+    List<OmRateLimiterMetricsInfo.RateLimiterMetric> persisted = source.snapshotRequestCounts();
+
+    // Only vol1/bucket1 still exists after restart; vol2/bucket2 was deleted
+    // after the file was written, so its counters must not be resurrected.
+    OmRateLimiterMetrics restored = new OmRateLimiterMetrics();
+    restored.updateCurrentQuota("vol1", "bucket1", "READ", 10);
+    restored.restoreRequestCounts(persisted);
+
+    List<OmRateLimiterMetricsInfo.RateLimiterMetric> snapshot = restored.snapshotRequestCounts();
+    assertEquals(1, snapshot.size());
+    assertEquals("vol1", snapshot.get(0).getVolume());
+    assertEquals(1, snapshot.get(0).getAllowedRequests());
   }
 }

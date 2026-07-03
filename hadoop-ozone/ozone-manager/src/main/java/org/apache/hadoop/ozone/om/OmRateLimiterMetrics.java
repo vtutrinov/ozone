@@ -27,7 +27,11 @@ import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -58,15 +62,23 @@ public class OmRateLimiterMetrics implements MetricsSource {
           "remaining_quota_ratio",
           "Remaining quota ratio");
 
-  private final ConcurrentMap<LimiterKey, Integer> allowedRequests = new ConcurrentHashMap<>();
-  private final ConcurrentMap<LimiterKey, Integer> rejectedRequests = new ConcurrentHashMap<>();
+  private final ConcurrentMap<LimiterKey, Long> allowedRequests = new ConcurrentHashMap<>();
+  private final ConcurrentMap<LimiterKey, Long> rejectedRequests = new ConcurrentHashMap<>();
   private final ConcurrentMap<LimiterKey, Integer> currentQuota = new ConcurrentHashMap<>();
   private final ConcurrentMap<LimiterKey, Integer> lastPeriodTotalRequests = new ConcurrentHashMap<>();
   private final ConcurrentMap<LimiterKey, Integer> lastPeriodOverLimitRequests = new ConcurrentHashMap<>();
   private final ConcurrentMap<LimiterKey, Double> remainingQuotaRatio = new ConcurrentHashMap<>();
 
   public static OmRateLimiterMetrics create() {
-    OmRateLimiterMetrics omRateLimiterMetrics = new OmRateLimiterMetrics();
+    return register(new OmRateLimiterMetrics());
+  }
+
+  /**
+   * Registers the given instance with the metrics system, keeping its
+   * accumulated counters. Used to re-register after unRegister() on the
+   * OM restart path.
+   */
+  public static OmRateLimiterMetrics register(OmRateLimiterMetrics omRateLimiterMetrics) {
     return OzoneMetricsSystem.instance()
             .register(SOURCE_NAME,
                     "Metrics for Rate Limiters which show number of allowed and rejected requests, " +
@@ -102,6 +114,8 @@ public class OmRateLimiterMetrics implements MetricsSource {
       T value = entry.getValue();
       if (value instanceof Integer) {
         recordBuilder.addGauge(info, (Integer)value);
+      } else if (value instanceof Long) {
+        recordBuilder.addGauge(info, (Long)value);
       } else {
         recordBuilder.addGauge(info, (Double)value);
       }
@@ -110,11 +124,11 @@ public class OmRateLimiterMetrics implements MetricsSource {
   }
 
   public void incAllowedRequests(String volume, String bucket, String type) {
-    allowedRequests.merge(getRateLimiter(volume, bucket, type), 1, Integer::sum);
+    allowedRequests.merge(getRateLimiter(volume, bucket, type), 1L, Long::sum);
   }
 
   public void incRejectedRequests(String volume, String bucket, String type) {
-    rejectedRequests.merge(getRateLimiter(volume, bucket, type), 1, Integer::sum);
+    rejectedRequests.merge(getRateLimiter(volume, bucket, type), 1L, Long::sum);
   }
 
   public void updateCurrentQuota(String volume, String bucket, String type, int rps) {
@@ -146,6 +160,47 @@ public class OmRateLimiterMetrics implements MetricsSource {
 
   private LimiterKey getRateLimiter(String volume, String bucket, String type) {
     return new LimiterKey(volume, bucket, type);
+  }
+
+  /**
+   * Returns a snapshot of allowed/rejected request counters,
+   * to be persisted in the rate limiter metrics file.
+   */
+  public List<OmRateLimiterMetricsInfo.RateLimiterMetric> snapshotRequestCounts() {
+    Set<LimiterKey> keys = new HashSet<>(allowedRequests.keySet());
+    keys.addAll(rejectedRequests.keySet());
+
+    List<OmRateLimiterMetricsInfo.RateLimiterMetric> snapshot = new ArrayList<>(keys.size());
+    for (LimiterKey key : keys) {
+      OmRateLimiterMetricsInfo.RateLimiterMetric metric = new OmRateLimiterMetricsInfo.RateLimiterMetric();
+      metric.setVolume(key.getVolume());
+      metric.setBucket(key.getBucket());
+      metric.setType(key.getType());
+      metric.setAllowedRequests(allowedRequests.getOrDefault(key, 0L));
+      metric.setRejectedRequests(rejectedRequests.getOrDefault(key, 0L));
+      snapshot.add(metric);
+    }
+    return snapshot;
+  }
+
+  /**
+   * Restores allowed/rejected request counters loaded from the rate limiter
+   * metrics file on start. Entries whose limiter no longer exists (deleted
+   * after the file was last written) are skipped; existing limiters are
+   * identified by the quota entries populated from the DB on startup.
+   */
+  public void restoreRequestCounts(List<OmRateLimiterMetricsInfo.RateLimiterMetric> metricsInfoList) {
+    if (metricsInfoList == null) {
+      return;
+    }
+    for (OmRateLimiterMetricsInfo.RateLimiterMetric metric : metricsInfoList) {
+      LimiterKey key = new LimiterKey(metric.getVolume(), metric.getBucket(), metric.getType());
+      if (!currentQuota.containsKey(key)) {
+        continue;
+      }
+      allowedRequests.put(key, metric.getAllowedRequests());
+      rejectedRequests.put(key, metric.getRejectedRequests());
+    }
   }
 
   private enum RateLimiterMetricsInfo implements MetricsInfo {

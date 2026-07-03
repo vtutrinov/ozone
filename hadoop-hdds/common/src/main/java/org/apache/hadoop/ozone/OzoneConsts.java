@@ -371,6 +371,10 @@ public final class OzoneConsts {
   // For OM metrics saving to a file
   public static final String OM_METRICS_FILE = "omMetrics";
   public static final String OM_METRICS_TEMP_FILE = OM_METRICS_FILE + ".tmp";
+  // For OM rate limiter metrics saving to a file. Kept separate from
+  // OM_METRICS_FILE so that older OM versions can still parse that file.
+  public static final String OM_RATE_LIMITER_METRICS_FILE = "omRateLimiterMetrics";
+  public static final String OM_RATE_LIMITER_METRICS_TEMP_FILE = OM_RATE_LIMITER_METRICS_FILE + ".tmp";
 
   // For Multipart upload
   public static final int OM_MULTIPART_MIN_SIZE = 5 * 1024 * 1024;

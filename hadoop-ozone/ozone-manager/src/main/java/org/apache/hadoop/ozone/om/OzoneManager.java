@@ -293,6 +293,8 @@ import static org.apache.hadoop.ozone.OzoneConsts.DEFAULT_OM_UPDATE_ID;
 import static org.apache.hadoop.ozone.OzoneConsts.LAYOUT_VERSION_KEY;
 import static org.apache.hadoop.ozone.OzoneConsts.OM_METRICS_FILE;
 import static org.apache.hadoop.ozone.OzoneConsts.OM_METRICS_TEMP_FILE;
+import static org.apache.hadoop.ozone.OzoneConsts.OM_RATE_LIMITER_METRICS_FILE;
+import static org.apache.hadoop.ozone.OzoneConsts.OM_RATE_LIMITER_METRICS_TEMP_FILE;
 import static org.apache.hadoop.ozone.OzoneConsts.OM_RATIS_SNAPSHOT_DIR;
 import static org.apache.hadoop.ozone.OzoneConsts.OM_SNAPSHOT_DIR;
 import static org.apache.hadoop.ozone.OzoneConsts.PREPARE_MARKER_KEY;
@@ -442,6 +444,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       new ObjectMapper().writerWithDefaultPrettyPrinter();
   private static final ObjectReader READER =
       new ObjectMapper().readerFor(OmMetricsInfo.class);
+  private static final ObjectReader RATE_LIMITER_METRICS_READER =
+      new ObjectMapper().readerFor(OmRateLimiterMetricsInfo.class);
   private static final int SHUTDOWN_HOOK_PRIORITY = 30;
   private final File omMetaDir;
   private boolean isAclEnabled;
@@ -789,8 +793,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     if (isOmGrpcServerEnabled) {
       omS3gGrpcServer = getOmS3gGrpcServer(configuration);
     }
-    ShutdownHookManager.get().addShutdownHook(this::saveOmMetrics,
-        SHUTDOWN_HOOK_PRIORITY);
+    ShutdownHookManager.get().addShutdownHook(() -> {
+      saveOmMetrics();
+      saveRateLimiterMetrics();
+    }, SHUTDOWN_HOOK_PRIORITY);
 
     if (isBootstrapping || isForcedBootstrapping) {
       omState = State.BOOTSTRAPPING;
@@ -1236,6 +1242,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     @Override
     public void run() {
       saveOmMetrics();
+      saveRateLimiterMetrics();
     }
   }
 
@@ -1265,6 +1272,31 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return tmpLeadersMap;
   }
 
+  private void saveRateLimiterMetrics() {
+    if (omRateLimiterMetrics == null) {
+      return;
+    }
+    try {
+      File parent = getTempRateLimiterMetricsStorageFile().getParentFile();
+      if (!parent.exists()) {
+        Files.createDirectories(parent.toPath());
+      }
+      try (BufferedWriter writer = new BufferedWriter(
+          new OutputStreamWriter(new FileOutputStream(
+              getTempRateLimiterMetricsStorageFile()), StandardCharsets.UTF_8))) {
+        OmRateLimiterMetricsInfo rateLimiterMetricsInfo = new OmRateLimiterMetricsInfo();
+        rateLimiterMetricsInfo.setRateLimiterMetrics(omRateLimiterMetrics.snapshotRequestCounts());
+        WRITER.writeValue(writer, rateLimiterMetricsInfo);
+      }
+
+      Files.move(getTempRateLimiterMetricsStorageFile().toPath(),
+          getRateLimiterMetricsStorageFile().toPath(), StandardCopyOption
+              .ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+    } catch (IOException ex) {
+      LOG.error("Unable to write the om rate limiter metrics file", ex);
+    }
+  }
+
   /**
    * Returns temporary metrics storage file.
    *
@@ -1281,6 +1313,24 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    */
   private File getMetricsStorageFile() {
     return new File(omMetaDir, OM_METRICS_FILE);
+  }
+
+  /**
+   * Returns temporary rate limiter metrics storage file.
+   *
+   * @return File
+   */
+  private File getTempRateLimiterMetricsStorageFile() {
+    return new File(omMetaDir, OM_RATE_LIMITER_METRICS_TEMP_FILE);
+  }
+
+  /**
+   * Returns rate limiter metrics storage file.
+   *
+   * @return File
+   */
+  private File getRateLimiterMetricsStorageFile() {
+    return new File(omMetaDir, OM_RATE_LIMITER_METRICS_FILE);
   }
 
   private OzoneDelegationTokenSecretManager createDelegationTokenSecretManager(
@@ -2073,6 +2123,13 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     metrics.setNumFiles(metadataManager
         .countEstimatedRowsInTable(metadataManager.getFileTable()));
 
+    // Restore rate limiter counters saved before the previous shutdown.
+    if (getRateLimiterMetricsStorageFile().exists()) {
+      OmRateLimiterMetricsInfo rateLimiterMetricsInfo =
+          RATE_LIMITER_METRICS_READER.readValue(getRateLimiterMetricsStorageFile());
+      omRateLimiterMetrics.restoreRequestCounts(rateLimiterMetricsInfo.getRateLimiterMetrics());
+    }
+
     // Schedule save metrics
     long period = configuration.getTimeDuration(OZONE_OM_METRICS_SAVE_INTERVAL,
         OZONE_OM_METRICS_SAVE_INTERVAL_DEFAULT, TimeUnit.MILLISECONDS);
@@ -2179,6 +2236,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         .countEstimatedRowsInTable(metadataManager.getDirectoryTable()));
     metrics.setNumFiles(metadataManager
         .countEstimatedRowsInTable(metadataManager.getFileTable()));
+
+    // Re-register the rate limiter metrics source unregistered by stop().
+    // The live instance keeps its counters, so no restore from file here —
+    // the in-memory values are at least as fresh as the persisted snapshot.
+    OmRateLimiterMetrics.register(omRateLimiterMetrics);
 
     // Schedule save metrics
     long period = configuration.getTimeDuration(OZONE_OM_METRICS_SAVE_INTERVAL,
