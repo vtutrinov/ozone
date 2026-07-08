@@ -424,10 +424,9 @@ public class ObjectEndpoint extends EndpointBase {
       }
       try {
         long latencyMs = TimeUnit.NANOSECONDS.toMillis(Time.monotonicNowNanos() - startNanos);
-        getXidMetrics().recordRequest(
-                headers.getHeaderString("x-amz-meta-XID"), "PUT", errorCode, totalBytes, latencyMs);
+        getXidMetrics().recordRequest(getXid(), "PUT", errorCode, totalBytes, latencyMs);
       } catch (Exception e) {
-        LOG.error("Failed to record S3 xid metrics: ", e);
+        LOG.error("Failed to record xid metrics: ", e);
       }
     }
   }
@@ -454,6 +453,7 @@ public class ObjectEndpoint extends EndpointBase {
     long startNanos = Time.monotonicNowNanos();
     S3GAction s3GAction = S3GAction.GET_KEY;
     PerformanceStringBuilder perf = new PerformanceStringBuilder();
+    String xidRequest = getXid();
     try {
       if (uploadId != null) {
         // When we have uploadId, this is the request for list Parts.
@@ -529,9 +529,7 @@ public class ObjectEndpoint extends EndpointBase {
             long latencyMs = TimeUnit.NANOSECONDS.toMillis(Time.monotonicNowNanos() - startNanos);
             getMetrics().incGetKeySuccessLength(readLength);
             perf.appendSizeBytes(readLength);
-            getXidMetrics().recordRequest(getXid(bucketName, keyPath), "GET", HttpStatus.SC_OK, readLength, latencyMs);
-          } catch (ExecutionException e) {
-            LOG.error("Failed to get xid header: ", e);
+            getXidMetrics().recordRequest(xidRequest, "GET", HttpStatus.SC_OK, readLength, latencyMs);
           }
           long opLatencyNs =  getMetrics().updateGetKeySuccessStats(startNanos);
           perf.appendOpLatencyNanos(opLatencyNs);
@@ -557,10 +555,7 @@ public class ObjectEndpoint extends EndpointBase {
             getMetrics().incGetKeySuccessLength(readLength);
             perf.appendSizeBytes(readLength);
             long latencyMs = TimeUnit.NANOSECONDS.toMillis(Time.monotonicNowNanos() - startNanos);
-            getXidMetrics().recordRequest(
-                    getXid(bucketName, keyPath), "GET", HttpStatus.SC_OK, readLength, latencyMs);
-          } catch (ExecutionException e) {
-            LOG.error("Failed to get xid header: ", e);
+            getXidMetrics().recordRequest(xidRequest, "GET", HttpStatus.SC_OK, readLength, latencyMs);
           }
           long opLatencyNs = getMetrics().updateGetKeySuccessStats(startNanos);
           perf.appendOpLatencyNanos(opLatencyNs);
@@ -639,7 +634,7 @@ public class ObjectEndpoint extends EndpointBase {
       }
 
       long latencyMs = TimeUnit.NANOSECONDS.toMillis(Time.monotonicNowNanos() - startNanos);
-      getXidMetrics().recordRequest(getXid(bucketName, keyPath), "GET", errorCode, 0, latencyMs);
+      getXidMetrics().recordRequest(xidRequest, "GET", errorCode, 0, latencyMs);
 
       if (os3Exception != null) {
         throw os3Exception;
@@ -652,14 +647,23 @@ public class ObjectEndpoint extends EndpointBase {
       AUDIT.logReadFailure(
           buildAuditMessageForFailure(s3GAction, getAuditParameters(), ex)
       );
-      getXidMetrics().recordRequest(
-              getXid(bucketName, keyPath), "GET", HttpStatus.SC_INTERNAL_SERVER_ERROR, 0, latencyNs);
+      getXidMetrics().recordRequest(xidRequest, "GET", HttpStatus.SC_INTERNAL_SERVER_ERROR, 0, latencyNs);
       throw ex;
     }
   }
 
-  private String getXid(String bucketName, String keyPath) throws ExecutionException, OMException {
-    return getOzoneKeyDetails(bucketName, keyPath).getMetadata().get("xid");
+  private String getXid() {
+    String xid = headers.getHeaderString("x-amz-meta-xid");
+    if (xid != null) {
+      LOG.info("x-amz-meta-xid={}", xid);
+      return xid;
+    }
+    xid = headers.getHeaderString("xid");
+    if (xid != null) {
+      LOG.info("xid={}", xid);
+      return xid;
+    }
+    return null;
   }
 
   static void addLastModifiedDate(

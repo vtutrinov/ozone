@@ -1,5 +1,6 @@
 package org.apache.hadoop.ozone.s3.metrics;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
@@ -16,6 +17,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -26,7 +28,8 @@ public final class S3GatewayXidMetrics implements MetricsSource {
 
   private static final String SOURCE_NAME = S3GatewayXidMetrics.class.getSimpleName();
   private static final int MAX_LATENCY_SAMPLES_PER_XID = 10000;
-
+  private static final long CLEANUP_INTERVAL_MS = TimeUnit.DAYS.toMillis(1);
+  private final AtomicLong lastCleanupTime = new AtomicLong(System.currentTimeMillis());
   private static S3GatewayXidMetrics instance;
 
   private final ConcurrentMap<BytesMetricKey, AtomicLong> bytesTotal = new ConcurrentHashMap<>();
@@ -61,6 +64,8 @@ public final class S3GatewayXidMetrics implements MetricsSource {
   }
 
   public void recordRequest(String xid, String requestType, int errorCode, long bytes, long latencyMs) {
+    cleanupIfNeeded();
+
     String checkedXid = checkXid(xid, "none");
 
     bytesTotal.computeIfAbsent(new BytesMetricKey(checkedXid, requestType), key -> new AtomicLong())
@@ -132,6 +137,35 @@ public final class S3GatewayXidMetrics implements MetricsSource {
           .addCounter(Interns.info("error_count", "Total failed request count"),
               entry.getValue().get());
     }
+  }
+
+  @VisibleForTesting
+  void cleanupIfNeeded() {
+    long now = System.currentTimeMillis();
+    long lastCleanup = lastCleanupTime.get();
+
+    if (now - lastCleanup < CLEANUP_INTERVAL_MS) {
+      return;
+    }
+
+    if (lastCleanupTime.compareAndSet(lastCleanup, now)) {
+      clearMetrics();
+    }
+  }
+
+  @VisibleForTesting
+  void clearMetrics() {
+    bytesTotal.clear();
+    latencyMsTotal.clear();
+    latencyCount.clear();
+    requestCount.clear();
+    errorsTotal.clear();
+    latencySamplesByXid.clear();
+  }
+
+  @VisibleForTesting
+  void setLastCleanupTime(long timeMs) {
+    lastCleanupTime.set(timeMs);
   }
 
   private void writeLatencyPercentileMetrics(MetricsCollector collector) {
