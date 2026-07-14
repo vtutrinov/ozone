@@ -28,7 +28,7 @@ public final class S3GatewayXidMetrics implements MetricsSource {
 
   private static final String SOURCE_NAME = S3GatewayXidMetrics.class.getSimpleName();
   private static final int MAX_LATENCY_SAMPLES_PER_XID = 10000;
-  private static final long CLEANUP_INTERVAL_MS = TimeUnit.DAYS.toMillis(30);
+  private static final long CLEANUP_INTERVAL_MS = TimeUnit.DAYS.toMillis(1);
   private final AtomicLong lastCleanupTime = new AtomicLong(System.currentTimeMillis());
   private static S3GatewayXidMetrics instance;
 

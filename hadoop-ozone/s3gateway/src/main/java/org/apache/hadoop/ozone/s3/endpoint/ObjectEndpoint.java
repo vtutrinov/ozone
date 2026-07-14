@@ -426,7 +426,7 @@ public class ObjectEndpoint extends EndpointBase {
         long latencyMs = TimeUnit.NANOSECONDS.toMillis(Time.monotonicNowNanos() - startNanos);
         getXidMetrics().recordRequest(getXid(), "PUT", errorCode, totalBytes, latencyMs);
       } catch (Exception e) {
-        LOG.error("Failed to record S3 xid metrics: ", e);
+        LOG.error("Failed to record xid metrics: ", e);
       }
     }
   }
@@ -453,7 +453,7 @@ public class ObjectEndpoint extends EndpointBase {
     long startNanos = Time.monotonicNowNanos();
     S3GAction s3GAction = S3GAction.GET_KEY;
     PerformanceStringBuilder perf = new PerformanceStringBuilder();
-    String xidRequest = getXid(bucketName, keyPath);
+    String xidRequest = getXid();
     try {
       if (uploadId != null) {
         // When we have uploadId, this is the request for list Parts.
@@ -655,50 +655,15 @@ public class ObjectEndpoint extends EndpointBase {
   private String getXid() {
     String xid = headers.getHeaderString("x-amz-meta-xid");
     if (xid != null) {
-      LOG.info("PUT: x-amz-meta-xid={}", xid);
+      LOG.info("x-amz-meta-xid={}", xid);
       return xid;
     }
     xid = headers.getHeaderString("xid");
     if (xid != null) {
-      LOG.info("PUT: xid={}", xid);
+      LOG.info("xid={}", xid);
       return xid;
     }
     return null;
-  }
-
-  private String getXid(String bucketName, String keyPath) throws ExecutionException, OMException {
-    String xid = headers.getHeaderString("x-amz-meta-xid");
-    if (xid != null) {
-      LOG.info("GET: x-amz-meta-xid={}", xid);
-      return xid;
-    }
-    xid = headers.getHeaderString("xid");
-    if (xid != null) {
-      LOG.info("GET: xid={}", xid);
-      return xid;
-    }
-
-    if (headers.getRequestHeaders() != null) {
-      LOG.info("GET: All headers={}", headers.getRequestHeaders().toString());
-    }
-    if (headers.getRequestHeader("xid") != null && !headers.getRequestHeader("xid").isEmpty()) {
-      String header = headers.getRequestHeader("xid").get(0);
-      LOG.info("GET: RequestHeader xid={}", header);
-      if (header != null) {
-        return header;
-      }
-    } else {
-      LOG.info("GET: RequestHeader list with xid is null or empty");
-    }
-
-    if (context.getHeaderString("xid") != null) {
-      LOG.info("GET: ContextHeader={}", context.getHeaderString("xid"));
-      return context.getHeaderString("xid");
-    } else {
-      LOG.info("GET: ContextHeader xid is null");
-    }
-
-    return getOzoneKeyDetails(bucketName, keyPath).getMetadata().get("xid");
   }
 
   static void addLastModifiedDate(
