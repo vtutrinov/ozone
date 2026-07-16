@@ -83,6 +83,9 @@ public final class S3GatewayXidMetrics implements MetricsSource {
   /** Approximate record count; used to throttle eviction checks. */
   private final AtomicLong recordCount = new AtomicLong(0);
 
+  /** GC-intern pool for BytesMetricKey to avoid redundant allocations. */
+  private final ConcurrentMap<String, BytesMetricKey> bytesMetricKeyPool = new ConcurrentHashMap<>();
+
   private S3GatewayXidMetrics() {
   }
 
@@ -121,7 +124,7 @@ public final class S3GatewayXidMetrics implements MetricsSource {
 
     String checkedXid = checkXid(xid, "none");
 
-    bytesTotal.computeIfAbsent(new BytesMetricKey(checkedXid, requestType), key -> new AtomicLong())
+    bytesTotal.computeIfAbsent(internBytesKey(checkedXid, requestType), key -> new AtomicLong())
         .addAndGet(bytes);
     latencyMsTotal.computeIfAbsent(checkedXid, s -> new AtomicLong())
         .addAndGet(latencyMs);
@@ -250,6 +253,7 @@ public final class S3GatewayXidMetrics implements MetricsSource {
     latencySamplesByXid.clear();
     samplesVersion.clear();
     cachedPercentiles.clear();
+    bytesMetricKeyPool.clear();
   }
 
   @VisibleForTesting
@@ -345,6 +349,16 @@ public final class S3GatewayXidMetrics implements MetricsSource {
       return defaultValue;
     }
     return value;
+  }
+
+  /**
+   * Interns a {@link BytesMetricKey} by pooling it.
+   * Returns the same instance for identical (xid, requestType) pairs to reduce GC pressure.
+   * Package-private for testing (test uses Object to avoid direct reference to private class).
+   */
+  BytesMetricKey internBytesKey(String xid, String requestType) {
+    String key = xid + "\u0000" + requestType; // null-safe separator
+    return bytesMetricKeyPool.computeIfAbsent(key, k -> new BytesMetricKey(xid, requestType));
   }
 
   private static final class RequestMetricKey {

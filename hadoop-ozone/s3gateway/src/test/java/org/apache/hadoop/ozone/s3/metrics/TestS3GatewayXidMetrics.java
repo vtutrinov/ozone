@@ -951,4 +951,62 @@ class TestS3GatewayXidMetrics {
     // When activeXidCount > XID_MONITORING_THRESHOLD, xidMemoryRatio is also emitted.
     verify(rb).addGauge(argThat(info -> info.name().equals("xidMemoryRatio")), anyDouble());
   }
+
+  // === GC intern ===
+
+  @Test
+  void testBytesMetricKeyInternPooling() {
+    // Creating the same key multiple times should return the same instance.
+    Object key1 = metrics.internBytesKey("pool-xid", "put");
+    Object key2 = metrics.internBytesKey("pool-xid", "put");
+    Object key3 = metrics.internBytesKey("pool-xid", "get");
+    Object key4 = metrics.internBytesKey("pool-xid", "put");
+
+    // Same key must return the same instance.
+    assertSame(key1, key2);
+    assertSame(key1, key4);
+
+    // Different requestType should return a different instance.
+    assertNotEquals(key1, key3);
+
+    // The pool should only contain 2 entries ("pool-xid \0 put" and "pool-xid \0 get").
+    try {
+      Field poolField = S3GatewayXidMetrics.class.getDeclaredField("bytesMetricKeyPool");
+      poolField.setAccessible(true);
+      Map<?, ?> pool = (Map<?, ?>) poolField.get(metrics);
+      assertEquals(2, pool.size(),
+          "Intern pool should contain exactly 2 distinct keys");
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Test
+  void testBytesMetricKeyInternPoolClearOnClearMetrics() {
+    metrics.internBytesKey("clear-pool-xid", "put");
+    metrics.internBytesKey("clear-pool-xid", "get");
+
+    metrics.clearMetrics();
+
+    try {
+      Field poolField = S3GatewayXidMetrics.class.getDeclaredField("bytesMetricKeyPool");
+      poolField.setAccessible(true);
+      Map<?, ?> pool = (Map<?, ?>) poolField.get(metrics);
+      assertEquals(0, pool.size(),
+          "bytesMetricKeyPool should be cleared after clearMetrics()");
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Test
+  void testBytesMetricKeyInternNoNPE() {
+    // Interning with null fields should not cause NPE.
+    metrics.internBytesKey(null, null);
+    metrics.internBytesKey(null, "put");
+    metrics.internBytesKey("xid", null);
+
+    // Just verify no exceptions occur.
+    assertTrue(true, "internBytesKey should not throw NPE for null fields");
+  }
 }
