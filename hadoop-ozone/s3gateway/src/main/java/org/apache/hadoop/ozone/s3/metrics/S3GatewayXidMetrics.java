@@ -39,6 +39,10 @@ public final class S3GatewayXidMetrics implements MetricsSource {
   /** HTTP error threshold — codes >= this are counted as errors. */
   static final int ERROR_CODE_THRESHOLD = 400;
 
+  /** XID monitoring threshold: when unique XID count exceeds this,
+   *  metrics include an alert to trigger migration to approximate sketches (e.g. HdrHistogram). */
+  private static final int XID_MONITORING_THRESHOLD = 5000;
+
   // Static metrics info constants (reuse: avoid per-call Interns.info() allocation)
   private static final MetricsInfo METRICS_INFO_XID =
       Interns.info("XID", "Request XID");
@@ -60,6 +64,8 @@ public final class S3GatewayXidMetrics implements MetricsSource {
       Interns.info("request_latency_ms_p95", "95th percentile latency in milliseconds");
   private static final MetricsInfo METRICS_INFO_REQUEST_LATENCY_P99 =
       Interns.info("request_latency_ms_p99", "99th percentile latency in milliseconds");
+  private static final MetricsInfo METRICS_INFO_ACTIVE_XID_COUNT =
+      Interns.info("activeXidCount", "Number of unique XIDs tracked in memory");
   private final AtomicLong lastCleanupTime = new AtomicLong(System.currentTimeMillis());
   private static volatile S3GatewayXidMetrics instance;
 
@@ -105,6 +111,7 @@ public final class S3GatewayXidMetrics implements MetricsSource {
     writeLatencyMetrics(metricsCollector);
     writeRequestCountMetrics(metricsCollector);
     writeErrorMetrics(metricsCollector);
+    writeXidMonitoringMetrics(metricsCollector);
     // Percentile metrics involve sorting (O(N log N)) — do outside any lock
     writeLatencyPercentileMetrics(metricsCollector);
   }
@@ -195,6 +202,26 @@ public final class S3GatewayXidMetrics implements MetricsSource {
           .tag(METRICS_INFO_ERROR_CODE, String.valueOf(key.errorCode))
           .addCounter(METRICS_INFO_ERROR_COUNT,
               entry.getValue().get());
+    }
+  }
+
+  private void writeXidMonitoringMetrics(MetricsCollector collector) {
+    long activeXidCount = latencySamplesByXid.size();
+    if (activeXidCount == 0) {
+      // No active XIDs — skip to keep metrics empty when nothing is tracked.
+      return;
+    }
+    collector.addRecord(SOURCE_NAME)
+        .addCounter(METRICS_INFO_ACTIVE_XID_COUNT, activeXidCount);
+
+    // When the number of unique XIDs exceeds the threshold, add an alert
+    // so downstream monitoring systems can trigger migration to approximate
+    // sketches (e.g. HdrHistogram) instead of keeping full sample arrays.
+    if (activeXidCount > XID_MONITORING_THRESHOLD) {
+      double memoryRatio = (double) activeXidCount / XID_MONITORING_THRESHOLD;
+      collector.addRecord(SOURCE_NAME)
+          .addGauge(Interns.info("xidMemoryRatio", "Ratio of active XIDs to monitoring threshold"),
+              memoryRatio);
     }
   }
 

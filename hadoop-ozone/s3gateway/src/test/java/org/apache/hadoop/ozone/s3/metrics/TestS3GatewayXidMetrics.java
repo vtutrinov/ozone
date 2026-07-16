@@ -890,4 +890,65 @@ class TestS3GatewayXidMetrics {
     assertEquals(threadCount * recordsPerThread, actual.size(),
         "No data loss: all records should be present in bytesTotal under concurrent access");
   }
+
+  // === XID monitoring ===
+
+  @Test
+  void testXidMonitoringActiveCount() {
+    // Adding a single request should create 1 active XID.
+    metrics.recordRequest("monitor-xid", "put", 200, 100, 10);
+
+    metrics.getMetrics(collector, true);
+
+    // Verify the activeXidCount gauge is present and equals 1.
+    verify(rb).addCounter(argThat(info -> info.name().equals("activeXidCount")), eq(1L));
+  }
+
+  @Test
+  void testXidMonitoringClearResetsCount() {
+    metrics.recordRequest("clear-monitor-xid", "put", 200, 100, 10);
+
+    collector = mock(MetricsCollector.class);
+    rb = mock(MetricsRecordBuilder.class, RETURNS_SELF);
+    when(collector.addRecord(anyString())).thenReturn(rb);
+
+    metrics.getMetrics(collector, true);
+    verify(rb).addCounter(argThat(info -> info.name().equals("activeXidCount")), eq(1L));
+
+    // clearMetrics should reset the count to 0.
+    metrics.clearMetrics();
+
+    collector = mock(MetricsCollector.class);
+    rb = mock(MetricsRecordBuilder.class, RETURNS_SELF);
+    when(collector.addRecord(anyString())).thenReturn(rb);
+
+    metrics.getMetrics(collector, true);
+    // When activeXidCount == 0, writeXidMonitoringMetrics() returns early
+    // without calling addRecord — so no activeXidCount counter should be emitted.
+    verify(rb, never()).addCounter(argThat(info -> info.name().equals("activeXidCount")), anyLong());
+  }
+
+  @Test
+  void testXidMonitoringThresholdAlert() {
+    // Add XID_MONITORING_THRESHOLD + 1 unique XIDs to trigger the alert.
+    // Monitoring threshold is 5000; adding 5001 unique XIDs.
+    // We use a batch approach to avoid OOM — each unique XID gets 1 sample.
+    int threshold = 5001;
+
+    for (int i = 0; i < threshold; i++) {
+      metrics.recordRequest("alert-xid-" + i, "put", 200, 10, 5);
+    }
+
+    collector = mock(MetricsCollector.class);
+    rb = mock(MetricsRecordBuilder.class, RETURNS_SELF);
+    when(collector.addRecord(anyString())).thenReturn(rb);
+
+    metrics.getMetrics(collector, true);
+
+    // activeXidCount should reflect the total.
+    verify(rb).addCounter(argThat(info -> info.name().equals("activeXidCount")), eq((long) threshold));
+
+    // When activeXidCount > XID_MONITORING_THRESHOLD, xidMemoryRatio is also emitted.
+    verify(rb).addGauge(argThat(info -> info.name().equals("xidMemoryRatio")), anyDouble());
+  }
 }
