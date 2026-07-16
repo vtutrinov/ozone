@@ -8,10 +8,11 @@ import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.ozone.OzoneConsts;
 import org.apache.hadoop.ozone.metrics.OzoneMetricsSystem;
-import org.apache.http.HttpStatus;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -30,12 +31,12 @@ public final class S3GatewayXidMetrics implements MetricsSource {
   private static final int MAX_LATENCY_SAMPLES_PER_XID = 10000;
   private static final long CLEANUP_INTERVAL_MS = TimeUnit.DAYS.toMillis(1);
   private final AtomicLong lastCleanupTime = new AtomicLong(System.currentTimeMillis());
-  private static S3GatewayXidMetrics instance;
+  private static volatile S3GatewayXidMetrics instance;
 
   private final ConcurrentMap<BytesMetricKey, AtomicLong> bytesTotal = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, AtomicLong> latencyMsTotal = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, AtomicLong> latencyCount = new ConcurrentHashMap<>();
-  private final ConcurrentMap<String, List<Long>> latencySamplesByXid = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, Deque<Long>> latencySamplesByXid = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, AtomicLong> requestCount = new ConcurrentHashMap<>();
   private final ConcurrentMap<RequestMetricKey, AtomicLong> errorsTotal = new ConcurrentHashMap<>();
 
@@ -76,16 +77,16 @@ public final class S3GatewayXidMetrics implements MetricsSource {
         .incrementAndGet();
     requestCount.computeIfAbsent(checkedXid, s -> new AtomicLong())
         .incrementAndGet();
-    latencySamplesByXid.computeIfAbsent(checkedXid, s -> Collections.synchronizedList(new ArrayList<>()))
+    latencySamplesByXid.computeIfAbsent(checkedXid, s -> (Deque<Long>) Collections.synchronizedCollection(new ArrayDeque<Long>(MAX_LATENCY_SAMPLES_PER_XID)))
             .add(latencyMs);
 
-    List<Long> latencySamples = latencySamplesByXid.get(checkedXid);
+    Deque<Long> latencySamples = latencySamplesByXid.get(checkedXid);
     synchronized (latencySamples) {
       if (latencySamples.size() > MAX_LATENCY_SAMPLES_PER_XID) {
-        latencySamples.remove(0);
+        latencySamples.removeFirst();
       }
     }
-    if (errorCode != HttpStatus.SC_OK) {
+    if (errorCode >= 400) {
       RequestMetricKey requestMetricKey = new RequestMetricKey(checkedXid, errorCode);
       errorsTotal.computeIfAbsent(requestMetricKey, key -> new AtomicLong())
           .incrementAndGet();
@@ -169,13 +170,21 @@ public final class S3GatewayXidMetrics implements MetricsSource {
   }
 
   private void writeLatencyPercentileMetrics(MetricsCollector collector) {
-    for (Map.Entry<String, List<Long>> entry : latencySamplesByXid.entrySet()) {
+    for (Map.Entry<String, Deque<Long>> entry : latencySamplesByXid.entrySet()) {
       String xid = entry.getKey();
-      List<Long> samples = entry.getValue();
+      Deque<Long> samples = entry.getValue();
 
-      double p50 = percentile(samples, 50);
-      double p95 = percentile(samples, 95);
-      double p99 = percentile(samples, 99);
+      List<Long> sortedSamples;
+
+      synchronized (samples) {
+        sortedSamples = new ArrayList<>(samples);
+      }
+
+      Collections.sort(sortedSamples);
+
+      double p50 = percentile(sortedSamples, 50);
+      double p95 = percentile(sortedSamples, 95);
+      double p99 = percentile(sortedSamples, 99);
 
       MetricsRecordBuilder rb = collector.addRecord(SOURCE_NAME)
               .tag(Interns.info("XID", "Request XID"), xid);
@@ -185,17 +194,10 @@ public final class S3GatewayXidMetrics implements MetricsSource {
     }
   }
 
-  private static double percentile(List<Long> samples, double percentile) {
-    if (samples == null || samples.isEmpty()) {
+  private static double percentile(List<Long> sortedSamples, double percentile) {
+    if (sortedSamples == null || sortedSamples.isEmpty()) {
       return 0.0;
     }
-
-    List<Long> sortedSamples;
-    synchronized (samples) {
-      sortedSamples = new ArrayList<>(samples);
-    }
-
-    Collections.sort(sortedSamples);
 
     int n = sortedSamples.size();
     if (n == 1) {
