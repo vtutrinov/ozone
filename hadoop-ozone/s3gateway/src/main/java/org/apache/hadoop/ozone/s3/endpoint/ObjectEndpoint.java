@@ -1114,6 +1114,7 @@ public class ObjectEndpoint extends EndpointBase {
           }
           getMetrics().incCopyObjectSuccessLength(copyLength);
           perf.appendSizeBytes(copyLength);
+          getXidMetrics().recordRequest(getXid(), "PUT", HttpStatus.SC_OK, copyLength, metadataLatencyNs);
         }
       } else {
         long putLength;
@@ -1132,6 +1133,7 @@ public class ObjectEndpoint extends EndpointBase {
         }
         getMetrics().incPutKeySuccessLength(putLength);
         perf.appendSizeBytes(putLength);
+        getXidMetrics().recordRequest(getXid(), "PUT", HttpStatus.SC_OK, putLength, metadataLatencyNs);
       }
       perf.appendMetaLatencyNanos(metadataLatencyNs);
 
@@ -1155,21 +1157,28 @@ public class ObjectEndpoint extends EndpointBase {
       }
 
     } catch (OMException ex) {
+      OS3Exception os3Exception = null;
       if (copyHeader != null) {
         getMetrics().updateCopyObjectFailureStats(startNanos);
       } else {
         getMetrics().updateCreateMultipartKeyFailureStats(startNanos);
       }
       if (ex.getResult() == ResultCodes.NO_SUCH_MULTIPART_UPLOAD_ERROR) {
-        throw newError(NO_SUCH_UPLOAD, uploadID, ex);
+        os3Exception = newError(NO_SUCH_UPLOAD, uploadID, ex);
       } else if (isAccessDenied(ex)) {
-        throw newError(S3ErrorTable.ACCESS_DENIED, bucket + "/" + key, ex);
+        os3Exception = newError(S3ErrorTable.ACCESS_DENIED, bucket + "/" + key, ex);
       } else if (ex.getResult() == ResultCodes.INVALID_PART) {
-        OS3Exception os3Exception = newError(
+        os3Exception = newError(
             S3ErrorTable.INVALID_ARGUMENT, String.valueOf(partNumber), ex);
         os3Exception.setErrorMessage(ex.getMessage());
+      }
+      long latencyNs = Time.monotonicNowNanos() - startNanos;
+      getXidMetrics().recordRequest(getXid(), "PUT", HttpStatus.SC_INTERNAL_SERVER_ERROR, 0, latencyNs);
+
+      if (os3Exception != null) {
         throw os3Exception;
       }
+
       throw ex;
     } finally {
       // Reset the thread-local message digest instance in case of exception
