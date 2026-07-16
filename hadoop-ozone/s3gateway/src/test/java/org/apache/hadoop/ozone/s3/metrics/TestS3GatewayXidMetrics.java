@@ -597,38 +597,32 @@ class TestS3GatewayXidMetrics {
 
   @Test
   void testEvictionRemovesOldestKey() throws Exception {
-    // Add MAX_KEYS_PER_MAP + 1 records to push errorsTotal past the
-    // eviction threshold. We reuse a single XID because each unique XID
-    // pre-allocates an 80KB ArrayDeque in latencySamplesByXid (~8GB of
-    // heap otherwise); varying the errorCode instead grows errorsTotal
-    // with a fresh RequestMetricKey per call, exercising the same
-    // evictIfOverLimit() code path.
+    // Add records past the eviction threshold. Eviction is now throttled
+    // (every 128 records) so we need more records to ensure the map is
+    // trimmed back below MAX_KEYS_PER_MAP.
     //
-    // KNOWN LIMITATION: evictIfOverLimit() in S3GatewayXidMetrics calls
-    // it.remove() on a ConcurrentHashMap iterator without first calling
-    // it.next(), which throws IllegalStateException. The test verifies
-    // that the eviction path is reached (an exception is observed once
-    // the threshold is exceeded) and that the map grew to at least
-    // MAX_KEYS_PER_MAP entries. A correct fix would advance the
-    // iterator before removing (it.next(); it.remove()).
-    int totalRecords = MAX_KEYS_PER_MAP + 1;
-    int evictionFailures = 0;
+    // With 65536 records: evictions happen at 128,256,...,65536 = 512 times.
+    // Each eviction removes one entry from each map. So errorsTotal grows to
+    // 65536 then shrinks by 512 → ~65024 which is safely < MAX_KEYS_PER_MAP.
+    int totalRecords = 65536;
 
     for (int i = 0; i < totalRecords; i++) {
       metrics.recordRequest("evict-xid", "put", 400 + i, 10, 5);
     }
 
-    // After fix (it.next() + it.remove()), eviction should complete without exception
-    // and the map should not exceed MAX_KEYS_PER_MAP significantly.
+    // After fix (it.next() + it.remove()), eviction should complete without exception.
     Field errorsTotalField = S3GatewayXidMetrics.class.getDeclaredField("errorsTotal");
     errorsTotalField.setAccessible(true);
     Map<?, ?> errorsTotalMap = (Map<?, ?>) errorsTotalField.get(metrics);
 
-    assertTrue(errorsTotalMap.size() >= MAX_KEYS_PER_MAP,
-        "errorsTotal should have grown to at least MAX_KEYS_PER_MAP entries, got: "
+    // The map should be below MAX_KEYS_PER_MAP because eviction trimmed it.
+    // No eviction happened before MAX_KEYS_PER_MAP was reached, so at some
+    // point the map was larger than the current size.
+    assertTrue(errorsTotalMap.size() < MAX_KEYS_PER_MAP,
+        "errorsTotal should have been evicted back below MAX_KEYS_PER_MAP, got: "
             + errorsTotalMap.size());
-    assertTrue(errorsTotalMap.size() < MAX_KEYS_PER_MAP + 50,
-        "errorsTotal should have been evicted shortly after exceeding MAX_KEYS_PER_MAP, got: "
+    assertTrue(errorsTotalMap.size() > 0,
+        "errorsTotal should still have entries after eviction, got: "
             + errorsTotalMap.size());
   }
 
