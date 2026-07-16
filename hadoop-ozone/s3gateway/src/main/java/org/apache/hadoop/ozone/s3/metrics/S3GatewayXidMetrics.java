@@ -13,6 +13,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -29,8 +30,10 @@ public final class S3GatewayXidMetrics implements MetricsSource {
 
   private static final String SOURCE_NAME = S3GatewayXidMetrics.class.getSimpleName();
   private static final int MAX_LATENCY_SAMPLES_PER_XID = 10000;
+  private static final int MAX_KEYS_PER_MAP = 100000;
   private static final long CLEANUP_INTERVAL_MS = TimeUnit.DAYS.toMillis(1);
   private final AtomicLong lastCleanupTime = new AtomicLong(System.currentTimeMillis());
+  private final Object metricsLock = new Object();
   private static volatile S3GatewayXidMetrics instance;
 
   private final ConcurrentMap<BytesMetricKey, AtomicLong> bytesTotal = new ConcurrentHashMap<>();
@@ -39,16 +42,23 @@ public final class S3GatewayXidMetrics implements MetricsSource {
   private final ConcurrentMap<String, Deque<Long>> latencySamplesByXid = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, AtomicLong> requestCount = new ConcurrentHashMap<>();
   private final ConcurrentMap<RequestMetricKey, AtomicLong> errorsTotal = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, double[]> cachedPercentiles = new ConcurrentHashMap<>();
 
   private S3GatewayXidMetrics() {
   }
 
   public static S3GatewayXidMetrics getInstance() {
-    if (instance == null) {
-      S3GatewayXidMetrics xidMetrics = new S3GatewayXidMetrics();
-      instance = OzoneMetricsSystem.instance().register(SOURCE_NAME, "Metrics for xid header", xidMetrics);
+    S3GatewayXidMetrics local = instance;
+    if (local == null) {
+      synchronized (S3GatewayXidMetrics.class) {
+        local = instance;
+        if (local == null) {
+          local = new S3GatewayXidMetrics();
+          instance = OzoneMetricsSystem.instance().register(SOURCE_NAME, "Metrics for xid header", local);
+        }
+      }
     }
-    return instance;
+    return local;
   }
 
   public static void unRegister() {
@@ -57,11 +67,13 @@ public final class S3GatewayXidMetrics implements MetricsSource {
 
   @Override
   public void getMetrics(MetricsCollector metricsCollector, boolean b) {
-    writeBytesMetrics(metricsCollector);
-    writeLatencyMetrics(metricsCollector);
-    writeRequestCountMetrics(metricsCollector);
-    writeErrorMetrics(metricsCollector);
-    writeLatencyPercentileMetrics(metricsCollector);
+    synchronized (metricsLock) {
+      writeBytesMetrics(metricsCollector);
+      writeLatencyMetrics(metricsCollector);
+      writeRequestCountMetrics(metricsCollector);
+      writeErrorMetrics(metricsCollector);
+      writeLatencyPercentileMetrics(metricsCollector);
+    }
   }
 
   public void recordRequest(String xid, String requestType, int errorCode, long bytes, long latencyMs) {
@@ -77,7 +89,7 @@ public final class S3GatewayXidMetrics implements MetricsSource {
         .incrementAndGet();
     requestCount.computeIfAbsent(checkedXid, s -> new AtomicLong())
         .incrementAndGet();
-    latencySamplesByXid.computeIfAbsent(checkedXid, s -> (Deque<Long>) Collections.synchronizedCollection(new ArrayDeque<Long>(MAX_LATENCY_SAMPLES_PER_XID)))
+    latencySamplesByXid.computeIfAbsent(checkedXid, s -> new ArrayDeque<>(MAX_LATENCY_SAMPLES_PER_XID))
             .add(latencyMs);
 
     Deque<Long> latencySamples = latencySamplesByXid.get(checkedXid);
@@ -91,6 +103,14 @@ public final class S3GatewayXidMetrics implements MetricsSource {
       errorsTotal.computeIfAbsent(requestMetricKey, key -> new AtomicLong())
           .incrementAndGet();
     }
+
+    // Evict oldest key from string maps if they exceed the max key limit.
+    evictIfOverLimit(bytesTotal);
+    evictIfOverLimit(latencyMsTotal);
+    evictIfOverLimit(latencyCount);
+    evictIfOverLimit(requestCount);
+    evictIfOverLimit(latencySamplesByXid);
+    evictIfOverLimit(errorsTotal);
   }
 
   private void writeBytesMetrics(MetricsCollector collector) {
@@ -156,12 +176,15 @@ public final class S3GatewayXidMetrics implements MetricsSource {
 
   @VisibleForTesting
   void clearMetrics() {
-    bytesTotal.clear();
-    latencyMsTotal.clear();
-    latencyCount.clear();
-    requestCount.clear();
-    errorsTotal.clear();
-    latencySamplesByXid.clear();
+    synchronized (metricsLock) {
+      bytesTotal.clear();
+      latencyMsTotal.clear();
+      latencyCount.clear();
+      requestCount.clear();
+      errorsTotal.clear();
+      latencySamplesByXid.clear();
+      cachedPercentiles.clear();
+    }
   }
 
   @VisibleForTesting
@@ -169,22 +192,62 @@ public final class S3GatewayXidMetrics implements MetricsSource {
     lastCleanupTime.set(timeMs);
   }
 
+  /**
+   * Evicts the first entry from the given map if its size exceeds {@link #MAX_KEYS_PER_MAP}.
+   * ConcurrentHashMap does not maintain insertion order, so eviction is FIFO-ish
+   * (removes whichever entry the iterator returns first).
+   */
+  private <K, V> void evictIfOverLimit(ConcurrentMap<K, V> map) {
+    if (map.size() > MAX_KEYS_PER_MAP) {
+      // ConcurrentHashMap entrySet iterator returns entries in arbitrary order,
+      // but consistent enough for eviction purposes.
+      Iterator<Map.Entry<K, V>> it = map.entrySet().iterator();
+      if (it.hasNext()) {
+        it.remove();
+      }
+    }
+  }
+
   private void writeLatencyPercentileMetrics(MetricsCollector collector) {
     for (Map.Entry<String, Deque<Long>> entry : latencySamplesByXid.entrySet()) {
       String xid = entry.getKey();
       Deque<Long> samples = entry.getValue();
 
-      List<Long> sortedSamples;
+      double p50, p95, p99;
 
+      // Cache percentiles: only recompute if samples have changed since last computation.
+      double[] cached = cachedPercentiles.computeIfAbsent(xid, k -> new double[4]);
+      long expectedSize = samples.size();
       synchronized (samples) {
-        sortedSamples = new ArrayList<>(samples);
+        if (cached[0] == 0 && cached[1] == 0 && cached[2] == 0) {
+          // First computation — calculate percentiles.
+          List<Long> sortedSamples = new ArrayList<>(samples);
+          Collections.sort(sortedSamples);
+          p50 = percentile(sortedSamples, 50);
+          p95 = percentile(sortedSamples, 95);
+          p99 = percentile(sortedSamples, 99);
+          cached[0] = p50;
+          cached[1] = p95;
+          cached[2] = p99;
+          cached[3] = (double) expectedSize;
+        } else if (Math.abs((double) samples.size() - cached[3]) < 0.001) {
+          // No new samples — reuse cached values.
+          p50 = cached[0];
+          p95 = cached[1];
+          p99 = cached[2];
+        } else {
+          // Samples added — recompute.
+          List<Long> sortedSamples = new ArrayList<>(samples);
+          Collections.sort(sortedSamples);
+          p50 = percentile(sortedSamples, 50);
+          p95 = percentile(sortedSamples, 95);
+          p99 = percentile(sortedSamples, 99);
+          cached[0] = p50;
+          cached[1] = p95;
+          cached[2] = p99;
+          cached[3] = (double) expectedSize;
+        }
       }
-
-      Collections.sort(sortedSamples);
-
-      double p50 = percentile(sortedSamples, 50);
-      double p95 = percentile(sortedSamples, 95);
-      double p99 = percentile(sortedSamples, 99);
 
       MetricsRecordBuilder rb = collector.addRecord(SOURCE_NAME)
               .tag(Interns.info("XID", "Request XID"), xid);
