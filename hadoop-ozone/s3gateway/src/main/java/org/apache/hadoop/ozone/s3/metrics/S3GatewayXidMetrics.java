@@ -2,6 +2,7 @@ package org.apache.hadoop.ozone.s3.metrics;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.metrics2.MetricsCollector;
+import org.apache.hadoop.metrics2.MetricsInfo;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.annotation.Metrics;
@@ -32,6 +33,28 @@ public final class S3GatewayXidMetrics implements MetricsSource {
   private static final int MAX_LATENCY_SAMPLES_PER_XID = 10000;
   private static final int MAX_KEYS_PER_MAP = 100000;
   private static final long CLEANUP_INTERVAL_MS = TimeUnit.DAYS.toMillis(1);
+
+  // Static metrics info constants (reuse: avoid per-call Interns.info() allocation)
+  private static final MetricsInfo METRICS_INFO_XID =
+      Interns.info("XID", "Request XID");
+  private static final MetricsInfo METRICS_INFO_METHOD =
+      Interns.info("method", "S3 request type: GET or PUT");
+  private static final MetricsInfo METRICS_INFO_SUM_BYTES =
+      Interns.info("sum_bytes", "Total processed bytes");
+  private static final MetricsInfo METRICS_INFO_AVG_LATENCY =
+      Interns.info("average_latency", "Average request latency in milliseconds");
+  private static final MetricsInfo METRICS_INFO_COUNT_REQUESTS =
+      Interns.info("count_requests", "Total request count");
+  private static final MetricsInfo METRICS_INFO_ERROR_CODE =
+      Interns.info("error_code", "HTTP error code");
+  private static final MetricsInfo METRICS_INFO_ERROR_COUNT =
+      Interns.info("error_count", "Total failed request count");
+  private static final MetricsInfo METRICS_INFO_REQUEST_LATENCY_P50 =
+      Interns.info("request_latency_ms_p50", "50th percentile latency in milliseconds");
+  private static final MetricsInfo METRICS_INFO_REQUEST_LATENCY_P95 =
+      Interns.info("request_latency_ms_p95", "95th percentile latency in milliseconds");
+  private static final MetricsInfo METRICS_INFO_REQUEST_LATENCY_P99 =
+      Interns.info("request_latency_ms_p99", "99th percentile latency in milliseconds");
   private final AtomicLong lastCleanupTime = new AtomicLong(System.currentTimeMillis());
   private final Object metricsLock = new Object();
   private static volatile S3GatewayXidMetrics instance;
@@ -40,8 +63,12 @@ public final class S3GatewayXidMetrics implements MetricsSource {
   private final ConcurrentMap<String, AtomicLong> latencyMsTotal = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, AtomicLong> latencyCount = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Deque<Long>> latencySamplesByXid = new ConcurrentHashMap<>();
+  /** Version of samples for percentile caching; incremented on each add/remove. */
+  private final ConcurrentMap<String, AtomicLong> samplesVersion = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, AtomicLong> requestCount = new ConcurrentHashMap<>();
   private final ConcurrentMap<RequestMetricKey, AtomicLong> errorsTotal = new ConcurrentHashMap<>();
+  /** Version counter for samples: incremented on each add() + removeFirst().
+   *  Stored in array [p50, p95, p99, version]. */
   private final ConcurrentMap<String, double[]> cachedPercentiles = new ConcurrentHashMap<>();
 
   private S3GatewayXidMetrics() {
@@ -89,13 +116,16 @@ public final class S3GatewayXidMetrics implements MetricsSource {
         .incrementAndGet();
     requestCount.computeIfAbsent(checkedXid, s -> new AtomicLong())
         .incrementAndGet();
+    AtomicLong ver = samplesVersion.computeIfAbsent(checkedXid, s -> new AtomicLong());
     latencySamplesByXid.computeIfAbsent(checkedXid, s -> new ArrayDeque<>(MAX_LATENCY_SAMPLES_PER_XID))
             .add(latencyMs);
+    ver.incrementAndGet();
 
     Deque<Long> latencySamples = latencySamplesByXid.get(checkedXid);
     synchronized (latencySamples) {
       if (latencySamples.size() > MAX_LATENCY_SAMPLES_PER_XID) {
         latencySamples.removeFirst();
+        ver.incrementAndGet();
       }
     }
     if (errorCode >= 400) {
@@ -118,11 +148,11 @@ public final class S3GatewayXidMetrics implements MetricsSource {
       BytesMetricKey key = entry.getKey();
 
       MetricsRecordBuilder rb = collector.addRecord(SOURCE_NAME)
-          .tag(Interns.info("XID", "Request XID"), key.xid)
-          .tag(Interns.info("method", "S3 request type: GET or PUT"), key.requestType);
+          .tag(METRICS_INFO_XID, key.xid)
+          .tag(METRICS_INFO_METHOD, key.requestType);
 
       rb.addCounter(
-          Interns.info("sum_bytes", "Total processed bytes"),
+          METRICS_INFO_SUM_BYTES,
           entry.getValue().get());
     }
   }
@@ -135,17 +165,16 @@ public final class S3GatewayXidMetrics implements MetricsSource {
       double avgLatencyNs = count == 0 ? 0.0 : (double) total / count;
 
       collector.addRecord(SOURCE_NAME)
-          .tag(Interns.info("XID", "Request XID"), xid)
-          .addGauge(Interns.info("average_latency", "Average request latency in milliseconds"),
-              avgLatencyNs);
+          .tag(METRICS_INFO_XID, xid)
+          .addGauge(METRICS_INFO_AVG_LATENCY, avgLatencyNs);
     }
   }
 
   private void writeRequestCountMetrics(MetricsCollector collector) {
     for (Map.Entry<String, AtomicLong> entry : requestCount.entrySet()) {
       collector.addRecord(SOURCE_NAME)
-          .tag(Interns.info("XID", "Request XID"), entry.getKey())
-          .addCounter(Interns.info("count_requests", "Total request count"), entry.getValue().get());
+          .tag(METRICS_INFO_XID, entry.getKey())
+          .addCounter(METRICS_INFO_COUNT_REQUESTS, entry.getValue().get());
     }
   }
 
@@ -153,9 +182,9 @@ public final class S3GatewayXidMetrics implements MetricsSource {
     for (Map.Entry<RequestMetricKey, AtomicLong> entry : errorsTotal.entrySet()) {
       RequestMetricKey key = entry.getKey();
       collector.addRecord(SOURCE_NAME)
-          .tag(Interns.info("XID", "Request XID"), key.xid)
-          .tag(Interns.info("error_code", "HTTP error code"), String.valueOf(key.errorCode))
-          .addCounter(Interns.info("error_count", "Total failed request count"),
+          .tag(METRICS_INFO_XID, key.xid)
+          .tag(METRICS_INFO_ERROR_CODE, String.valueOf(key.errorCode))
+          .addCounter(METRICS_INFO_ERROR_COUNT,
               entry.getValue().get());
     }
   }
@@ -183,6 +212,7 @@ public final class S3GatewayXidMetrics implements MetricsSource {
       requestCount.clear();
       errorsTotal.clear();
       latencySamplesByXid.clear();
+      samplesVersion.clear();
       cachedPercentiles.clear();
     }
   }
@@ -203,6 +233,7 @@ public final class S3GatewayXidMetrics implements MetricsSource {
       // but consistent enough for eviction purposes.
       Iterator<Map.Entry<K, V>> it = map.entrySet().iterator();
       if (it.hasNext()) {
+        it.next();
         it.remove();
       }
     }
@@ -212,48 +243,36 @@ public final class S3GatewayXidMetrics implements MetricsSource {
     for (Map.Entry<String, Deque<Long>> entry : latencySamplesByXid.entrySet()) {
       String xid = entry.getKey();
       Deque<Long> samples = entry.getValue();
+      AtomicLong version = samplesVersion.get(xid);
+      long currentVersion = version == null ? 0L : version.get();
 
       double p50, p95, p99;
 
-      // Cache percentiles: only recompute if samples have changed since last computation.
-      double[] cached = cachedPercentiles.computeIfAbsent(xid, k -> new double[4]);
-      long expectedSize = samples.size();
-      synchronized (samples) {
-        if (cached[0] == 0 && cached[1] == 0 && cached[2] == 0) {
-          // First computation — calculate percentiles.
+      // Cache percentiles: only recompute if samples version has changed.
+      double[] cached = cachedPercentiles.get(xid);
+      if (cached != null && (long) cached[3] == currentVersion) {
+        // No new samples — reuse cached values.
+        p50 = cached[0];
+        p95 = cached[1];
+        p99 = cached[2];
+      } else {
+        synchronized (samples) {
+          // Recompute percentiles.
           List<Long> sortedSamples = new ArrayList<>(samples);
           Collections.sort(sortedSamples);
           p50 = percentile(sortedSamples, 50);
           p95 = percentile(sortedSamples, 95);
           p99 = percentile(sortedSamples, 99);
-          cached[0] = p50;
-          cached[1] = p95;
-          cached[2] = p99;
-          cached[3] = (double) expectedSize;
-        } else if (Math.abs((double) samples.size() - cached[3]) < 0.001) {
-          // No new samples — reuse cached values.
-          p50 = cached[0];
-          p95 = cached[1];
-          p99 = cached[2];
-        } else {
-          // Samples added — recompute.
-          List<Long> sortedSamples = new ArrayList<>(samples);
-          Collections.sort(sortedSamples);
-          p50 = percentile(sortedSamples, 50);
-          p95 = percentile(sortedSamples, 95);
-          p99 = percentile(sortedSamples, 99);
-          cached[0] = p50;
-          cached[1] = p95;
-          cached[2] = p99;
-          cached[3] = (double) expectedSize;
         }
+        // Store with version snapshot taken before synchronized.
+        cachedPercentiles.put(xid, new double[]{p50, p95, p99, (double) currentVersion});
       }
 
       MetricsRecordBuilder rb = collector.addRecord(SOURCE_NAME)
-              .tag(Interns.info("XID", "Request XID"), xid);
-      rb.addGauge(Interns.info("request_latency_ms_p50", "50th percentile latency in milliseconds"), p50);
-      rb.addGauge(Interns.info("request_latency_ms_p95", "95th percentile latency in milliseconds"), p95);
-      rb.addGauge(Interns.info("request_latency_ms_p99", "99th percentile latency in milliseconds"), p99);
+              .tag(METRICS_INFO_XID, xid);
+      rb.addGauge(METRICS_INFO_REQUEST_LATENCY_P50, p50);
+      rb.addGauge(METRICS_INFO_REQUEST_LATENCY_P95, p95);
+      rb.addGauge(METRICS_INFO_REQUEST_LATENCY_P99, p99);
     }
   }
 
