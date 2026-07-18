@@ -1,0 +1,11 @@
+blob.server.port: 6124
+taskmanager.memory.process.size: 1536m
+classloader.resolve-order: parent-first
+parallelism.default: 2
+jobmanager.rpc.address: jobmanager
+taskmanager.numberOfTaskSlots: 2
+rest.address: jobmanager
+jobmanager.memory.process.size: 1024m
+env.java.opts.all: -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both -Djava.security.krb5.realm=EXAMPLE.COM -Djava.security.krb5.kdc=kdc.example.com
+query.server.port: 6125
+rest.bind-address: 0.0.0.0

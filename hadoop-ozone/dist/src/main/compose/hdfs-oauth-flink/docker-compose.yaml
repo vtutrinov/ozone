@@ -1,0 +1,170 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ============================================================
+# Secure plain-HDFS + Flink Standalone over OAuth — NO Ozone,
+# NO KDC, no keytabs. Mirror of ozone-oauth-flink with the
+# storage swapped to hdfs://namenode:9000.
+#
+# The Flink image ships no Hadoop; the ozone-oauth variant fed
+# it the Ozone dist lib. Here a one-shot `hadooplibs` service
+# copies the Hadoop client jars from the stock Hadoop image
+# into a shared volume consumed via HADOOP_CLASSPATH.
+# ============================================================
+
+volumes:
+  hadooplibs:
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    hostname: keycloak
+    dns_search: .
+    ports:
+      - 8080:8080
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./keycloak-realm.json:/opt/keycloak/data/import/ozone-realm.json
+    command: ["start-dev", "--import-realm", "--health-enabled=true"]
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  # One-shot: flatten the Hadoop client jars into the shared volume.
+  # Runs as root — the named volume is root-owned, and a failed
+  # `find -exec cp` would NOT fail the script, so verify the copy
+  # landed before declaring success.
+  hadooplibs:
+    image: ${HADOOP_IMAGE}:${HADOOP_VERSION}
+    user: "0:0"
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+        find /opt/hadoop/share/hadoop/common /opt/hadoop/share/hadoop/hdfs \
+          -name '*.jar' ! -name '*-tests.jar' -exec cp -n {} /libs/ \;
+        chmod a+r /libs/*.jar
+        ls /libs/hadoop-common-*.jar /libs/hadoop-hdfs-client-*.jar > /dev/null
+        echo "copied $(ls /libs | wc -l) jars"
+    volumes:
+      - hadooplibs:/libs
+
+  namenode:
+    image: ${HADOOP_IMAGE}:${HADOOP_VERSION}
+    hostname: namenode
+    dns_search: .
+    ports:
+      - 9870:9870
+    env_file:
+      - docker-config
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+    environment:
+      ENSURE_NAMENODE_DIR: /tmp/hadoop-hadoop/dfs/name
+      HADOOP_OPTS: -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: nn
+      AUTH_PASSWORD: nn
+    command: ["hdfs", "namenode"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  datanode:
+    image: ${HADOOP_IMAGE}:${HADOOP_VERSION}
+    hostname: datanode
+    dns_search: .
+    env_file:
+      - docker-config
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+    environment:
+      WAITFOR: namenode:9000
+      HADOOP_OPTS: -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: dn
+      AUTH_PASSWORD: dn
+    command: ["hdfs", "datanode"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  # ---- Flink Standalone cluster ----
+
+  jobmanager:
+    image: apache/flink:${FLINK_VERSION}
+    hostname: jobmanager
+    dns_search: .
+    ports:
+      - 8082:8081  # Flink Web UI
+    user: "0:0"
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+      - hadooplibs:/opt/hadooplibs:ro
+      - ./core-site.xml:/opt/hadoop-conf/core-site.xml
+      - ./flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
+    environment:
+      HADOOP_CONF_DIR: /opt/hadoop-conf
+      HADOOP_CLASSPATH: /opt/hadooplibs/*
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: flink
+      AUTH_PASSWORD: flink
+      # apache/flink docker-entrypoint appends
+      # `jobmanager.rpc.address: $(hostname -f)` when this env is
+      # unset — pin it so both JM and TM point at the JM service.
+      JOB_MANAGER_RPC_ADDRESS: jobmanager
+    command: ["jobmanager"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      namenode:
+        condition: service_started
+      hadooplibs:
+        condition: service_completed_successfully
+
+  taskmanager:
+    image: apache/flink:${FLINK_VERSION}
+    hostname: taskmanager
+    dns_search: .
+    user: "0:0"
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+      - hadooplibs:/opt/hadooplibs:ro
+      - ./core-site.xml:/opt/hadoop-conf/core-site.xml
+      - ./flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
+    environment:
+      HADOOP_CONF_DIR: /opt/hadoop-conf
+      HADOOP_CLASSPATH: /opt/hadooplibs/*
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: flink
+      AUTH_PASSWORD: flink
+      JOB_MANAGER_RPC_ADDRESS: jobmanager
+    command: ["taskmanager"]
+    depends_on:
+      jobmanager:
+        condition: service_started
+      hadooplibs:
+        condition: service_completed_successfully
