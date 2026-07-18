@@ -1,0 +1,146 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ============================================================
+# Secure plain-HDFS + Apache Spark Standalone over OAuth —
+# NO Ozone, NO KDC, no keytabs. Mirror of ozone-oauth-spark
+# with the storage layer swapped to hdfs://namenode:9000.
+# ============================================================
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    hostname: keycloak
+    dns_search: .
+    ports:
+      - 8080:8080
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./keycloak-realm.json:/opt/keycloak/data/import/ozone-realm.json
+    command: ["start-dev", "--import-realm", "--health-enabled=true"]
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  namenode:
+    image: ${HADOOP_IMAGE}:${HADOOP_VERSION}
+    hostname: namenode
+    dns_search: .
+    ports:
+      - 9870:9870
+    env_file:
+      - docker-config
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+    environment:
+      ENSURE_NAMENODE_DIR: /tmp/hadoop-hadoop/dfs/name
+      HADOOP_OPTS: -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: nn
+      AUTH_PASSWORD: nn
+    command: ["hdfs", "namenode"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  datanode:
+    image: ${HADOOP_IMAGE}:${HADOOP_VERSION}
+    hostname: datanode
+    dns_search: .
+    env_file:
+      - docker-config
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+    environment:
+      WAITFOR: namenode:9000
+      HADOOP_OPTS: -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: dn
+      AUTH_PASSWORD: dn
+    command: ["hdfs", "datanode"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  # ---- Spark Standalone cluster ----
+
+  spark-master:
+    image: apache/spark:${SPARK_VERSION}
+    hostname: spark-master
+    dns_search: .
+    ports:
+      - 7077:7077
+      - 8082:8081
+    user: "0:0"
+    # Spark runs as the image-default user (spark / 185); the agent
+    # writes per-user state under $HOME. Easiest to run as root for
+    # the test rig; production would set up a dedicated user.
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+      - ./core-site.xml:/opt/spark/conf/core-site.xml
+      - ./spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_MASTER_HOST: spark-master
+      SPARK_MASTER_PORT: 7077
+      SPARK_MASTER_WEBUI_PORT: 8081
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: spark
+      AUTH_PASSWORD: spark
+      SPARK_DAEMON_JAVA_OPTS: >-
+        -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+        -Djava.security.krb5.realm=EXAMPLE.COM
+        -Djava.security.krb5.kdc=kdc.example.com
+    command: ["/opt/spark/sbin/start-master.sh"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      namenode:
+        condition: service_started
+
+  spark-worker:
+    image: apache/spark:${SPARK_VERSION}
+    hostname: spark-worker
+    dns_search: .
+    user: "0:0"
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+      - ./core-site.xml:/opt/spark/conf/core-site.xml
+      - ./spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 1g
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: spark
+      AUTH_PASSWORD: spark
+      SPARK_DAEMON_JAVA_OPTS: >-
+        -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+        -Djava.security.krb5.realm=EXAMPLE.COM
+        -Djava.security.krb5.kdc=kdc.example.com
+    command: ["/opt/spark/sbin/start-worker.sh", "spark://spark-master:7077"]
+    depends_on:
+      spark-master:
+        condition: service_started
