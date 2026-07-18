@@ -1,0 +1,214 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ============================================================
+# Secure plain-HDFS + Storm 2.6 over OAuth — NO Ozone, NO KDC,
+# no keytabs. Mirror of ozone-oauth-storm with the storage
+# swapped to hdfs://namenode:9000.
+#
+# The Storm image ships no Hadoop; a one-shot `hadooplibs`
+# service flattens the Hadoop client jars from the stock Hadoop
+# image into a shared volume, mounted into Storm's extlib-daemon
+# (nimbus/supervisor/ui classpath) and extlib (worker classpath).
+# ============================================================
+
+volumes:
+  hadooplibs:
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    hostname: keycloak
+    dns_search: .
+    ports:
+      - 8080:8080
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./keycloak-realm.json:/opt/keycloak/data/import/ozone-realm.json
+    command: ["start-dev", "--import-realm", "--health-enabled=true"]
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  # One-shot: flatten the Hadoop client jars into the shared volume.
+  # Runs as root — the named volume is root-owned, and a failed
+  # `find -exec cp` would NOT fail the script, so verify the copy
+  # landed before declaring success.
+  hadooplibs:
+    image: ${HADOOP_IMAGE}:${HADOOP_VERSION}
+    user: "0:0"
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+        find /opt/hadoop/share/hadoop/common /opt/hadoop/share/hadoop/hdfs \
+          -name '*.jar' ! -name '*-tests.jar' -exec cp -n {} /libs/ \;
+        chmod a+r /libs/*.jar
+        ls /libs/hadoop-common-*.jar /libs/hadoop-hdfs-client-*.jar > /dev/null
+        echo "copied $(ls /libs | wc -l) jars"
+    volumes:
+      - hadooplibs:/libs
+
+  namenode:
+    image: ${HADOOP_IMAGE}:${HADOOP_VERSION}
+    hostname: namenode
+    dns_search: .
+    ports:
+      - 9870:9870
+    env_file:
+      - docker-config
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+    environment:
+      ENSURE_NAMENODE_DIR: /tmp/hadoop-hadoop/dfs/name
+      HADOOP_OPTS: -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: nn
+      AUTH_PASSWORD: nn
+    command: ["hdfs", "namenode"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  datanode:
+    image: ${HADOOP_IMAGE}:${HADOOP_VERSION}
+    hostname: datanode
+    dns_search: .
+    env_file:
+      - docker-config
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+    environment:
+      WAITFOR: namenode:9000
+      HADOOP_OPTS: -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: dn
+      AUTH_PASSWORD: dn
+    command: ["hdfs", "datanode"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  # ---- Storm cluster ----
+
+  zookeeper:
+    image: zookeeper:3.9
+    hostname: zookeeper
+    dns_search: .
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=zookeeper:2888:3888;2181
+      ZOO_4LW_COMMANDS_WHITELIST: mntr,conf,ruok
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  nimbus:
+    image: storm:${STORM_VERSION}
+    hostname: nimbus
+    dns_search: .
+    user: "0:0"
+    ports:
+      - 6627:6627
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+      - hadooplibs:/opt/hadooplibs:ro
+      - ./core-site.xml:/opt/hadoop-conf/core-site.xml
+      - ./storm.yaml:/conf/storm.yaml
+      # extlib-daemon jars go on nimbus/supervisor/ui classpaths;
+      # extlib jars go on worker classpaths. The flat hadooplibs
+      # volume serves both, so:
+      #   1. the security-auth-agent can replace UGI (it
+      #      Class.forName's o.a.h.security.UserGroupInformation
+      #      at premain);
+      #   2. topologies using HdfsBolt have the hdfs client.
+      - hadooplibs:/apache-storm-2.6.4/extlib-daemon:ro
+      - hadooplibs:/apache-storm-2.6.4/extlib:ro
+    environment:
+      HADOOP_CONF_DIR: /opt/hadoop-conf
+      HADOOP_CLASSPATH: /opt/hadooplibs/*
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: storm
+      AUTH_PASSWORD: storm
+      # JAVA_TOOL_OPTIONS is the sledgehammer — every JVM spawned
+      # from this container (nimbus, storm CLI, worker forks)
+      # inherits the agent.
+      JAVA_TOOL_OPTIONS: >-
+        -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+        -Djava.security.krb5.realm=EXAMPLE.COM
+        -Djava.security.krb5.kdc=kdc.example.com
+    command: ["storm", "nimbus"]
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      namenode:
+        condition: service_started
+      hadooplibs:
+        condition: service_completed_successfully
+
+  supervisor:
+    image: storm:${STORM_VERSION}
+    hostname: supervisor
+    dns_search: .
+    user: "0:0"
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+      - hadooplibs:/opt/hadooplibs:ro
+      - ./core-site.xml:/opt/hadoop-conf/core-site.xml
+      - ./storm.yaml:/conf/storm.yaml
+      - hadooplibs:/apache-storm-2.6.4/extlib-daemon:ro
+      - hadooplibs:/apache-storm-2.6.4/extlib:ro
+    environment:
+      HADOOP_CONF_DIR: /opt/hadoop-conf
+      HADOOP_CLASSPATH: /opt/hadooplibs/*
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: storm
+      AUTH_PASSWORD: storm
+      JAVA_TOOL_OPTIONS: >-
+        -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+        -Djava.security.krb5.realm=EXAMPLE.COM
+        -Djava.security.krb5.kdc=kdc.example.com
+    command: ["storm", "supervisor"]
+    depends_on:
+      nimbus:
+        condition: service_started
+
+  storm-ui:
+    image: storm:${STORM_VERSION}
+    hostname: storm-ui
+    dns_search: .
+    ports:
+      - 8083:8080
+    volumes:
+      - ./storm.yaml:/conf/storm.yaml
+    command: ["storm", "ui"]
+    depends_on:
+      nimbus:
+        condition: service_started
