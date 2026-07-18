@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one
+  or more contributor license agreements.  See the NOTICE file
+  distributed with this work for additional information
+  regarding copyright ownership.  The ASF licenses this file
+  to you under the Apache License, Version 2.0 (the
+  "License"); you may not use this file except in compliance
+  with the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+-->
+<configuration>
+  <!-- Default FS points at plain HDFS — HMS resolves relative
+       warehouse paths against this. No Ozone filesystem impls
+       needed: hdfs:// is native to the Hadoop libs Hive ships. -->
+  <property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://namenode:9000</value>
+  </property>
+
+  <!-- Secure mode — agent intercepts the Kerberos login flow. -->
+  <property>
+    <name>hadoop.security.authentication</name>
+    <value>kerberos</value>
+  </property>
+  <property>
+    <name>hadoop.security.authorization</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>hadoop.security.auth_to_local</name>
+    <value>DEFAULT</value>
+  </property>
+
+  <!-- HDFS client side of the secure cluster: the expected NN
+       service principal and the SASL protection level on the
+       DataNode data-transfer path (DIGEST-MD5 via block tokens). -->
+  <property>
+    <name>dfs.namenode.kerberos.principal</name>
+    <value>nn/namenode@EXAMPLE.COM</value>
+  </property>
+  <property>
+    <name>dfs.data.transfer.protection</name>
+    <value>authentication</value>
+  </property>
+
+  <!-- HMS impersonates the connecting user (HS2 doAs). -->
+  <property>
+    <name>hadoop.proxyuser.hms.hosts</name>
+    <value>*</value>
+  </property>
+  <property>
+    <name>hadoop.proxyuser.hms.groups</name>
+    <value>*</value>
+  </property>
+  <property>
+    <name>hadoop.proxyuser.hms.users</name>
+    <value>*</value>
+  </property>
+
+  <!-- Hive's result-fetch path calls
+       TokenCache.obtainTokensForNamenodes(), which asks Hadoop's
+       Master.getMasterPrincipal() for a delegation-token renewer.
+       Without a value here it throws "Can't get Master Kerberos
+       principal for use as renewer". We have no RM in this suite —
+       the principal string is only used as the renewer label. -->
+  <property>
+    <name>yarn.resourcemanager.principal</name>
+    <value>rm/_HOST@EXAMPLE.COM</value>
+  </property>
+</configuration>

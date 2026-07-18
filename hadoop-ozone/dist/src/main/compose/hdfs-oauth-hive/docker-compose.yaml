@@ -1,0 +1,202 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ============================================================
+# Secure plain-HDFS + Hive Metastore + HiveServer2 (Tez local
+# mode) with OAuth via Keycloak — NO Ozone, NO KDC, no keytabs.
+#
+# Mirror of ozone-oauth-hive with the storage layer swapped:
+# warehouse lives on hdfs://namenode:9000/warehouse. The same
+# security-auth-agent secures NN/DN RPC, HMS thrift SASL and
+# the HS2 doAs chain.
+# ============================================================
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    hostname: keycloak
+    dns_search: .
+    ports:
+      - 8080:8080
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./keycloak-realm.json:/opt/keycloak/data/import/ozone-realm.json
+    command: ["start-dev", "--import-realm", "--health-enabled=true"]
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  namenode:
+    image: ${HADOOP_IMAGE}:${HADOOP_VERSION}
+    hostname: namenode
+    dns_search: .
+    ports:
+      - 9870:9870
+    env_file:
+      - docker-config
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+    environment:
+      ENSURE_NAMENODE_DIR: /tmp/hadoop-hadoop/dfs/name
+      HADOOP_OPTS: -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: nn
+      AUTH_PASSWORD: nn
+    command: ["hdfs", "namenode"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  datanode:
+    image: ${HADOOP_IMAGE}:${HADOOP_VERSION}
+    hostname: datanode
+    dns_search: .
+    env_file:
+      - docker-config
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+    environment:
+      WAITFOR: namenode:9000
+      HADOOP_OPTS: -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: dn
+      AUTH_PASSWORD: dn
+    command: ["hdfs", "datanode"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  # ------------------------------------------------------------
+  # Hive Metastore stack
+  # ------------------------------------------------------------
+  postgres:
+    image: postgres:${POSTGRES_VERSION}
+    hostname: postgres
+    dns_search: .
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive
+      POSTGRES_DB: metastore
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive -d metastore"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  hms:
+    image: apache/hive:${HIVE_VERSION}
+    hostname: hms
+    dns_search: .
+    ports:
+      - 9083:9083
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: postgres
+      SERVICE_OPTS: >-
+        -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+        -Djava.security.krb5.realm=EXAMPLE.COM
+        -Djava.security.krb5.kdc=kdc.example.com
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/metastore
+        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
+        -Djavax.jdo.option.ConnectionUserName=hive
+        -Djavax.jdo.option.ConnectionPassword=hive
+      # security-auth-agent OAuth credentials — HMS authenticates
+      # to HDFS (NameNode) as user `hms` via the agent's env
+      # AuthDataProvider; no KDC, no keytab needed. hdfs:// is
+      # native to the Hadoop libs the Hive image ships — no extra
+      # filesystem jar required (unlike the ozone-oauth variant).
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: hms
+      AUTH_PASSWORD: hms
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+      - ./hive-site.xml:/opt/hive/conf/hive-site.xml
+      - ./core-site.xml:/opt/hive/conf/core-site.xml
+      - ./core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      # Postgres JDBC driver — fetched by test.sh into ./jars/.
+      - ./jars/postgresql.jar:/opt/hive/lib/postgresql.jar
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      namenode:
+        condition: service_started
+
+  hiveserver2:
+    image: apache/hive:${HIVE_VERSION}
+    hostname: hiveserver2
+    dns_search: .
+    user: "0:0"
+    # In Hive 4 local-mode Tez, DagUtils enforces that the session
+    # staging dir on the local filesystem is owned by either the
+    # submitter (e.g. "testuser") or the service UGI ("hms"). The
+    # apache/hive image's default OS user is "hive" so the check
+    # would fail under doAs. We start as root, useradd the
+    # hms/testuser/hadoop OS users so chown can name them, chown
+    # /tmp/hive*, then drop privileges via su to "hms" which keeps
+    # OAuth identity and POSIX owner aligned.
+    entrypoint:
+      - bash
+      - -lc
+      - |
+        set -e
+        for u in hms testuser hadoop; do
+          id -u "$$u" >/dev/null 2>&1 || useradd -m -s /bin/bash -u "$$(awk -v n=$$u 'BEGIN{print n=="hms"?1100:(n=="testuser"?1101:1102)}')" "$$u"
+        done
+        mkdir -p /tmp/hive /tmp/hive-local /home/hms /home/hms/wd
+        chown -R hms:hms /tmp/hive /tmp/hive-local /home/hms
+        chown -R hms:hms /opt/hive/conf 2>/dev/null || true
+        # Tez local mode creates ./tez-local-cache* in $PWD, so we
+        # cd into hms's home before the JVM starts.
+        cd /home/hms/wd
+        exec su -p -c "cd /home/hms/wd && /entrypoint.sh" hms
+    environment:
+      SERVICE_NAME: hiveserver2
+      # Don't try to (re)initialise schema — hms already did.
+      IS_RESUME: "true"
+      # Talk to the standalone metastore instead of running an
+      # embedded one.
+      SERVICE_OPTS: >-
+        -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+        -Djava.security.krb5.realm=EXAMPLE.COM
+        -Djava.security.krb5.kdc=kdc.example.com
+        -Dhive.metastore.uris=thrift://hms:9083
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: hms
+      AUTH_PASSWORD: hms
+    volumes:
+      - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+      - ./hive-site.xml:/opt/hive/conf/hive-site.xml
+      - ./core-site.xml:/opt/hive/conf/core-site.xml
+      - ./core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./tez-site.xml:/opt/tez/conf/tez-site.xml
+      - ./jars/postgresql.jar:/opt/hive/lib/postgresql.jar
+    depends_on:
+      hms:
+        condition: service_started
+      keycloak:
+        condition: service_healthy

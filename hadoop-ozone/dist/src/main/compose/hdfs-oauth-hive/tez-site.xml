@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one
+  or more contributor license agreements.  See the NOTICE file
+  distributed with this work for additional information
+  regarding copyright ownership.  The ASF licenses this file
+  to you under the Apache License, Version 2.0 (the
+  "License"); you may not use this file except in compliance
+  with the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+-->
+<!--
+  Tez configuration for the ozone-oauth-hive suite — runs Tez in
+  LOCAL MODE so we don't need a YARN cluster. The single-process
+  Tez AM + tasks run inside HiveServer2's JVM, which already has
+  the security-auth-agent loaded; outbound Ozone writes therefore
+  ride the same OAuth identity HS2 itself uses.
+-->
+<configuration>
+  <!-- Local mode: Tez AM + tasks share the HS2 JVM, no YARN. -->
+  <property>
+    <name>tez.local.mode</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>tez.runtime.optimize.local.fetch</name>
+    <value>true</value>
+  </property>
+
+  <!-- Don't try to ship a Tez tarball to HDFS — point at the
+       local jars the Hive image already ships under /opt/tez. -->
+  <property>
+    <name>tez.lib.uris</name>
+    <value>file:///opt/tez/tez.tar.gz</value>
+  </property>
+  <property>
+    <name>tez.use.cluster.hadoop-libs</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>tez.ignore.lib.uris</name>
+    <value>true</value>
+  </property>
+
+  <!-- Tez stages session/job state under this directory. Keep it
+       local so Tez doesn't need an HDFS-style staging dir on
+       ofs:// (writes via Ozone still happen for query results;
+       this is just AM/task scratch). -->
+  <property>
+    <name>tez.staging-dir</name>
+    <value>file:///tmp/tez-staging</value>
+  </property>
+
+  <!-- Disable history UI (no Timeline server in this suite). -->
+  <property>
+    <name>tez.history.logging.service.class</name>
+    <value>org.apache.tez.dag.history.logging.impl.SimpleHistoryLoggingService</value>
+  </property>
+  <property>
+    <name>tez.tez-ui.history-url.base</name>
+    <value/>
+  </property>
+
+  <!-- In local mode the container settings don't apply to YARN
+       containers (there are none), but Hive still reads them to
+       size the in-JVM task workers. -->
+  <property>
+    <name>tez.am.resource.memory.mb</name>
+    <value>512</value>
+  </property>
+  <property>
+    <name>tez.task.resource.memory.mb</name>
+    <value>512</value>
+  </property>
+</configuration>
