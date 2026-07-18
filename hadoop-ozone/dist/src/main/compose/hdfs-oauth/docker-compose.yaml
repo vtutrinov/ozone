@@ -1,0 +1,118 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ============================================================
+# Secure plain-HDFS + YARN cluster with OAuth (via Keycloak)
+# instead of a KDC — NO Ozone components at all.
+#
+# This proves the security-auth-agent is storage-agnostic: the
+# same agent that carried the ozone-oauth* suites intercepts
+# Kerberos logins and SASL GSSAPI in stock Apache Hadoop
+# (NameNode, DataNode, ResourceManager, NodeManager) with no
+# KDC and no keytab files anywhere.
+# ============================================================
+
+x-common: &hadoop-common
+  image: ${HADOOP_IMAGE}:${HADOOP_VERSION}
+  dns_search: .
+  env_file:
+    - docker-config
+  volumes:
+    - ${AGENT_JAR}:/opt/security-auth-agent.jar:ro
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    hostname: keycloak
+    dns_search: .
+    ports:
+      - 8080:8080
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./keycloak-realm.json:/opt/keycloak/data/import/ozone-realm.json
+    command: ["start-dev", "--import-realm", "--health-enabled=true"]
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  namenode:
+    <<: *hadoop-common
+    hostname: namenode
+    ports:
+      - 9870:9870
+    environment:
+      ENSURE_NAMENODE_DIR: /tmp/hadoop-hadoop/dfs/name
+      HADOOP_OPTS: -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: nn
+      AUTH_PASSWORD: nn
+    command: ["hdfs", "namenode"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  datanode:
+    <<: *hadoop-common
+    hostname: datanode
+    environment:
+      WAITFOR: namenode:9000
+      HADOOP_OPTS: -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: dn
+      AUTH_PASSWORD: dn
+    command: ["hdfs", "datanode"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  rm:
+    <<: *hadoop-common
+    hostname: rm
+    ports:
+      - 8088:8088
+    environment:
+      WAITFOR: namenode:9000
+      HADOOP_OPTS: -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: rm
+      AUTH_PASSWORD: rm
+    command: ["yarn", "resourcemanager"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  nm:
+    <<: *hadoop-common
+    hostname: nm
+    environment:
+      WAITFOR: rm:8088
+      HADOOP_OPTS: -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env,auth-token-validation=none,auth-token-renewal=both
+      AUTH_SERVER_URL: http://keycloak:8080/realms/EXAMPLE.COM/protocol/openid-connect/token
+      AUTH_CLIENT_ID: ozone-client
+      AUTH_LOGIN: nm
+      AUTH_PASSWORD: nm
+    command: ["yarn", "nodemanager"]
+    depends_on:
+      keycloak:
+        condition: service_healthy

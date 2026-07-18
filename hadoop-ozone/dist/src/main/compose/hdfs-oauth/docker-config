@@ -1,0 +1,91 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ============================================================
+# SECURE plain-HDFS/YARN cluster WITHOUT a KDC.
+#
+# hadoop.security.authentication=kerberos and service principals
+# are configured, but no KDC runs and no keytab files exist.
+# The security-auth-agent intercepts every loginUserFromKeytab()
+# and SASL GSSAPI exchange and replaces them with OAuth tokens
+# from Keycloak. If interception failed, every service would die
+# at startup with "Unable to obtain password from user" — so a
+# healthy cluster IS the proof the agent covers plain Hadoop.
+# ============================================================
+
+CORE-SITE.XML_fs.defaultFS=hdfs://namenode:9000
+CORE-SITE.XML_fs.trash.interval=1
+CORE-SITE.XML_hadoop.security.authentication=kerberos
+CORE-SITE.XML_hadoop.security.authorization=true
+CORE-SITE.XML_hadoop.security.auth_to_local=DEFAULT
+
+# --- HDFS: secure mode, principals point at nonexistent keytabs ---
+HDFS-SITE.XML_dfs.namenode.rpc-address=namenode:9000
+HDFS-SITE.XML_dfs.namenode.kerberos.principal=nn/namenode@EXAMPLE.COM
+HDFS-SITE.XML_dfs.namenode.keytab.file=/etc/security/keytabs/nn.keytab
+HDFS-SITE.XML_dfs.datanode.kerberos.principal=dn/datanode@EXAMPLE.COM
+HDFS-SITE.XML_dfs.datanode.keytab.file=/etc/security/keytabs/dn.keytab
+HDFS-SITE.XML_dfs.block.access.token.enable=true
+# SASL on the data-transfer path (DIGEST-MD5 keyed by block tokens,
+# no Kerberos involved) so the DataNode may run on non-privileged
+# ports; ignore.secure.ports.for.testing skips the HTTPS_ONLY
+# requirement that SASL data transfer otherwise implies.
+HDFS-SITE.XML_dfs.data.transfer.protection=authentication
+HDFS-SITE.XML_ignore.secure.ports.for.testing=true
+HDFS-SITE.XML_dfs.replication=1
+HDFS-SITE.XML_dfs.permissions.enabled=true
+HDFS-SITE.XML_dfs.namenode.datanode.registration.ip-hostname-check=false
+
+# --- YARN: secure RM/NM, same no-keytab trick ---
+YARN-SITE.XML_yarn.resourcemanager.hostname=rm
+YARN-SITE.XML_yarn.resourcemanager.principal=rm/rm@EXAMPLE.COM
+YARN-SITE.XML_yarn.resourcemanager.keytab=/etc/security/keytabs/rm.keytab
+YARN-SITE.XML_yarn.nodemanager.principal=nm/nm@EXAMPLE.COM
+YARN-SITE.XML_yarn.nodemanager.keytab=/etc/security/keytabs/nm.keytab
+YARN-SITE.XML_yarn.nodemanager.aux-services=mapreduce_shuffle
+YARN-SITE.XML_yarn.nodemanager.vmem-check-enabled=false
+YARN-SITE.XML_yarn.nodemanager.pmem-check-enabled=false
+YARN-SITE.XML_yarn.nodemanager.disk-health-checker.enable=false
+YARN-SITE.XML_yarn.nodemanager.delete.debug-delay-sec=600
+
+CAPACITY-SCHEDULER.XML_yarn.scheduler.capacity.maximum-applications=10000
+CAPACITY-SCHEDULER.XML_yarn.scheduler.capacity.maximum-am-resource-percent=0.5
+CAPACITY-SCHEDULER.XML_yarn.scheduler.capacity.resource-calculator=org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator
+CAPACITY-SCHEDULER.XML_yarn.scheduler.capacity.root.queues=default
+CAPACITY-SCHEDULER.XML_yarn.scheduler.capacity.root.default.capacity=100
+CAPACITY-SCHEDULER.XML_yarn.scheduler.capacity.root.default.user-limit-factor=1
+CAPACITY-SCHEDULER.XML_yarn.scheduler.capacity.root.default.maximum-capacity=100
+CAPACITY-SCHEDULER.XML_yarn.scheduler.capacity.root.default.state=RUNNING
+CAPACITY-SCHEDULER.XML_yarn.scheduler.capacity.root.default.acl_submit_applications=*
+CAPACITY-SCHEDULER.XML_yarn.scheduler.capacity.root.default.acl_administer_queue=*
+
+# --- MapReduce over YARN ---
+MAPRED-SITE.XML_mapreduce.framework.name=yarn
+MAPRED-SITE.XML_mapreduce.map.memory.mb=2048
+MAPRED-SITE.XML_mapreduce.reduce.memory.mb=2048
+MAPRED-SITE.XML_mapred.child.java.opts=-Xmx1g
+MAPRED-SITE.XML_mapreduce.application.classpath=/opt/hadoop/share/hadoop/mapreduce/*:/opt/hadoop/share/hadoop/mapreduce/lib/*
+
+# Load the agent inside the MR ApplicationMaster and map/reduce task
+# JVMs. Storage/RM access from the AM works via delegation tokens
+# (DIGEST-MD5) obtained by the submitter, but the AM's own client
+# port speaks SASL KERBEROS for job-status queries — the agent fixes
+# the principal shape there, same as in the ozone-oauth suite.
+MAPRED-SITE.XML_yarn.app.mapreduce.am.command-opts=-Xmx1024m -javaagent:/opt/security-auth-agent.jar=auth-data-provider=env
+MAPRED-SITE.XML_mapreduce.map.java.opts=-javaagent:/opt/security-auth-agent.jar=auth-data-provider=env
+MAPRED-SITE.XML_mapreduce.reduce.java.opts=-javaagent:/opt/security-auth-agent.jar=auth-data-provider=env
+
+no_proxy=namenode,datanode,rm,nm,keycloak,localhost,127.0.0.1
