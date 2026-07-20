@@ -113,7 +113,15 @@ public class Gateway extends GenericCli {
 
   private static void loginS3GUser(OzoneConfiguration conf)
       throws IOException, AuthenticationException {
-    if (OzoneSecurityUtil.isSecurityEnabled(conf)) {
+    OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+    // S3G's Sig V4 path is HMAC end-to-end — S3G validates the signature
+    // against the user's S3 secret via an OM call over the SIMPLE service
+    // port (Step C-2), no Kerberos needed. HTTP SPNEGO is independently
+    // wired in the embedded Jetty (different keytab key); it is unaffected
+    // by whether the S3G daemon itself holds a Kerberos identity. So skip
+    // the S3G daemon login when inter-service Kerberos is off — operators
+    // can run an external-only deployment with no s3g.keytab on the pod.
+    if (OzoneSecurityUtil.requiresInterServiceKerberosLogin(conf)) {
       if (SecurityUtil.getAuthenticationMethod(conf).equals(
           UserGroupInformation.AuthenticationMethod.KERBEROS)) {
         if (LOG.isDebugEnabled()) {

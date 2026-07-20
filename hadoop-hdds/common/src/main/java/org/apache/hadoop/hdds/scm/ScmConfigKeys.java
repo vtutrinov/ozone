@@ -159,6 +159,21 @@ public final class ScmConfigKeys {
       "ozone.scm.client.port";
   public static final int OZONE_SCM_CLIENT_PORT_DEFAULT = 9860;
 
+  /**
+   * Optional sibling RPC port for StorageContainerLocationProtocol that
+   * answers SIMPLE auth in split-Kerberos mode. The Kerberos-served
+   * {@link #OZONE_SCM_CLIENT_PORT_KEY} stays as-is for external admin
+   * tools; OM and other internal callers dial this address instead so
+   * they don't need a TGT for inter-service calls. Unset → no sibling
+   * server is built and OM/internal calls fall back to the standard
+   * port (same behaviour as before Step M).
+   */
+  public static final String OZONE_SCM_SERVICE_RPC_ADDRESS_KEY =
+      "ozone.scm.service.rpc-address";
+  public static final String OZONE_SCM_SERVICE_RPC_BIND_HOST_KEY =
+      "ozone.scm.service.rpc-bind-host";
+  public static final int OZONE_SCM_SERVICE_RPC_PORT_DEFAULT = 9866;
+
   public static final String OZONE_SCM_DATANODE_PORT_KEY =
       "ozone.scm.datanode.port";
   public static final int OZONE_SCM_DATANODE_PORT_DEFAULT = 9861;
@@ -173,6 +188,31 @@ public final class ScmConfigKeys {
   public static final String OZONE_SCM_SECURITY_SERVICE_PORT_KEY =
       "ozone.scm.security.service.port";
   public static final int OZONE_SCM_SECURITY_SERVICE_PORT_DEFAULT = 9961;
+
+  /**
+   * Step Q — SIMPLE sibling of SCM's SCMSecurityProtocol server
+   * (cert issuance / secret-key vending).
+   *
+   * Mirrors {@link #OZONE_SCM_SERVICE_RPC_ADDRESS_KEY} for the
+   * StorageContainerLocationProtocol Step-M sibling. When this key is
+   * set, SCM binds a second SCMSecurityProtocol server on the configured
+   * port with {@code hadoop.security.authentication=simple} baked in at
+   * build time. The primary port
+   * ({@link #OZONE_SCM_SECURITY_SERVICE_PORT_KEY}, default 9961) reverts
+   * to the legacy auth policy — Kerberos when external Kerberos is
+   * enabled, SIMPLE otherwise — so external admin tools like
+   * {@code ozone admin cert list} can present a TGT against it. Internal
+   * callers (OM/DN/Recon cert issuance, secret-key vending) route to the
+   * sibling via {@code HddsServerUtil.getScmSecurityClient(...,
+   * internalCaller=true)} so they need no TGT. Unset → no sibling server
+   * is built and the legacy single-port behaviour applies (Step D,
+   * SIMPLE-when-interservice=false).
+   */
+  public static final String OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY =
+      "ozone.scm.security.service.rpc-address";
+  public static final String OZONE_SCM_SECURITY_SERVICE_RPC_BIND_HOST_KEY =
+      "ozone.scm.security.service.rpc-bind-host";
+  public static final int OZONE_SCM_SECURITY_SERVICE_RPC_PORT_DEFAULT = 9962;
 
   // Container service client
   public static final String OZONE_SCM_CLIENT_ADDRESS_KEY =

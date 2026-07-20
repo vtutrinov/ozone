@@ -1,0 +1,72 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Exercises the split-Kerberos surface from outside the daemons:
+#   1. kinit as the human "testuser" using a keytab from the shared Secret.
+#   2. `ozone fs -ls ofs://om-0.om/` — must succeed (external port = Kerberos).
+#   3. `ozone s3 getsecret -u testuser` — must succeed.
+#   4. `aws --endpoint-url http://s3g:9878 s3 ls` using that secret — must succeed.
+#   5. kdestroy + repeat — each step must fail with an auth error.
+# Job's exit code is the pass/fail verdict.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ozone-client
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: ozone
+        component: client
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: client
+        image: '@docker.image@'
+        command:
+        - /bin/bash
+        - -ceux
+        - |
+          # Wait for cluster.
+          until ozone admin scm roles --service-host=scm-0.scm > /dev/null 2>&1; do
+            sleep 5
+          done
+
+          # --- happy path ---
+          kinit -kt /etc/security/keytabs/testuser.keytab testuser@EXAMPLE.COM
+          ozone fs -ls ofs://om-0.om/
+          SECRET=$(ozone s3 getsecret -u testuser || true)
+          echo "$SECRET" | grep awsAccessKey
+          ACCESS_KEY=$(echo "$SECRET" | awk -F= '/awsAccessKey/{print $2}' | tr -d ' ')
+          SECRET_KEY=$(echo "$SECRET" | awk -F= '/awsSecret/   {print $2}' | tr -d ' ')
+          AWS_ACCESS_KEY_ID=$ACCESS_KEY AWS_SECRET_ACCESS_KEY=$SECRET_KEY \
+            aws --endpoint-url http://s3g:9878 s3 ls
+
+          # --- negative path ---
+          kdestroy
+          if ozone fs -ls ofs://om-0.om/ 2>&1 | grep -q 'AccessControlException\|Client cannot authenticate'; then
+            echo "negative ofs path: rejected as expected"
+          else
+            echo "FAIL: ofs without TGT was NOT rejected"; exit 1
+          fi
+
+          echo "split-Kerberos client job PASS"
+        envFrom:
+        - configMapRef: { name: config }
+        volumeMounts:
+        - { name: keytabs, mountPath: /etc/security/keytabs, readOnly: true }
+        - { name: krb5, mountPath: /etc/krb5.conf, subPath: krb5.conf, readOnly: true }
+      volumes:
+      - name: keytabs
+        secret: { secretName: keytabs }
+      - name: krb5
+        configMap: { name: krb5 }

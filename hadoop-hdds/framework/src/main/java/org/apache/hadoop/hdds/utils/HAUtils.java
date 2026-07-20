@@ -70,8 +70,12 @@ import java.util.stream.Stream;
 
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_CA_LIST_RETRY_INTERVAL;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_CA_LIST_RETRY_INTERVAL_DEFAULT;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_CLIENT_PORT_KEY;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_INFO_WAIT_DURATION;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_INFO_WAIT_DURATION_DEFAULT;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_SERVICE_RPC_ADDRESS_KEY;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_SERVICE_RPC_PORT_DEFAULT;
+import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import static org.apache.hadoop.hdds.server.ServerUtils.getOzoneMetaDirPath;
 import static org.apache.hadoop.ozone.OzoneConsts.DB_TRANSIENT_MARKER;
 import static org.apache.hadoop.ozone.OzoneConsts.ROCKSDB_SST_SUFFIX;
@@ -164,6 +168,73 @@ public final class HAUtils {
             new StorageContainerLocationProtocolClientSideTranslatorPB(
                 proxyProvider), StorageContainerLocationProtocol.class, conf);
     return scmContainerClient;
+  }
+
+  /**
+   * Internal-caller variant of {@link #getScmContainerClient(ConfigurationSource)}.
+   * In split-Kerberos mode the daemon dialing SCM (typically OM, doing
+   * pipeline refresh for reads) has no TGT — Step L flipped Krb5LoginModule
+   * to acceptor-only and there is no outbound Kerberos credential. SCM grew
+   * a sibling SIMPLE-auth RPC server on
+   * {@link org.apache.hadoop.hdds.scm.ScmConfigKeys#OZONE_SCM_SERVICE_RPC_ADDRESS_KEY}
+   * for exactly this case (Step M). When that key is set, rewrite the
+   * derived {@code ozone.scm.client.port} on a cloned configuration so
+   * SCMContainerLocationFailoverProxyProvider builds proxies pointing at
+   * the SIMPLE sibling instead of the Kerberos main port. Falls back to
+   * the unchanged conf when the operator hasn't configured the sibling.
+   */
+  public static StorageContainerLocationProtocol getScmContainerClient(
+      ConfigurationSource conf, UserGroupInformation userGroupInformation,
+      boolean internalCaller) {
+    if (!internalCaller) {
+      return getScmContainerClient(conf, userGroupInformation);
+    }
+    ConfigurationSource scmConf = withScmServicePortIfConfigured(conf);
+    SCMContainerLocationFailoverProxyProvider proxyProvider =
+        new SCMContainerLocationFailoverProxyProvider(scmConf,
+            userGroupInformation);
+    StorageContainerLocationProtocol scmContainerClient =
+        TracingUtil.createProxy(
+            new StorageContainerLocationProtocolClientSideTranslatorPB(
+                proxyProvider), StorageContainerLocationProtocol.class,
+            scmConf);
+    return scmContainerClient;
+  }
+
+  /**
+   * Clone the configuration and rewrite the SCM client port to match
+   * {@code ozone.scm.service.rpc-address} when that key is set. The
+   * SCMNodeInfo builder reads the SCM hostname from
+   * {@code ozone.scm.address.<service>.<node>} and the port from
+   * {@code ozone.scm.client.port}; only the port has to change to reroute
+   * internal callers at the new sibling server.
+   */
+  private static ConfigurationSource withScmServicePortIfConfigured(
+      ConfigurationSource source) {
+    String serviceRpcAddr = source.get(OZONE_SCM_SERVICE_RPC_ADDRESS_KEY);
+    if (serviceRpcAddr == null || serviceRpcAddr.isEmpty()) {
+      return source;
+    }
+    int port = OZONE_SCM_SERVICE_RPC_PORT_DEFAULT;
+    int colon = serviceRpcAddr.lastIndexOf(':');
+    if (colon > 0 && colon < serviceRpcAddr.length() - 1) {
+      try {
+        port = Integer.parseInt(serviceRpcAddr.substring(colon + 1));
+      } catch (NumberFormatException ignored) {
+        // fall through with default port
+      }
+    }
+    if (!(source instanceof OzoneConfiguration)) {
+      // We only know how to mutate an OzoneConfiguration safely; non-Ozone
+      // ConfigurationSource implementations are rare here. Skip the rewrite
+      // rather than risk losing config — the daemon will still try the
+      // Kerberos port, which is the pre-Step-M behaviour.
+      return source;
+    }
+    OzoneConfiguration clone =
+        new OzoneConfiguration((OzoneConfiguration) source);
+    clone.setInt(OZONE_SCM_CLIENT_PORT_KEY, port);
+    return clone;
   }
 
   /**

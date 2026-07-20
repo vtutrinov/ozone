@@ -460,12 +460,28 @@ public final class HddsServerUtil {
   public static SCMSecurityProtocolClientSideTranslatorPB
       getScmSecurityClientWithMaxRetry(OzoneConfiguration conf,
       UserGroupInformation ugi) throws IOException {
+    return getScmSecurityClientWithMaxRetry(conf, ugi, false);
+  }
+
+  /**
+   * Step Q — internal-caller variant. When {@code internalCaller} is true
+   * and {@link org.apache.hadoop.hdds.scm.ScmConfigKeys
+   * #OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY} is configured on SCM,
+   * route through SCM's SIMPLE sibling instead of the Kerberos main port.
+   * Mirrors {@code HAUtils.getScmContainerClient(conf, ugi, true)}.
+   */
+  public static SCMSecurityProtocolClientSideTranslatorPB
+      getScmSecurityClientWithMaxRetry(OzoneConfiguration conf,
+      UserGroupInformation ugi, boolean internalCaller) throws IOException {
     // Certificate from SCM is required for DN startup to succeed, so retry
     // for ever. In this way DN start up is resilient to SCM service running
     // status.
-    OzoneConfiguration configuration = new OzoneConfiguration(conf);
+    OzoneConfiguration configuration =
+        internalCaller
+            ? withScmSecuritySiblingPortIfConfigured(conf)
+            : new OzoneConfiguration(conf);
     SCMClientConfig scmClientConfig =
-        conf.getObject(SCMClientConfig.class);
+        configuration.getObject(SCMClientConfig.class);
     int retryCount = Integer.MAX_VALUE;
     scmClientConfig.setRetryCount(retryCount);
     configuration.setFromObject(scmClientConfig);
@@ -473,6 +489,109 @@ public final class HddsServerUtil {
     return new SCMSecurityProtocolClientSideTranslatorPB(
         new SCMSecurityProtocolFailoverProxyProvider(configuration,
             ugi == null ? UserGroupInformation.getCurrentUser() : ugi));
+  }
+
+  /**
+   * If {@link org.apache.hadoop.hdds.scm.ScmConfigKeys
+   * #OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY} is set, return a cloned
+   * configuration with every {@code OZONE_SCM_SECURITY_SERVICE_ADDRESS_KEY}
+   * variant (non-HA and per-node HA) port-rewritten to the sibling port —
+   * SCMNodeInfo + the failover proxy provider then build proxies pointing
+   * at the SCM SCMSecurityProtocol SIMPLE sibling instead of the Kerberos
+   * main port (9961). Falls back to the input conf when no sibling is
+   * configured.
+   *
+   * <p>Why both keys are touched: {@code SCMNodeInfo.getPort} reads the
+   * per-node {@code OZONE_SCM_SECURITY_SERVICE_ADDRESS_KEY.<svc>.<node>}
+   * key first and only falls back to {@code OZONE_SCM_SECURITY_SERVICE_PORT_KEY}
+   * when no per-node address is present. In real HA deployments the
+   * per-node addresses are populated with explicit ports
+   * ({@code host:9961}), so a port-key-only substitution is silently
+   * ignored and the failover proxy still dials the Kerberos main port.
+   * Mirrors Step N's per-node OM rewrite in
+   * {@code OmTransportFactory.withOmServicePortAddressIfConfigured}.
+   */
+  /**
+   * Made {@code public} so SCM bootstrap (HASecurityUtils) can route its
+   * own pre-cert-bootstrap call to the SIMPLE sibling — at bootstrap the
+   * SCM daemon has no TGT (acceptor-only Krb5 per Step L) so the Kerberos
+   * main port is unreachable.
+   */
+  public static OzoneConfiguration withScmSecuritySiblingPortIfConfigured(
+      OzoneConfiguration conf) {
+    String siblingAddr = conf.get(
+        org.apache.hadoop.hdds.scm.ScmConfigKeys
+            .OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY);
+    if (siblingAddr == null || siblingAddr.isEmpty()) {
+      return new OzoneConfiguration(conf);
+    }
+    int port = org.apache.hadoop.hdds.scm.ScmConfigKeys
+        .OZONE_SCM_SECURITY_SERVICE_RPC_PORT_DEFAULT;
+    int colon = siblingAddr.lastIndexOf(':');
+    if (colon > 0 && colon < siblingAddr.length() - 1) {
+      try {
+        port = Integer.parseInt(siblingAddr.substring(colon + 1));
+      } catch (NumberFormatException ignored) {
+        // fall through with default port
+      }
+    }
+    OzoneConfiguration clone = new OzoneConfiguration(conf);
+    // Port-key substitution — used in non-HA topologies and as the
+    // SCMNodeInfo fallback when per-node addresses lack a port suffix.
+    clone.setInt(org.apache.hadoop.hdds.scm.ScmConfigKeys
+        .OZONE_SCM_SECURITY_SERVICE_PORT_KEY, port);
+
+    // Non-HA fallback: single ozone.scm.security.service.address — rewrite
+    // its port if it has one.
+    String nonHaAddr = conf.get(
+        org.apache.hadoop.hdds.scm.ScmConfigKeys
+            .OZONE_SCM_SECURITY_SERVICE_ADDRESS_KEY);
+    if (nonHaAddr != null && !nonHaAddr.isEmpty()) {
+      clone.set(org.apache.hadoop.hdds.scm.ScmConfigKeys
+              .OZONE_SCM_SECURITY_SERVICE_ADDRESS_KEY,
+          replacePortPreservingHost(nonHaAddr, port));
+    }
+
+    // HA: enumerate every ozone.scm.security.service.address.<svc>.<node>
+    // and rewrite its port so the SCMSecurityProtocolFailoverProxyProvider
+    // hits the SIMPLE sibling on every SCM pod. Iterating every declared
+    // service ID is safe — the per-node keys are namespaced.
+    java.util.Collection<String> serviceIds = conf.getTrimmedStringCollection(
+        org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_SERVICE_IDS_KEY);
+    for (String serviceId : serviceIds) {
+      if (serviceId == null || serviceId.isEmpty()) {
+        continue;
+      }
+      String nodesKey = org.apache.hadoop.ozone.ha.ConfUtils.addKeySuffixes(
+          org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_NODES_KEY,
+          serviceId);
+      java.util.Collection<String> nodeIds =
+          conf.getTrimmedStringCollection(nodesKey);
+      for (String nodeId : nodeIds) {
+        String addrKey = org.apache.hadoop.ozone.ha.ConfUtils.addKeySuffixes(
+            org.apache.hadoop.hdds.scm.ScmConfigKeys
+                .OZONE_SCM_SECURITY_SERVICE_ADDRESS_KEY,
+            serviceId, nodeId);
+        String addr = conf.get(addrKey);
+        if (addr != null && !addr.isEmpty()) {
+          clone.set(addrKey, replacePortPreservingHost(addr, port));
+        }
+      }
+    }
+    return clone;
+  }
+
+  /**
+   * Return {@code addr} with any port suffix replaced by {@code newPort}.
+   * Bare hostnames get {@code :newPort} appended; host:port replaces the
+   * suffix; IPv6 bracketed forms ({@code [::1]:9961}) honour the bracket.
+   */
+  private static String replacePortPreservingHost(String addr, int newPort) {
+    int closingBracket = addr.lastIndexOf(']');
+    int colon = addr.lastIndexOf(':');
+    String host = (colon > closingBracket && colon > 0)
+        ? addr.substring(0, colon) : addr;
+    return host + ":" + newPort;
   }
 
   /**
@@ -556,8 +675,19 @@ public final class HddsServerUtil {
   public static SecretKeyProtocolClientSideTranslatorPB
       getSecretKeyClientForScm(ConfigurationSource conf,
       String scmNodeId, UserGroupInformation ugi) {
+    // Step Q follow-up: this helper is called by SCMHAManagerImpl
+    // .getSecretKeysFromLeader (a follower SCM fetching keys from the
+    // leader). The destination is SCMSecurityProtocol on port 9961, which
+    // becomes Kerberos under Step Q when external Kerberos is enabled. In
+    // acceptor-only Krb5 mode (Step L) the SCM daemon has no TGT and
+    // cannot initiate Kerberos against the peer — route through the
+    // SIMPLE sibling (port 9962) when configured. Same pattern as the
+    // Step Q runtime + bootstrap cert-client paths.
+    ConfigurationSource effectiveConf =
+        HddsServerUtil.withScmSecuritySiblingPortIfConfigured(
+            OzoneConfiguration.of(conf));
     return new SecretKeyProtocolClientSideTranslatorPB(
-        new SingleSecretKeyProtocolProxyProvider(conf, ugi,
+        new SingleSecretKeyProtocolProxyProvider(effectiveConf, ugi,
             SecretKeyProtocolScmPB.class, scmNodeId),
         SecretKeyProtocolScmPB.class);
   }

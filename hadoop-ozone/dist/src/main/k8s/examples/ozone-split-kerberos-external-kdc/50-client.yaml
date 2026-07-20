@@ -1,0 +1,274 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Client pod sits in the edge namespace alongside the KDC and reaches the
+# Ozone cluster only via the public Services (om-public, s3g-public) in
+# the cluster namespace. It carries the human testuser keytab and exercises
+# the full external surface end-to-end. The Job exits non-zero on any
+# failure so its status is the test verdict.
+
+# Cluster-side config the client needs. Mostly the same flags as the
+# daemons, with addresses pointing at the public Services across the
+# namespace boundary.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: client-config
+  namespace: ozone-extkdc-edge
+data:
+  # HA OM addresses — same shape as the cluster configmap so failover
+  # is symmetric in both directions.
+  OZONE-SITE.XML_ozone.om.service.ids: omservice
+  OZONE-SITE.XML_ozone.om.nodes.omservice: om0,om1,om2
+  OZONE-SITE.XML_ozone.om.address.omservice.om0: om-0.om.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.om.address.omservice.om1: om-1.om.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.om.address.omservice.om2: om-2.om.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.om.kerberos.principal: om/om@EXAMPLE.COM
+
+  # HA SCM addresses
+  OZONE-SITE.XML_ozone.scm.service.ids: scmservice
+  OZONE-SITE.XML_ozone.scm.nodes.scmservice: scm0,scm1,scm2
+  OZONE-SITE.XML_ozone.scm.address.scmservice.scm0: scm-0.scm.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.scm.address.scmservice.scm1: scm-1.scm.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.scm.address.scmservice.scm2: scm-2.scm.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_hdds.scm.kerberos.principal: scm/scm@EXAMPLE.COM
+
+  OZONE-SITE.XML_ozone.security.enabled: "true"
+  OZONE-SITE.XML_ozone.security.kerberos.external.enabled: "true"
+  OZONE-SITE.XML_ozone.security.kerberos.interservice.enabled: "false"
+  OZONE-SITE.XML_hdds.grpc.tls.enabled: "false"
+  OZONE-SITE.XML_ozone.administrators: "testuser,om,scm,dn,s3g,hadoop,root"
+  OZONE-SITE.XML_ozone.s3.administrators: "testuser,s3g,hadoop,root"
+  OZONE-SITE.XML_ozone.security.http.kerberos.enabled: "false"
+  CORE-SITE.XML_hadoop.security.authentication: kerberos
+  CORE-SITE.XML_hadoop.security.authorization: "false"
+  CORE-SITE.XML_hadoop.security.auth_to_local: "DEFAULT"
+  # ipc.client.fallback-to-simple-auth-allowed INTENTIONALLY OMITTED on
+  # the client side. Setting it to "true" makes the IPC client silently
+  # downgrade to SIMPLE when a server answers "I only accept SIMPLE",
+  # which is what cluster-internal daemons need (OM → SCM:9863 etc., set
+  # automatically by OzoneSecurityUtil.validateKerberosFlags). For an
+  # external admin client like this Job, however, the flag would hide
+  # bugs: if SCM:9860 were ever misconfigured to SIMPLE the client would
+  # appear to "work" but reach SCM as user `hadoop` (the OS user) instead
+  # of testuser@REALM. Omitting it forces the IPC layer to honour the
+  # client's TGT — every Kerberos-served port (OM:9862, SCM:9860) must
+  # genuinely Kerberos-authenticate or the call fails fast.
+  LOG4J.PROPERTIES_log4j.rootLogger: INFO, stdout
+  LOG4J.PROPERTIES_log4j.appender.stdout: org.apache.log4j.ConsoleAppender
+  LOG4J.PROPERTIES_log4j.appender.stdout.layout: org.apache.log4j.PatternLayout
+  LOG4J.PROPERTIES_log4j.appender.stdout.layout.ConversionPattern: '%d{yyyy-MM-dd HH:mm:ss} %-5p %c{1}:%L - %m%n'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ozone-client
+  namespace: ozone-extkdc-edge
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: ozone-extkdc
+        component: client
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: client
+        image: ozone-split-kerberos:dev
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: client-config
+        env:
+        - name: KRB5_CONFIG
+          value: /etc/krb5.conf
+        - name: AWS_ACCESS_KEY_ID
+          value: placeholder
+        - name: AWS_SECRET_ACCESS_KEY
+          value: placeholder
+        - name: AWS_REGION
+          value: us-east-1
+        command: ["/bin/bash", "-lc"]
+        args:
+        - |
+          set -euo pipefail
+
+          # The image's entrypoint.sh converts OZONE-SITE.XML_* / CORE-SITE.XML_*
+          # env vars into the actual hadoop config XMLs via envtoconf.py. We
+          # override `command` so the entrypoint doesn't run on its own;
+          # invoke the converter explicitly here, otherwise the ozone CLI
+          # falls back to ozone-defaults and connects to 0.0.0.0:9862.
+          /opt/hadoop/libexec/envtoconf.py --destination /opt/hadoop/etc/hadoop
+
+          OM_ADDR="omservice:9862"
+          S3G_URL="http://s3g-public.ozone-extkdc-cluster.svc.cluster.local:9878"
+          TEST_USER="testuser@EXAMPLE.COM"
+          TEST_KEYTAB="/etc/security/testuser-keytab/testuser.keytab"
+
+          echo "=== Step 1: kinit as ${TEST_USER}"
+          kinit -kt "${TEST_KEYTAB}" "${TEST_USER}"
+          klist
+
+          echo "=== Step 2: ozone sh volume create (uses OM external Kerberos port)"
+          ozone sh volume create /testvol 2>&1 | tail -3 || true
+          ozone sh volume info /testvol >/dev/null
+
+          echo "=== Step 3: ozone sh bucket create"
+          ozone sh bucket create /testvol/testbucket 2>&1 | tail -3 || true
+          ozone sh bucket info /testvol/testbucket >/dev/null
+
+          echo "=== Step 4: ozone fs -ls (bucket-level listing via OM Kerberos port)"
+          ozone fs -ls ofs://omservice/testvol/
+
+          echo "=== Step 4b: ozone admin scm roles (Kerberos against SCM external admin port)"
+          # Per Step K SCMClientProtocolServer (port 9860) stays Kerberos-served
+          # when external Kerberos is enabled — so a TGT-bearing client must
+          # authenticate via Kerberos against scm/scm@EXAMPLE.COM. The chain
+          # below exercises three of SCM's RPC ports: ClientProtocol (Kerberos,
+          # 9860) for `scm roles`, the same for `safemode status` and
+          # `datanode list` which both go through StorageContainerLocation.
+          ozone admin scm roles
+          # The test asserts the COMMAND works (genuine Kerberos handshake
+          # against SCM:9860 — no SIMPLE fallback because the client conf
+          # no longer carries ipc.client.fallback-to-simple-auth-allowed).
+          # Cluster safemode state is not asserted — DN registration timing
+          # makes the latter flaky right after a roll.
+          ozone admin safemode status | tee /tmp/safe.out
+          grep -qE "safe mode" /tmp/safe.out \
+            || { echo "FAIL: safemode status returned unexpected output" >&2; cat /tmp/safe.out >&2; exit 1; }
+          ozone admin datanode list >/tmp/dn.out 2>&1
+          grep -qE "Datanode|datanode" /tmp/dn.out \
+            || { echo "FAIL: ozone admin datanode list returned no Datanode entries" >&2; cat /tmp/dn.out >&2; exit 1; }
+          echo "PASS: SCM admin chain over Kerberos (no SIMPLE fallback)"
+
+          echo "=== Step 4b-cert: ozone admin cert list (Step Q: SCMSecurityProtocol Kerberos on 9961)"
+          # Pre-Step-Q this command failed with "Server asks us to fall back
+          # to SIMPLE auth" because SCMSecurityProtocolServer at 9961 was
+          # unconditionally SIMPLE in interservice=false mode (Step D). Step Q
+          # restored 9961 to Kerberos when external.enabled=true and added a
+          # SIMPLE sibling on 9962 for internal callers (OM/DN/Recon cert
+          # issuance). With the client running without
+          # ipc.client.fallback-to-simple-auth-allowed, this proves a genuine
+          # Kerberos handshake against scm/scm@EXAMPLE.COM on 9961.
+          ozone admin cert list >/tmp/cert.out 2>&1 \
+            || { echo "FAIL: ozone admin cert list errored:"; cat /tmp/cert.out >&2; exit 1; }
+          grep -qE "Serial.*Subject|SubjectName|No certificates found" /tmp/cert.out \
+            || { echo "FAIL: cert list output unexpected:" >&2; cat /tmp/cert.out >&2; exit 1; }
+          echo "PASS: ozone admin cert list over Kerberos (Step Q)"
+
+          echo "=== Step 4c: force the OM→SCM internal path (Step M, port 9866)"
+          # ozone sh key list calls OM.listKeys → KeyManagerImpl which, for
+          # any bucket whose keys carry block locations, will invoke
+          # refreshPipeline → SCM.getContainerWithPipelineBatch. That's
+          # exactly the call site that crashed before Step M with
+          # "Failed to find any Kerberos tgt". An empty bucket short-
+          # circuits before refreshPipeline, but the OM-side construction
+          # of SCMContainerLocationFailoverProxyProvider still happens at
+          # OM startup (eagerly) — so the moment OM started up, OM either
+          # bound a proxy at SCM:9866 (Step M working) or it would have
+          # crashed/logged a connection failure. The deploy script's
+          # post-Job sweep (step 6b/8) verifies the established TCP
+          # session from OM to SCM:9866.
+          #
+          # The command below is best-effort — it touches the OM listKeys
+          # path with no keys present; we just assert it exits cleanly.
+          # Real read-path coverage (refreshPipeline with non-empty
+          # blocks) is blocked by the same pre-existing Constable issue
+          # that blocks PutObject.
+          ozone sh key list /testvol/testbucket >/tmp/keys.out 2>&1 \
+            && echo "PASS: ozone sh key list succeeded (OM control plane intact)" \
+            || { echo "FAIL: ozone sh key list errored:"; cat /tmp/keys.out >&2; exit 1; }
+
+          echo "=== Step 5: ofs PutObject + GetObject round-trip"
+          # Real exercise of the OM → SCM internal path. PutObject allocates
+          # blocks via SCMBlockProtocol (port 9863, SIMPLE — Step D). GetObject
+          # is the load-bearing test for Step M: OM.lookupKey reaches into
+          # KeyManagerImpl.refresh → refreshPipeline → SCM.getContainerWith-
+          # PipelineBatch on StorageContainerLocationProtocol. Pre-Step-M
+          # that call landed on the Kerberos-served 9860 and failed with
+          # "Failed to find any Kerberos tgt". Post-Step-M it lands on the
+          # SIMPLE sibling at 9866 and succeeds.
+          echo "split-kerberos step M write/read test" > /tmp/payload.txt
+          OFS=ofs://omservice/testvol/testbucket
+          ozone fs -put -f /tmp/payload.txt $OFS/payload-stepm.txt 2>&1 | tail -3
+          ozone fs -ls $OFS/payload-stepm.txt 2>&1 | tail -3
+          ozone fs -cat $OFS/payload-stepm.txt > /tmp/payload-roundtrip.txt
+          diff /tmp/payload.txt /tmp/payload-roundtrip.txt \
+            && echo "PASS: ofs PutObject + GetObject round-trip OK"
+          # ozone sh key info forces refreshPipeline on an existing key.
+          ozone sh key info /testvol/testbucket/payload-stepm.txt 2>&1 \
+            | tail -5
+          echo "PASS: key metadata + pipeline lookup OK (OM → SCM:9866 SIMPLE)"
+
+          echo "=== Step 6: kdestroy — anything Kerberos-dependent must fail next"
+          kdestroy
+          klist || true
+
+          echo "=== Step 7: ozone sh without TGT must be rejected"
+          if ozone sh volume info /testvol >/tmp/oz.out 2>&1 ; then
+            echo "FAIL: ozone sh succeeded without TGT" >&2
+            cat /tmp/oz.out >&2
+            exit 1
+          fi
+          # Confirm the failure is auth-related, not some other transient error.
+          grep -qE "AccessControl|Client cannot authenticate|GSS|SASL" /tmp/oz.out \
+            || { echo "FAIL: ozone sh failed for non-auth reason:" >&2; cat /tmp/oz.out >&2; exit 1; }
+          echo "PASS: ozone sh rejected without TGT (auth-shaped error)"
+
+          echo "=== Step 7b: ozone admin scm WITHOUT TGT must be REJECTED"
+          # Per Step K the SCM external admin port (StorageContainerLocationProtocol
+          # on 9860) stays Kerberos-served when external=true, regardless of
+          # interservice. A client without a TGT must therefore be rejected with
+          # a Kerberos-shaped auth error, not silently succeed via SIMPLE.
+          if ozone admin scm roles >/tmp/scm.out 2>&1 ; then
+            echo "FAIL: ozone admin scm roles succeeded without TGT" >&2
+            cat /tmp/scm.out >&2
+            exit 1
+          fi
+          grep -qE "AccessControl|Client cannot authenticate|GSS|SASL|Kerberos" /tmp/scm.out \
+            || { echo "FAIL: ozone admin scm rejected for non-Kerberos reason:" >&2; cat /tmp/scm.out >&2; exit 1; }
+          echo "PASS: ozone admin scm rejected without TGT (Kerberos-shaped error)"
+
+          echo "=== Step 7c: ozone admin cert list WITHOUT TGT must be REJECTED"
+          # Step Q symmetry — SCM:9961 is Kerberos, so a TGT-less client must
+          # be rejected, exactly as 9860 is in Step 7b.
+          if ozone admin cert list >/tmp/cert-no.out 2>&1 ; then
+            echo "FAIL: ozone admin cert list succeeded without TGT" >&2
+            cat /tmp/cert-no.out >&2
+            exit 1
+          fi
+          grep -qE "AccessControl|Client cannot authenticate|GSS|SASL|Kerberos" /tmp/cert-no.out \
+            || { echo "FAIL: cert list rejected for non-Kerberos reason:" >&2; cat /tmp/cert-no.out >&2; exit 1; }
+          echo "PASS: ozone admin cert list rejected without TGT (Kerberos-shaped error)"
+
+          # Sig V4 / getsecret / PutObject all go through the OM multi-raft
+          # write path which is currently blocked by the pre-existing
+          # Constable issue on the Java 11 runner image. They are NOT
+          # exercised by this Job — see README. The control-plane Kerberos
+          # surface (Steps 1-4 above) and the negative auth path (Steps 6-7)
+          # are what this Job validates for the external-KDC scenario.
+
+          echo "=== ALL TESTS PASSED ==="
+        volumeMounts:
+        - name: testuser-keytab
+          mountPath: /etc/security/testuser-keytab
+          readOnly: true
+        - name: krb5
+          mountPath: /etc/krb5.conf
+          subPath: krb5.conf
+          readOnly: true
+      volumes:
+      - name: testuser-keytab
+        secret:
+          secretName: testuser-keytab
+      - name: krb5
+        configMap:
+          name: krb5

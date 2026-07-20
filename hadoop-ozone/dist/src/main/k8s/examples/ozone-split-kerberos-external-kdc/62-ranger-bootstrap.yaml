@@ -1,0 +1,107 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Bootstrap the `ozonedev` Ranger service with `policy.download.auth.users`
+# = "om,admin" so OM's SPNEGO-authenticated REST polls can fetch policies
+# (default ranger-admin returns 403 for any user except the local admin).
+# Adds users `testuser` + `om` to the local DB so post-auth_to_local
+# lookups succeed.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ranger-policies-bootstrap
+  namespace: ozone-extkdc-cluster
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+      - name: wait-ranger
+        image: curlimages/curl:8.10.1
+        command: ["sh","-c","until curl -sf -u admin:RangerAdmin1! http://ranger-admin:6080/service/public/v2/api/servicedef/ >/dev/null; do echo waiting ranger; sleep 10; done"]
+      containers:
+      - name: seed
+        image: python:3.11-alpine
+        env:
+        - { name: RANGER_URL,  value: http://ranger-admin:6080 }
+        - { name: RANGER_USER, value: admin }
+        - { name: RANGER_PASS, value: RangerAdmin1! }
+        command:
+        - python3
+        - -c
+        - |
+          import json, os, sys, urllib.request, urllib.error, base64
+          URL, USER, PASS = os.environ['RANGER_URL'], os.environ['RANGER_USER'], os.environ['RANGER_PASS']
+          AUTH = 'Basic ' + base64.b64encode(f'{USER}:{PASS}'.encode()).decode()
+
+          def call(method, path, body=None):
+              data = json.dumps(body).encode() if body is not None else None
+              req = urllib.request.Request(URL + path, data=data, method=method,
+                                           headers={'Authorization': AUTH, 'Content-Type': 'application/json'})
+              try:
+                  r = urllib.request.urlopen(req, timeout=30)
+                  return r.status, r.read().decode()
+              except urllib.error.HTTPError as e:
+                  return e.code, e.read().decode()
+
+          # `policy.download.auth.users` and `tag.download.auth.users` are
+          # the gates that decide which post-auth_to_local usernames are
+          # allowed to pull policies from this service. Without "om" in
+          # those lists, OM's SPNEGO REST poll gets 403 and ACLs freeze
+          # at the boot snapshot — even with the Step P fix in place,
+          # because Step P only makes a TGT available, the authorisation
+          # check on ranger-admin side is independent.
+          code, body = call('POST', '/service/public/v2/api/service', {
+              'name': 'ozonedev', 'type': 'ozone', 'isEnabled': True,
+              'configs': {
+                  'username': 'admin', 'password': 'x',
+                  'ozone.om.address': 'om-0.om.ozone-extkdc-cluster.svc.cluster.local:9862',
+                  'ozone.om.http-address': 'om-0.om.ozone-extkdc-cluster.svc.cluster.local:9874',
+                  'hadoop.security.authentication': 'kerberos',
+                  'policy.download.auth.users': 'om,admin',
+                  'tag.download.auth.users':    'om,admin',
+              }
+          })
+          print('service create:', code, body[:200] if code >= 300 else 'OK')
+
+          # Local DB users — RangerKRBAuthenticationFilter falls back to the
+          # local x_portal_user table after extracting the principal name
+          # via auth_to_local (om/om@EXAMPLE.COM → om, testuser@... → testuser).
+          for u in ('testuser', 'om'):
+              email = f'{u}@example.com'
+              code, body = call('POST', '/service/xusers/secure/users', {
+                  'name': u, 'firstName': u, 'lastName': 'Test',
+                  'emailAddress': email,
+                  'password': 'Ignore1234!', 'userRoleList': ['ROLE_USER']
+              })
+              print(f'user {u}:', code, 'OK' if code < 300 else body[:200])
+
+          # Append testuser + om to the default `all - volume, bucket, key`
+          # policy so they have access to do anything against ozonedev. The
+          # regression test exercises testuser writing a key under a freshly-
+          # POSTed policy update, which is what proves OM's policy refresh
+          # still works after a TGT lifecycle cycle.
+          ACCESSES = [{'type': t, 'isAllowed': True} for t in
+                      ('read', 'write', 'list', 'create', 'delete', 'read_acl', 'write_acl')]
+          code, body = call('GET', '/service/public/v2/api/policy?serviceName=ozonedev&policyName=all%20-%20volume,%20bucket,%20key')
+          arr = json.loads(body)
+          if not arr:
+              print('default policy not found'); sys.exit(1)
+          p = arr[0]
+          for u in ('testuser', 'om'):
+              if any(u in pi.get('users', []) for pi in p['policyItems']):
+                  continue
+              p['policyItems'].append({'accesses': ACCESSES, 'users': [u],
+                                      'groups': [], 'roles': [], 'delegateAdmin': True})
+          code, body = call('PUT', f"/service/public/v2/api/policy/{p['id']}", p)
+          print('default policy +testuser +om:', code, 'OK' if code < 300 else body[:200])
+
+          print('bootstrap done')

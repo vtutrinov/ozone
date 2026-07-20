@@ -1,0 +1,75 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Shared krb5.conf: both the edge namespace (KDC + client) and the cluster
+# namespace (OM/S3G keytab login) need this. Pointing kdc= at the edge
+# namespace's KDC Service via in-cluster DNS — the only piece of "internal"
+# topology that leaks across the namespace boundary, and it's deliberate.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: krb5
+  namespace: ozone-extkdc-edge
+data:
+  krb5.conf: |
+    [logging]
+      default = FILE:/var/log/krb5libs.log
+      kdc     = FILE:/var/log/krb5kdc.log
+    [libdefaults]
+      dns_canonicalize_hostname = false
+      dns_lookup_realm  = false
+      # Short for tgt-renewal-test (Step P regression). 5m TGT with 30m
+      # max-renewable lets Hadoop's auto-renewer fire every ~4m; the
+      # test waits 2m past startup to verify the renewer is alive.
+      ticket_lifetime   = 5m
+      renew_lifetime    = 30m
+      forwardable       = true
+      rdns              = false
+      default_realm     = EXAMPLE.COM
+      udp_preference_limit = 1
+    [realms]
+      EXAMPLE.COM = {
+        kdc          = kdc.ozone-extkdc-edge.svc.cluster.local
+        admin_server = kdc.ozone-extkdc-edge.svc.cluster.local
+      }
+    [domain_realm]
+      .svc.cluster.local = EXAMPLE.COM
+      svc.cluster.local  = EXAMPLE.COM
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: krb5
+  namespace: ozone-extkdc-cluster
+data:
+  krb5.conf: |
+    [logging]
+      default = FILE:/var/log/krb5libs.log
+      kdc     = FILE:/var/log/krb5kdc.log
+    [libdefaults]
+      dns_canonicalize_hostname = false
+      dns_lookup_realm  = false
+      # Short for tgt-renewal-test (Step P regression). 5m TGT with 30m
+      # max-renewable lets Hadoop's auto-renewer fire every ~4m; the
+      # test waits 2m past startup to verify the renewer is alive.
+      ticket_lifetime   = 5m
+      renew_lifetime    = 30m
+      forwardable       = true
+      rdns              = false
+      default_realm     = EXAMPLE.COM
+      udp_preference_limit = 1
+    [realms]
+      EXAMPLE.COM = {
+        kdc          = kdc.ozone-extkdc-edge.svc.cluster.local
+        admin_server = kdc.ozone-extkdc-edge.svc.cluster.local
+      }
+    [domain_realm]
+      .svc.cluster.local = EXAMPLE.COM
+      svc.cluster.local  = EXAMPLE.COM
