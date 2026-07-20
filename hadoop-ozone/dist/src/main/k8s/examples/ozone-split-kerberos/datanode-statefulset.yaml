@@ -1,0 +1,51 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: datanode
+  labels:
+    app.kubernetes.io/component: ozone
+spec:
+  selector:
+    matchLabels:
+      app: ozone
+      component: datanode
+  serviceName: datanode
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: ozone
+        component: datanode
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+      - name: datanode
+        image: '@docker.image@'
+        args: [ozone, datanode]
+        envFrom:
+        - configMapRef: { name: config }
+        volumeMounts:
+        - { name: data, mountPath: /data }
+        - { name: keytabs, mountPath: /etc/security/keytabs, readOnly: true }
+        - { name: krb5, mountPath: /etc/krb5.conf, subPath: krb5.conf, readOnly: true }
+      volumes:
+      - name: keytabs
+        secret: { secretName: keytabs }
+      - name: krb5
+        configMap: { name: krb5 }
+  volumeClaimTemplates:
+  - metadata: { name: data }
+    spec:
+      accessModes: [ReadWriteOnce]
+      resources: { requests: { storage: 20Gi } }

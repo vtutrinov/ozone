@@ -1,0 +1,47 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# OM image variant with the Ranger Ozone plugin baked in. Used only for
+# the SPNEGO-ranger-admin regression test (Job 63-tgt-renewal-test) —
+# the rest of the example's daemons (SCM, DN, S3G, Recon) keep the
+# stock ozone-split-kerberos:dev image.
+#
+# Build:
+#   1. Build the Ranger Ozone plugin tarball from a sibling checkout of
+#      `component-ranger-plugins`:
+#        cd /work/sber/component-ranger-plugins
+#        mvn -pl :ranger-distro,:ranger-ozone-plugin,:ranger-ozone-plugin-shim,\
+#            :ranger-plugin-classloader,:ranger-plugins-common,\
+#            :ranger-plugins-audit,:ranger-plugins-cred \
+#            -am -P sdp-build-ranger-ozone-plugin package -DskipTests -q
+#   2. Copy the tarball next to this Dockerfile:
+#        cp /work/sber/component-ranger-plugins/target/ranger-2.4.0-ozone-plugin.tar.gz .
+#   3. Build:
+#        docker build -t spnego-ranger-om:dev -f Dockerfile.spnego-ranger-om .
+#        minikube image load spnego-ranger-om:dev
+
+FROM ozone-split-kerberos:dev
+
+USER root
+
+COPY ranger-2.4.0-ozone-plugin.tar.gz /tmp/rngr.tar.gz
+
+# Drop plugin JARs into /opt/ozone/share/ozone/lib (matches the layout the
+# stock Ozone classpath expects) and append the plugin entries to OM's
+# .classpath only — SCM/DN/S3G/Recon classpath files are untouched, so
+# they don't load the class.
+RUN mkdir -p /ranger-plugin && \
+    tar -xzf /tmp/rngr.tar.gz -C /ranger-plugin --strip-components=1 && \
+    cp -v /ranger-plugin/lib/libext/*.jar                          /opt/ozone/share/ozone/lib/ 2>/dev/null || true && \
+    cp -v /ranger-plugin/lib/libext/ranger-ozone-plugin-impl/*.jar /opt/ozone/share/ozone/lib/ 2>/dev/null || true && \
+    rm /tmp/rngr.tar.gz && \
+    sed -i 's|$|:$HDDS_LIB_JARS_DIR/ranger-ozone-plugin-2.4.0.jar:$HDDS_LIB_JARS_DIR/ranger-ozone-plugin-shim-2.4.0.jar|' /opt/ozone/share/ozone/classpath/ozone-manager.classpath
+
+USER hadoop

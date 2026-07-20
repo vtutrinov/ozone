@@ -174,17 +174,6 @@
       <groupId>org.apache.ozone</groupId>
       <artifactId>hdds-server-scm</artifactId>
     </dependency>
-    <!-- visible only for ContainerOperationClient -->
-    <dependency>
-      <groupId>org.apache.ozone</groupId>
-      <artifactId>ozone-cli-admin</artifactId>
-      <exclusions>
-        <exclusion>
-          <groupId>*</groupId>
-          <artifactId>*</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
     <dependency>
       <groupId>org.apache.ozone</groupId>
       <artifactId>ozone-common</artifactId>

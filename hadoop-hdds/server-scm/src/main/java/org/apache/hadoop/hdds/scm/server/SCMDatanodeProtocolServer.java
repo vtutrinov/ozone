@@ -48,6 +48,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalLong;
@@ -86,6 +87,7 @@ import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.ipc_.ProtobufRpcEngine;
 import org.apache.hadoop.ipc_.RPC;
 import org.apache.hadoop.ipc_.Server;
+import org.apache.hadoop.ozone.OzoneSecurityUtil;
 import org.apache.hadoop.ozone.audit.AuditAction;
 import org.apache.hadoop.ozone.audit.AuditEventStatus;
 import org.apache.hadoop.ozone.audit.AuditLogger;
@@ -108,6 +110,7 @@ import org.apache.hadoop.ozone.protocol.commands.SCMCommand;
 import org.apache.hadoop.ozone.protocol.commands.SetNodeOperationalStateCommand;
 import org.apache.hadoop.ozone.protocolPB.StorageContainerDatanodeProtocolPB;
 import org.apache.hadoop.ozone.protocolPB.StorageContainerDatanodeProtocolServerSideTranslatorPB;
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
 import org.apache.hadoop.security.authorize.PolicyProvider;
 import org.apache.ratis.protocol.exceptions.NotLeaderException;
 import org.slf4j.Logger;
@@ -175,8 +178,20 @@ public class SCMDatanodeProtocolServer implements
                 new StorageContainerDatanodeProtocolServerSideTranslatorPB(
                     this, protocolMessageMetrics));
 
+    // The DN→SCM heartbeat RPC is an inter-service path. When inter-service
+    // Kerberos is disabled (split-Kerberos mode), advertise SIMPLE auth on
+    // this port so DNs without a Kerberos principal can register and heartbeat.
+    // Block-token verification on the data path (see BlockTokenVerifier) is
+    // HMAC-based and remains enforced regardless of this SASL setting.
+    OzoneConfiguration rpcConf = conf;
+    if (!OzoneSecurityUtil.isInterServiceKerberosEnabled(conf)) {
+      rpcConf = new OzoneConfiguration(conf);
+      rpcConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
+          AuthenticationMethod.SIMPLE.name().toLowerCase(Locale.ROOT));
+    }
+
     datanodeRpcServer =  startRpcServer(
-        conf,
+        rpcConf,
         datanodeRpcAddr,
         getProtocolClass(),
         dnProtoPbService,
@@ -189,7 +204,7 @@ public class SCMDatanodeProtocolServer implements
 
     if (conf.getBoolean(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHORIZATION,
         false)) {
-      datanodeRpcServer.refreshServiceAcl(conf, getPolicyProvider());
+      datanodeRpcServer.refreshServiceAcl(rpcConf, getPolicyProvider());
     }
 
     HddsServerUtil.addSuppressedLoggingExceptions(datanodeRpcServer);

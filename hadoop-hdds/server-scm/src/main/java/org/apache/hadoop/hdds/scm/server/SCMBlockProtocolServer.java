@@ -37,6 +37,7 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeoutException;
@@ -68,6 +69,7 @@ import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.ipc_.ProtobufRpcEngine;
 import org.apache.hadoop.ipc_.RPC;
 import org.apache.hadoop.ipc_.Server;
+import org.apache.hadoop.ozone.OzoneSecurityUtil;
 import org.apache.hadoop.ozone.audit.AuditAction;
 import org.apache.hadoop.ozone.audit.AuditEventStatus;
 import org.apache.hadoop.ozone.audit.AuditLogger;
@@ -78,6 +80,7 @@ import org.apache.hadoop.ozone.audit.SCMAction;
 import org.apache.hadoop.ozone.common.BlockGroup;
 import org.apache.hadoop.ozone.common.DeleteBlockGroupResult;
 import org.apache.hadoop.ozone.common.DeletedBlock;
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -132,9 +135,21 @@ public class SCMBlockProtocolServer implements
 
     final InetSocketAddress scmBlockAddress =
         scm.getScmNodeDetails().getBlockProtocolServerAddress();
+
+    // OM is the only authenticated caller of the block-protocol port. In the
+    // split-Kerberos mode (interservice=false) OM connects over SIMPLE; the
+    // server side must offer SIMPLE accordingly. Block tokens (HMAC) remain
+    // enforced on the data path independently.
+    OzoneConfiguration rpcConf = conf;
+    if (!OzoneSecurityUtil.isInterServiceKerberosEnabled(conf)) {
+      rpcConf = new OzoneConfiguration(conf);
+      rpcConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
+          AuthenticationMethod.SIMPLE.name().toLowerCase(Locale.ROOT));
+    }
+
     blockRpcServer =
         startRpcServer(
-            conf,
+            rpcConf,
             scmBlockAddress,
             ScmBlockLocationProtocolPB.class,
             blockProtoPbService,
@@ -146,7 +161,8 @@ public class SCMBlockProtocolServer implements
             scmBlockAddress, blockRpcServer);
     if (conf.getBoolean(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHORIZATION,
         false)) {
-      blockRpcServer.refreshServiceAcl(conf, SCMPolicyProvider.getInstance());
+      blockRpcServer.refreshServiceAcl(rpcConf,
+          SCMPolicyProvider.getInstance());
     }
     HddsServerUtil.addSuppressedLoggingExceptions(blockRpcServer);
   }

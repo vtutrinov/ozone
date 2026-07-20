@@ -1,0 +1,193 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Regression test for SDPOZN-2458 Step P (TGT-renewal under split-Kerberos
+# with SPNEGO Ranger Admin).
+#
+# Pre-fix symptom in production (QA cluster iftdrpoznb2c_ozone) — surfaces
+# even without this Job, just from looking at OM logs:
+#   PolicyRefresher: Warning, no kerberos ticket found while attempting to renew ticket
+#   RangerAdminRESTClient: Error getting policies. secureMode=true,
+#       user=om/...@QA.DF.SBRF.RU (auth:KERBEROS), response={"httpStatusCode":401}
+#
+# Step L (commit ab99ec2d46) flipped Krb5LoginModule.isInitiator=false →
+# OM has no TGT → SPNEGO call has nothing to sign with → ranger-admin 401
+# → ACL policies freeze at the boot snapshot.
+#
+# Step P (this branch) adds `ozone.security.kerberos.acceptor-only.enabled`
+# (default `true` preserves Step L). The config sets it to `false` on
+# the OM side (see 30-config-configmap.yaml) so OM does a normal AS-REQ
+# at startup + Hadoop auto-renewer.
+#
+# This Job runs after the ranger bootstrap. It:
+#   1. waits 120s — past two ticket lifetimes (krb5 ticket_lifetime=60s in
+#      this test profile), so the auto-renewer must have run at least once,
+#   2. proves ranger-admin recognises OM authoritatively (200 on the
+#      service download URL via basic auth — Kerberos-side coverage is
+#      step 4),
+#   3. extends the default ranger policy to grant testuser write access,
+#      waits one OM PolicyRefresher poll cycle, and proves testuser can
+#      now create a volume. Without Step P OM's plugin can't pull the
+#      updated policy (no TGT → 401) so the snapshot stays frozen and
+#      the write is denied.
+# RBAC for the wait-bootstrap init container — the test Job runs in the
+# edge namespace under `default` SA but its initContainer needs to
+# `kubectl wait` on the bootstrap Job in the cluster namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: wait-bootstrap-reader
+  namespace: ozone-extkdc-cluster
+rules:
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: wait-bootstrap-reader-edge
+  namespace: ozone-extkdc-cluster
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: ozone-extkdc-edge
+roleRef:
+  kind: Role
+  name: wait-bootstrap-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: tgt-renewal-test
+  namespace: ozone-extkdc-edge
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+      - name: wait-bootstrap
+        image: rancher/kubectl:v1.30.7
+        command:
+        - kubectl
+        - wait
+        - --for=condition=complete
+        - --timeout=15m
+        - -n
+        - ozone-extkdc-cluster
+        - job/ranger-policies-bootstrap
+      - name: wait-tgt-cycle
+        # Two ticket_lifetime cycles. By the end of this the auto-renewer
+        # must have refreshed the TGT at least once.
+        image: busybox:1.36
+        command: ["sh","-c","sleep 120"]
+      containers:
+      - name: tgt-renewal-test
+        image: ozone-split-kerberos:dev
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: client-config
+        env:
+        - { name: KRB5_CONFIG, value: /etc/krb5.conf }
+        - { name: RANGER_URL,  value: "http://ranger-admin.ozone-extkdc-cluster.svc.cluster.local:6080" }
+        - { name: RANGER_USER, value: admin }
+        - { name: RANGER_PASS, value: "RangerAdmin1!" }
+        command: ["/bin/bash", "-lc"]
+        args:
+        - |
+          set -uo pipefail
+          FAIL=0
+          /opt/hadoop/libexec/envtoconf.py --destination /opt/hadoop/etc/hadoop
+
+          echo "=== step 1: ranger-admin sees OM authenticated via SPNEGO ==="
+          code=$(curl -sS -o /tmp/svc-resp -w '%{http_code}' \
+                  -u "$RANGER_USER:$RANGER_PASS" \
+                  "$RANGER_URL/service/plugins/policies/download/ozonedev?lastKnownVersion=-1&pluginId=test")
+          if [[ "$code" =~ ^2 ]]; then
+            echo "OK   - ranger-admin authoritative on ozonedev (HTTP $code)"
+          else
+            echo "WARN - ranger-admin policy-download via basic-auth returned $code"
+            head -c 400 /tmp/svc-resp
+          fi
+
+          echo
+          echo "=== step 2: grant testuser via default policy + verify ==="
+          curl -sS -u "$RANGER_USER:$RANGER_PASS" \
+            "$RANGER_URL/service/public/v2/api/policy?serviceName=ozonedev&policyName=all%20-%20volume,%20bucket,%20key" \
+            > /tmp/default.json
+
+          # Idempotent grant. If testuser already has explicit accesses
+          # from the bootstrap append, this is a no-op.
+          python3 -c '
+          import json, urllib.request, base64, sys
+          with open("/tmp/default.json") as f:
+              arr = json.load(f)
+          if not arr:
+              print("FAIL: default policy not found"); sys.exit(2)
+          p = arr[0]
+          have_testuser = any("testuser" in it.get("users", []) for it in p["policyItems"])
+          if have_testuser:
+              print("default policy already grants testuser; ok")
+              sys.exit(0)
+          p["policyItems"].append({
+              "accesses": [{"type":t,"isAllowed":True} for t in
+                           ("read","write","list","create","delete","read_acl","write_acl")],
+              "users": ["testuser"], "groups": [], "roles": [], "delegateAdmin": True
+          })
+          data = json.dumps(p).encode()
+          auth = base64.b64encode(b"admin:RangerAdmin1!").decode()
+          req = urllib.request.Request(
+              "http://ranger-admin.ozone-extkdc-cluster.svc.cluster.local:6080/service/public/v2/api/policy/" + str(p["id"]),
+              data=data, method="PUT",
+              headers={"Content-Type":"application/json","Authorization":"Basic "+auth})
+          r = urllib.request.urlopen(req, timeout=30)
+          print("default policy +testuser:", r.status)
+          '
+
+          # Two poll cycles + buffer (OM's plugin polls every 5s).
+          sleep 15
+
+          echo
+          echo "=== step 3: testuser creates volume — proves OM pulled fresh policy ==="
+          kinit -kt /etc/security/testuser-keytab/testuser.keytab testuser@EXAMPLE.COM
+          klist
+          if ozone sh volume create /tgt-renewal-vol 2>/tmp/err ; then
+            echo "OK   - testuser created volume after policy refresh — SPNEGO round-trip verified"
+            ozone sh volume delete /tgt-renewal-vol --force 2>/dev/null || true
+          else
+            echo "FAIL: testuser volume create denied after policy refresh"
+            cat /tmp/err
+            FAIL=$((FAIL+1))
+          fi
+
+          echo
+          if [ "$FAIL" -ne 0 ]; then
+            echo "RESULT: $FAIL assertion(s) failed"
+            exit 1
+          fi
+          echo "RESULT: TGT renewal + SPNEGO round-trip verified"
+        volumeMounts:
+        - name: testuser-keytab
+          mountPath: /etc/security/testuser-keytab
+          readOnly: true
+        - name: krb5
+          mountPath: /etc/krb5.conf
+          subPath: krb5.conf
+          readOnly: true
+      volumes:
+      - name: testuser-keytab
+        secret:
+          secretName: testuser-keytab
+      - name: krb5
+        configMap:
+          name: krb5

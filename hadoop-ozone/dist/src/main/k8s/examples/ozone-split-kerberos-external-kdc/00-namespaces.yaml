@@ -1,0 +1,42 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Two-namespace layout for the external-KDC variant of split-Kerberos:
+#
+#   ozone-extkdc-edge    — KDC + human test client (the "corporate" tier).
+#                          This namespace owns every identity that Ozone
+#                          authenticates against. Pretends to live outside
+#                          the cluster — the deploy script never exposes
+#                          pod FQDNs from the cluster namespace to the KDC.
+#
+#   ozone-extkdc-cluster — Ozone daemons (OM, SCM, DN, S3G). They never
+#                          authenticate to each other (interservice=false);
+#                          only OM and S3G load keytabs at startup, with
+#                          stable-name principals that the KDC has been
+#                          seeded with.
+#
+# Cross-namespace traffic: the client pod resolves om-public and s3g-public
+# Services in the cluster namespace via the in-cluster DNS; the KDC sees
+# no traffic from the cluster namespace (interservice=false).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ozone-extkdc-edge
+  labels:
+    app.kubernetes.io/part-of: ozone-split-kerberos-external-kdc
+    role: edge
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ozone-extkdc-cluster
+  labels:
+    app.kubernetes.io/part-of: ozone-split-kerberos-external-kdc
+    role: cluster

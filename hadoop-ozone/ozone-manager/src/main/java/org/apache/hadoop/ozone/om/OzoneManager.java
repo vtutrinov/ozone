@@ -89,6 +89,9 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_READ_THREADPOOL_K
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_RPC_BIND_HOST_KEY;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_S3_GPRC_SERVER_ENABLED;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_S3_GRPC_SERVER_ENABLED_DEFAULT;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SERVICE_RPC_ADDRESS_KEY;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SERVICE_RPC_BIND_HOST_KEY;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SERVICE_RPC_PORT_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_SERVER_DEFAULT_REPLICATION_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_SERVER_DEFAULT_REPLICATION_KEY;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_SERVER_DEFAULT_REPLICATION_TYPE_DEFAULT;
@@ -152,6 +155,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -241,6 +245,7 @@ import org.apache.hadoop.ipc_.ProtobufRpcEngine;
 import org.apache.hadoop.ipc_.RPC;
 import org.apache.hadoop.ipc_.Server;
 import org.apache.hadoop.metrics2.util.MBeans;
+import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.OzoneAcl;
@@ -435,8 +440,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private OzoneConfiguration configuration;
   private OmConfig config;
   private RPC.Server omRpcServer;
+  private RPC.Server omServiceRpcServer;
   private GrpcOzoneManagerServer omS3gGrpcServer;
   private final InetSocketAddress omRpcAddress;
+  private InetSocketAddress omServiceRpcAddress;
   private final String omId;
   private final String threadPrefix;
   private ServiceInfoProvider serviceInfo;
@@ -484,6 +491,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private S3SecretManager s3SecretManager;
   private final boolean isOmGrpcServerEnabled;
   private volatile boolean isOmRpcServerRunning = false;
+  private volatile boolean isOmServiceRpcServerRunning = false;
   private volatile boolean isOmGrpcServerRunning = false;
   private String omComponent;
   private OzoneManagerProtocolServerSideTranslatorPB omServerProtocol;
@@ -738,7 +746,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
             "doesn't have SCM signed certificate.");
       }
       SCMSecurityProtocolClientSideTranslatorPB scmSecurityClient =
-          getScmSecurityClientWithMaxRetry(configuration, getCurrentUser());
+          getScmSecurityClientWithMaxRetry(configuration, getCurrentUser(),
+              true);
       certClient = new OMCertificateClient(secConfig, scmSecurityClient,
           omStorage, omInfo, "",
           scmInfo == null ? null : scmInfo.getScmId(),
@@ -1697,7 +1706,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    */
   private static StorageContainerLocationProtocol getScmContainerClient(
       OzoneConfiguration conf) {
-    return HAUtils.getScmContainerClient(conf);
+    // OM is an internal caller: dial SCM's SIMPLE sibling RPC server
+    // (Step M, ozone.scm.service.rpc-address) when configured so OM never
+    // needs a TGT to refresh pipelines. Falls back to the Kerberos main
+    // port automatically when the operator hasn't enabled the split.
+    return HAUtils.getScmContainerClient(conf, null, true);
   }
 
   /**
@@ -1750,8 +1763,101 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     String rpcBindHost = conf.get(OZONE_OM_RPC_BIND_HOST_KEY, OZONE_OM_BIND_HOST_DEFAULT);
     InetSocketAddress bindAddr = new InetSocketAddress(rpcBindHost, omNodeRpcAddr.getPort());
 
-    return startRpcServer(conf, bindAddr, omService,
-        omInterService, omAdminService, reconfigureService);
+    RPC.Server clientRpcServer = startRpcServer(conf, bindAddr,
+        omService, omInterService, omAdminService, reconfigureService);
+
+    // Optionally also build a sibling "service" RPC server for inter-service
+    // callers (S3G→OM, Recon→OM). When inter-service Kerberos is disabled
+    // (typically because the cluster runs in k8s with a service mesh handling
+    // mTLS), the service port carries SIMPLE auth while the main client port
+    // can still require Kerberos.
+    omServiceRpcServer = maybeBuildServiceRpcServer(conf,
+        omInterServerProtocol, omMetadataServerProtocol,
+        reconfigureServerProtocol);
+
+    return clientRpcServer;
+  }
+
+  /**
+   * Build the optional service-RPC server when
+   * {@link OMConfigKeys#OZONE_OM_SERVICE_RPC_ADDRESS_KEY} is configured.
+   * Returns {@code null} when the key is unset, preserving today's
+   * single-port behaviour.
+   */
+  private RPC.Server maybeBuildServiceRpcServer(OzoneConfiguration conf,
+      OMInterServiceProtocolServerSideImpl interServerProtocol,
+      OMAdminProtocolServerSideImpl adminServerProtocol,
+      ReconfigureProtocolServerSideTranslatorPB reconfigureServerProtocol)
+      throws IOException {
+    String serviceRpcAddrStr = conf.get(OZONE_OM_SERVICE_RPC_ADDRESS_KEY);
+    if (serviceRpcAddrStr == null || serviceRpcAddrStr.isEmpty()) {
+      return null;
+    }
+
+    InetSocketAddress serviceRpcAddr = NetUtils.createSocketAddr(
+        serviceRpcAddrStr, OZONE_OM_SERVICE_RPC_PORT_DEFAULT,
+        OZONE_OM_SERVICE_RPC_ADDRESS_KEY);
+    String serviceBindHost = conf.get(OZONE_OM_SERVICE_RPC_BIND_HOST_KEY,
+        OZONE_OM_BIND_HOST_DEFAULT);
+    InetSocketAddress serviceBindAddr = new InetSocketAddress(
+        serviceBindHost, serviceRpcAddr.getPort());
+
+    // Clone configuration so we can override the SASL profile for this
+    // port alone. Hadoop IPC reads hadoop.security.authentication from the
+    // Configuration handed to RPC.Builder; setting "simple" here yields a
+    // SIMPLE+TOKEN server (delegation tokens still validate via the secret
+    // manager set below). The shared, process-global UGI is left untouched.
+    OzoneConfiguration serviceConf = new OzoneConfiguration(conf);
+    if (!secConfig.isInterServiceKerberosEnabled()) {
+      serviceConf.set(
+          CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
+          AuthenticationMethod.SIMPLE.name().toLowerCase(Locale.ROOT));
+    }
+
+    BlockingService omServicePort =
+        OzoneManagerService.newReflectiveBlockingService(omServerProtocol);
+    BlockingService omInterServicePort =
+        OzoneManagerInterService.newReflectiveBlockingService(
+            interServerProtocol);
+    BlockingService omAdminServicePort =
+        OzoneManagerAdminService.newReflectiveBlockingService(
+            adminServerProtocol);
+    BlockingService reconfigureServicePort =
+        ReconfigureProtocolService.newReflectiveBlockingService(
+            reconfigureServerProtocol);
+
+    RPC.Server serviceRpcServer = startRpcServer(serviceConf, serviceBindAddr,
+        omServicePort, omInterServicePort, omAdminServicePort,
+        reconfigureServicePort);
+    omServiceRpcAddress = updateRPCListenAddress(configuration,
+        OZONE_OM_SERVICE_RPC_ADDRESS_KEY, serviceRpcAddr, serviceRpcServer);
+    LOG.info("Bound OM service RPC server to {} (auth={})",
+        omServiceRpcAddress,
+        secConfig.isInterServiceKerberosEnabled() ? "kerberos" : "simple");
+    return serviceRpcServer;
+  }
+
+  private void startServiceRpcServerIfPresent() {
+    if (omServiceRpcServer != null && !isOmServiceRpcServerRunning) {
+      omServiceRpcServer.start();
+      isOmServiceRpcServerRunning = true;
+    }
+  }
+
+  private void stopServiceRpcServerIfRunning() {
+    if (omServiceRpcServer != null && isOmServiceRpcServerRunning) {
+      omServiceRpcServer.stop();
+      isOmServiceRpcServerRunning = false;
+    }
+  }
+
+  /**
+   * Returns the bound address of the optional service RPC server, or
+   * {@code null} when {@link OMConfigKeys#OZONE_OM_SERVICE_RPC_ADDRESS_KEY}
+   * is not configured (single-port legacy mode).
+   */
+  public InetSocketAddress getOmServiceRpcServerAddr() {
+    return omServiceRpcAddress;
   }
 
   /**
@@ -1835,8 +1941,19 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    */
   private static void loginOMUserIfSecurityEnabled(OzoneConfiguration conf)
       throws IOException, AuthenticationException {
+    OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+    // In split-Kerberos mode OM never initiates outbound Kerberos calls
+    // (all inter-service traffic is SIMPLE via Step C-2 / IPC fallback).
+    // Flip Krb5LoginModule to acceptor-only so the keytab login doesn't
+    // emit an AS-REQ; zero KDC packets for this pod's lifetime.
+    OzoneSecurityUtil.useKerberosAcceptorOnlyMode(conf, LOG);
     securityEnabled = OzoneSecurityUtil.isSecurityEnabled(conf);
-    if (securityEnabled && testUgi == null) {
+    // The keytab login is needed whenever either RPC surface (external client
+    // or inter-service) is configured with Kerberos. In the split-Kerberos
+    // mode (external=true, interservice=false) the keytab still backs the
+    // external client port even though the inter-service port is SIMPLE.
+    if (OzoneSecurityUtil.requiresDaemonKerberosLogin(conf)
+        && testUgi == null) {
       // Checking certificate duration validity by using
       // validateCertificateValidityConfig() in SecurityConfig constructor.
       new SecurityConfig(conf);
@@ -1913,7 +2030,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         getOmDetailsProto(conf, omStore.getOmId());
 
     SCMSecurityProtocolClientSideTranslatorPB scmSecurityClient =
-        getScmSecurityClientWithMaxRetry(conf, getCurrentUser());
+        getScmSecurityClientWithMaxRetry(conf, getCurrentUser(), true);
 
     OMCertificateClient certClient =
         new OMCertificateClient(
@@ -2245,6 +2362,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
     omRpcServer.start();
     isOmRpcServerRunning = true;
+    startServiceRpcServerIfPresent();
 
     startTrashEmptier(configuration);
     if (isOmGrpcServerEnabled) {
@@ -2340,6 +2458,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
     omRpcServer.start();
     isOmRpcServerRunning = true;
+    startServiceRpcServerIfPresent();
 
     startTrashEmptier(configuration);
     registerMXBean();
@@ -2807,6 +2926,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         metricsTimer = null;
       }
       omRpcServer.stop();
+      stopServiceRpcServerIfRunning();
       if (isOmGrpcServerEnabled) {
         omS3gGrpcServer.stop();
       }
@@ -2928,11 +3048,19 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   }
 
   /**
-   * @return true if delegation token operation is allowed
+   * @return true if delegation token operation is allowed.
+   *
+   * <p>Delegation tokens are only meaningful when external Kerberos is
+   * configured (they are bootstrapped from a Kerberos identity and validated
+   * via HMAC on subsequent RPCs). In the split-Kerberos mode the OM's
+   * service-RPC port runs SIMPLE auth even though external Kerberos is on;
+   * we therefore key the decision off the deployment-level external-Kerberos
+   * flag rather than the JVM-global {@link UserGroupInformation#isSecurityEnabled()},
+   * which only reflects the inter-service UGI configuration.
    */
   private boolean isAllowedDelegationTokenOp() throws IOException {
     AuthenticationMethod authMethod = getConnectionAuthenticationMethod();
-    return !UserGroupInformation.isSecurityEnabled()
+    return !secConfig.isExternalKerberosEnabled()
         || (authMethod == AuthenticationMethod.KERBEROS)
         || (authMethod == AuthenticationMethod.KERBEROS_SSL)
         || (authMethod == AuthenticationMethod.CERTIFICATE);
@@ -4682,6 +4810,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     if (canProceed) {
       // Stop RPC server before stop metadataManager
       omRpcServer.stop();
+      stopServiceRpcServerIfRunning();
       isOmRpcServerRunning = false;
       omRpcServerStopped = true;
       LOG.info("RPC server is stopped. Spend {} ms.", Time.monotonicNow() - time);
@@ -4756,6 +4885,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         omRpcServer = getRpcServer(configuration);
         omRpcServer.start();
         isOmRpcServerRunning = true;
+        startServiceRpcServerIfPresent();
         LOG.info("RPC server is re-started. Spend {} ms.", Time.monotonicNow() - time);
       } catch (Exception e) {
         String errorMsg = "Failed to start RPC Server.";

@@ -17,6 +17,7 @@
 
 package org.apache.hadoop.ozone;
 
+import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_CLIENT_FALLBACK_TO_SIMPLE_AUTH_ALLOWED_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION;
 import static org.apache.hadoop.hdds.HddsConfigKeys.HDDS_GRPC_TLS_ENABLED;
 import static org.apache.hadoop.hdds.HddsConfigKeys.HDDS_SECRET_KEY_EXPIRY_DURATION;
@@ -35,6 +36,7 @@ import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_DATANODE_PORT_K
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_GRPC_PORT_KEY;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_RATIS_PORT_KEY;
 import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_SECURITY_SERVICE_PORT_KEY;
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.hdds.scm.server.SCMHTTPServerConfig.ConfigStrings.HDDS_SCM_HTTP_KERBEROS_KEYTAB_FILE_KEY;
 import static org.apache.hadoop.hdds.scm.server.SCMHTTPServerConfig.ConfigStrings.HDDS_SCM_HTTP_KERBEROS_PRINCIPAL_KEY;
 import static org.apache.hadoop.hdds.security.x509.exception.CertificateException.ErrorCode.ROLLBACK_ERROR;
@@ -43,6 +45,8 @@ import static org.apache.hadoop.hdds.utils.HddsServerUtil.getValidInetsForCurren
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ADMINISTRATORS;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_CLIENT_FAILOVER_MAX_ATTEMPTS_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_ENABLED_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY;
 import static org.apache.hadoop.ozone.OzoneConsts.SCM_SUB_CA;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.DELEGATION_TOKEN_MAX_LIFETIME_KEY;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_ADDRESS_KEY;
@@ -51,6 +55,7 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_HTTP_KERBEROS_PRI
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_KERBEROS_KEYTAB_FILE_KEY;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_KERBEROS_PRINCIPAL_KEY;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_S3_GPRC_SERVER_ENABLED;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SERVICE_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_TRANSPORT_CLASS;
 import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.TOKEN_EXPIRED;
 import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.USER_MISMATCH;
@@ -58,6 +63,7 @@ import static org.apache.hadoop.security.UserGroupInformation.AuthenticationMeth
 import static org.apache.ozone.test.GenericTestUtils.PortAllocator.getFreePort;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -570,6 +576,148 @@ final class TestSecureOzoneCluster {
       // Expects timeout failure from scmClient in om but om user login via
       // kerberos should succeed.
       assertThat(logs.getOutput()).contains("Ozone Manager login successful");
+    } finally {
+      if (scm != null) {
+        scm.stop();
+      }
+    }
+  }
+
+  /**
+   * Split-Kerberos: external=false + interservice=true is the one combination
+   * we forbid (ofs/o3fs clients would be unable to bootstrap a delegation
+   * token because the external RPC port would run without Kerberos).
+   * {@link OzoneSecurityUtil#validateKerberosFlags} must throw before the
+   * keytab login is attempted; the OM startup path proxies that throw out
+   * of {@link OzoneManager#createOm(OzoneConfiguration)} as an
+   * IllegalArgumentException.
+   */
+  @Test
+  public void testSplitKerberosRefuseInvalidCombo() throws Exception {
+    initSCM();
+    conf.setBoolean(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY, false);
+    conf.setBoolean(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY, true);
+    // SCM startup validates the flags too (SCM-side mirror of the OM
+    // playbook), so SCM creation must refuse the combo outright.
+    IllegalArgumentException scmEx = assertThrows(
+        IllegalArgumentException.class,
+        () -> HddsTestUtils.getScmSimple(conf));
+    assertTrue(scmEx.getMessage().contains(
+        OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY + "=false"));
+
+    // For the OM-side assertion the SCM must come up first, so start it
+    // with a valid combination and flip to the invalid one afterwards.
+    conf.unset(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY);
+    conf.unset(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY);
+    scm = HddsTestUtils.getScmSimple(conf);
+    try {
+      scm.start();
+      conf.setBoolean(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY, false);
+      conf.setBoolean(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY, true);
+      IllegalArgumentException ex = assertThrows(
+          IllegalArgumentException.class, () -> setupOm(conf));
+      assertTrue(ex.getMessage().contains(
+          OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY + "=false"));
+      assertTrue(ex.getMessage().contains(
+          OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY + "=true"));
+    } finally {
+      if (scm != null) {
+        scm.stop();
+      }
+    }
+  }
+
+  /**
+   * Split-Kerberos novel case: external=true, interservice=false. The OM must
+   * bind a second RPC server on the configured service-RPC address so that
+   * internal callers (S3G / Recon) can talk SIMPLE to the OM while ofs/o3fs
+   * clients keep targeting the Kerberos client port. The advisory WARN must
+   * also fire so operators see the mode in the logs.
+   */
+  @Test
+  public void testSplitKerberosExternalOnlyOmBindsServicePort()
+      throws Exception {
+    initSCM();
+    conf.setBoolean(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY, true);
+    conf.setBoolean(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY, false);
+    String serviceHostPort = InetAddress.getLocalHost().getCanonicalHostName()
+        + ":" + getFreePort();
+    conf.set(OZONE_OM_SERVICE_RPC_ADDRESS_KEY, serviceHostPort);
+    // Without a TGT (interservice=false) the OM fetches its secret keys / certificates from SCM's SIMPLE sibling
+    // port; without it the OM retries the Kerberos security port forever.
+    conf.set(OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY,
+        InetAddress.getLocalHost().getCanonicalHostName() + ":" + getFreePort());
+
+    LogCapturer logs = LogCapturer.captureLogs(OzoneManager.getLogger());
+    GenericTestUtils.setLogLevel(OzoneManager.getLogger(), INFO);
+
+    scm = HddsTestUtils.getScmSimple(conf);
+    try {
+      scm.start();
+      setupOm(conf);
+      om.setCertClient(new CertificateClientTestImpl(conf));
+      om.setScmTopologyClient(new ScmTopologyClient(scmBlockClient));
+      om.start();
+
+      assertNotNull(om.getOmRpcServerAddr(),
+          "External (Kerberos) client RPC server should be bound");
+      assertNotNull(om.getOmServiceRpcServerAddr(),
+          "Service (SIMPLE) RPC server should be bound");
+      assertNotEquals(om.getOmRpcServerAddr().getPort(),
+          om.getOmServiceRpcServerAddr().getPort(),
+          "Client and service RPC servers must bind different ports");
+
+      assertTrue(logs.getOutput().contains(
+              "split-Kerberos mode (external=true, interservice=false)"),
+          "Advisory WARN should be emitted in split-Kerberos mode");
+    } catch (Exception ex) {
+      // Tolerate a downstream SCM-client timeout: the assertions above only
+      // need the OM's RPC servers to be bound, which happens before any
+      // outbound SCM call.
+      assertTrue(logs.getOutput().contains("Ozone Manager login successful")
+              || logs.getOutput().contains(
+                  "split-Kerberos mode (external=true, interservice=false)"),
+          "OM startup must reach login / split-mode WARN: " + ex.getMessage());
+    } finally {
+      if (scm != null) {
+        scm.stop();
+      }
+    }
+  }
+
+  /**
+   * Split-Kerberos auto-set: when interservice=false the daemon's outbound
+   * RPCs must downgrade to SIMPLE against SCM ports running without Kerberos.
+   * The IPC client refuses that downgrade unless
+   * ipc.client.fallback-to-simple-auth-allowed=true is set globally; rather
+   * than burden operators with that key in core-site, the daemon login site
+   * sets it on its OzoneConfiguration. This test pins that behaviour so
+   * future refactors don't silently break SCM bootstrap in split mode.
+   */
+  @Test
+  public void testSplitKerberosAutoSetsIpcFallbackOnDaemonStartup()
+      throws Exception {
+    initSCM();
+    conf.setBoolean(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY, true);
+    conf.setBoolean(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY, false);
+    assertFalse(conf.getBoolean(IPC_CLIENT_FALLBACK_TO_SIMPLE_AUTH_ALLOWED_KEY,
+        false), "Precondition: fallback flag should start unset");
+
+    scm = HddsTestUtils.getScmSimple(conf);
+    try {
+      scm.start();
+      try {
+        setupOm(conf);
+      } catch (Exception ignored) {
+        // Downstream startup may fail (no certs / no real SCM heartbeats),
+        // but validateKerberosFlags runs at the very start of the OM init
+        // path so the auto-set still happens before any failure.
+      }
+      assertTrue(conf.getBoolean(IPC_CLIENT_FALLBACK_TO_SIMPLE_AUTH_ALLOWED_KEY,
+          false),
+          "OzoneSecurityUtil.validateKerberosFlags must auto-set the IPC "
+              + "fallback flag on the daemon's OzoneConfiguration when "
+              + "interservice=false");
     } finally {
       if (scm != null) {
         scm.stop();

@@ -1,0 +1,63 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Postgres for Ranger Admin. Lives in the cluster namespace next to OM
+# so the policy poll stays cluster-internal — same as DropApp prod
+# topology (Ranger DB is not exposed across the namespace boundary).
+apiVersion: v1
+kind: Service
+metadata:
+  name: ranger-db
+  namespace: ozone-extkdc-cluster
+spec:
+  selector: { component: ranger-db }
+  ports:
+  - { port: 5432, targetPort: 5432, name: pg }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ranger-db-init
+  namespace: ozone-extkdc-cluster
+data:
+  init.sh: |
+    #!/bin/bash
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+      CREATE USER rangeradmin WITH PASSWORD 'rangerR0cks!';
+      CREATE DATABASE ranger;
+      GRANT ALL PRIVILEGES ON DATABASE ranger TO rangeradmin;
+    EOSQL
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ranger-db
+  namespace: ozone-extkdc-cluster
+spec:
+  replicas: 1
+  selector: { matchLabels: { component: ranger-db } }
+  template:
+    metadata: { labels: { component: ranger-db } }
+    spec:
+      containers:
+      - name: pg
+        image: postgres:12
+        env:
+        - { name: POSTGRES_PASSWORD, value: "rangerR0cks!" }
+        ports: [ { containerPort: 5432, name: pg } ]
+        volumeMounts:
+        - { name: init, mountPath: /docker-entrypoint-initdb.d, readOnly: true }
+        readinessProbe:
+          exec: { command: ["pg_isready","-U","postgres"] }
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - { name: init, configMap: { name: ranger-db-init, defaultMode: 0755 } }

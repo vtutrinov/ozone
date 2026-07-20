@@ -77,6 +77,8 @@ import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_AUTHORIZATION_ENABLE
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_AUTHORIZATION_ENABLED_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_ENABLED_DEFAULT;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_ENABLED_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY;
+import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -140,6 +142,8 @@ public class SecurityConfig {
   private final Duration defaultCertDuration;
   private final Duration renewalGracePeriod;
   private final boolean isSecurityEnabled;
+  private final boolean externalKerberosEnabled;
+  private final boolean interServiceKerberosEnabled;
   private final boolean grpcTlsUseTestCert;
   private final Path externalRootCaPublicKeyPath;
   private final Path externalRootCaPrivateKeyPath;
@@ -219,6 +223,12 @@ public class SecurityConfig {
     this.isSecurityEnabled = configuration.getBoolean(
         OZONE_SECURITY_ENABLED_KEY,
         OZONE_SECURITY_ENABLED_DEFAULT);
+    this.externalKerberosEnabled = configuration.getBoolean(
+        OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY,
+        isSecurityEnabled);
+    this.interServiceKerberosEnabled = configuration.getBoolean(
+        OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY,
+        isSecurityEnabled);
 
     // Authorization is only effective when security is enabled, unless test mode is enabled
     boolean testAuthorizationEnabled = configuration.getBoolean(
@@ -406,6 +416,27 @@ public class SecurityConfig {
    */
   public boolean isSecurityEnabled() {
     return isSecurityEnabled;
+  }
+
+  /**
+   * Returns true if Kerberos is required on the external surfaces — OM client
+   * RPC (ofs/o3fs, {@code ozone s3 getsecret}) and the S3 Gateway HTTP listener
+   * (SPNEGO and AWS Sig V4). Determined by
+   * {@code ozone.security.kerberos.external.enabled}, falling back to
+   * {@link #isSecurityEnabled()} when unset.
+   */
+  public boolean isExternalKerberosEnabled() {
+    return externalKerberosEnabled;
+  }
+
+  /**
+   * Returns true if Kerberos is required on inter-service RPCs and the daemon
+   * keytab login (OM/SCM/DN/Recon). Determined by
+   * {@code ozone.security.kerberos.interservice.enabled}, falling back to
+   * {@link #isSecurityEnabled()} when unset.
+   */
+  public boolean isInterServiceKerberosEnabled() {
+    return interServiceKerberosEnabled;
   }
 
   /**
