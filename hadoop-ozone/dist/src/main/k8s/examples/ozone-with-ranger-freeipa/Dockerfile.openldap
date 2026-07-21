@@ -1,0 +1,22 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+FROM osixia/openldap:1.5.0
+
+# Bake LDIFs in so osixia can chown them — configmap mounts are read-only
+# and break the osixia init sequence.
+COPY ldif/01-accounts.ldif ldif/02-users.ldif ldif/03-groups.ldif \
+    /container/service/slapd/assets/config/bootstrap/ldif/custom/
+RUN chown -R 911:911 /container/service/slapd/assets/config/bootstrap/ldif/custom/

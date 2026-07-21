@@ -514,3 +514,4 @@ single revertable commit. The order, with what each contains:
 | K | SCM external admin port stays Kerberos | `SCMClientProtocolServer` keeps Kerberos when external=true regardless of interservice. |
 | L | acceptor-only Kerberos mode | OM and SCM never contact the KDC at startup or for renewal. |
 | M | SCM split-port for `StorageContainerLocationProtocol` | Sibling SIMPLE-auth RPC server (default port 9866) for OM and other internal callers, so the Kerberos-required 9860 port can stay for external `ozone admin` without forcing OM to hold a TGT. Mirrors OM's Step C-1 / C-2 pattern on the SCM side. |
+
