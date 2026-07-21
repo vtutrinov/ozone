@@ -1,0 +1,235 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ranger-db
+spec:
+  selector: { component: ranger-db }
+  ports:
+  - { port: 5432, targetPort: 5432, name: pg }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ranger-db-init
+data:
+  init.sh: |
+    #!/bin/bash
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+      CREATE USER rangeradmin WITH PASSWORD 'rangerR0cks!';
+      CREATE DATABASE ranger;
+      GRANT ALL PRIVILEGES ON DATABASE ranger TO rangeradmin;
+    EOSQL
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ranger-db
+spec:
+  replicas: 1
+  selector: { matchLabels: { component: ranger-db } }
+  template:
+    metadata: { labels: { component: ranger-db } }
+    spec:
+      containers:
+      - name: pg
+        image: postgres:12
+        env:
+        - { name: POSTGRES_PASSWORD, value: "rangerR0cks!" }
+        ports: [ { containerPort: 5432, name: pg } ]
+        volumeMounts:
+        - { name: init, mountPath: /docker-entrypoint-initdb.d, readOnly: true }
+        readinessProbe:
+          exec: { command: ["pg_isready","-U","postgres"] }
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - { name: init, configMap: { name: ranger-db-init, defaultMode: 0755 } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ranger-admin
+spec:
+  selector: { component: ranger-admin }
+  ports:
+  - { name: http, port: 6080, targetPort: 6080 }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ranger-admin-install
+data:
+  # Full install.properties — derived from security-admin/scripts/install.properties
+  # with these overrides: DB_FLAVOR=POSTGRES, postgres jdbc jar, ranger-db host,
+  # passwords set to known values, audit disabled. Missing keys (token_valid,
+  # cookie_path, ...) cause the embedded Tomcat webapp deploy to fail with a
+  # cryptic NumberFormatException, so the FULL property set is needed.
+  install.properties: |
+    PYTHON_COMMAND_INVOKER=python3
+    DB_FLAVOR=POSTGRES
+    SQL_CONNECTOR_JAR=/usr/share/java/postgresql.jar
+
+    db_root_user=postgres
+    db_root_password=rangerR0cks!
+    db_host=ranger-db
+    db_ssl_enabled=false
+    db_ssl_required=false
+    db_ssl_verifyServerCertificate=false
+    db_ssl_auth_type=2-way
+    javax_net_ssl_keyStore=
+    javax_net_ssl_keyStorePassword=
+    javax_net_ssl_trustStore=
+    javax_net_ssl_trustStorePassword=
+    javax_net_ssl_trustStore_type=jks
+    javax_net_ssl_keyStore_type=jks
+    db_ssl_certificate_file=
+    db_name=ranger
+    db_user=rangeradmin
+    db_password=rangerR0cks!
+    is_override_db_connection_string=false
+    db_override_connection_string=
+
+    rangerAdmin_password=RangerAdmin1!
+    rangerTagsync_password=RangerAdmin1!
+    rangerUsersync_password=RangerAdmin1!
+    keyadmin_password=RangerAdmin1!
+
+    audit_store=none
+    audit_elasticsearch_urls=
+    audit_elasticsearch_port=
+    audit_elasticsearch_protocol=
+    audit_elasticsearch_user=
+    audit_elasticsearch_password=
+    audit_elasticsearch_index=
+    audit_elasticsearch_bootstrap_enabled=false
+    audit_solr_urls=
+    audit_solr_user=
+    audit_solr_password=
+    audit_solr_zookeepers=
+    audit_solr_collection_name=ranger_audits
+    audit_solr_config_name=ranger_audits
+    audit_solr_configset_location=
+    audit_solr_no_shards=1
+    audit_solr_no_replica=1
+    audit_solr_max_shards_per_node=1
+    audit_solr_acl_user_list_sasl=solr,infra-solr
+    audit_solr_bootstrap_enabled=false
+    audit_cloudwatch_region=
+    audit_cloudwatch_log_group=
+    audit_cloudwatch_log_stream_prefix=
+
+    policymgr_external_url=http://ranger-admin:6080
+    policymgr_http_enabled=true
+    policymgr_https_keystore_file=
+    policymgr_https_keystore_keyalias=rangeradmin
+    policymgr_https_keystore_password=
+    policymgr_supportedcomponents=
+
+    unix_user=ranger
+    unix_user_pwd=ranger
+    unix_group=ranger
+
+    authentication_method=NONE
+    remoteLoginEnabled=true
+    authServiceHostName=localhost
+    authServicePort=5151
+    ranger_unixauth_keystore=keystore.jks
+    ranger_unixauth_keystore_password=password
+    ranger_unixauth_truststore=cacerts
+    ranger_unixauth_truststore_password=changeit
+
+    xa_ldap_url=
+    xa_ldap_userDNpattern=
+    xa_ldap_groupSearchBase=
+    xa_ldap_groupSearchFilter=
+    xa_ldap_groupRoleAttribute=
+    xa_ldap_base_dn=
+    xa_ldap_bind_dn=
+    xa_ldap_bind_password=
+    xa_ldap_referral=
+    xa_ldap_userSearchFilter=
+
+    xa_ldap_ad_domain=
+    xa_ldap_ad_url=
+    xa_ldap_ad_base_dn=
+    xa_ldap_ad_bind_dn=
+    xa_ldap_ad_bind_password=
+    xa_ldap_ad_referral=
+    xa_ldap_ad_userSearchFilter=
+
+    spnego_principal=
+    spnego_keytab=
+    token_valid=30
+    cookie_domain=
+    cookie_path=/
+    admin_principal=
+    admin_keytab=
+    lookup_principal=
+    lookup_keytab=
+    hadoop_conf=/etc/hadoop/conf
+
+    sso_enabled=false
+    sso_providerurl=
+    sso_publickey=
+
+    RANGER_ADMIN_LOG_DIR=/var/log/ranger
+    RANGER_PID_DIR_PATH=/var/run/ranger
+    RANGER_ADMIN_LOGBACK_CONF_FILE=/opt/ranger/admin/ews/webapp/WEB-INF/classes/conf/logback.xml
+
+    setup_mode=
+
+    XAPOLICYMGR_DIR=$PWD
+    app_home=$PWD/ews/webapp
+    TMPFILE=$PWD/.fi_tmp
+    LOGFILE=$PWD/logfile
+    LOGFILES="$LOGFILE"
+    JAVA_BIN='java'
+    JAVA_VERSION_REQUIRED='1.8'
+    JAVA_ORACLE='Java(TM) SE Runtime Environment'
+    ranger_admin_max_heap_size=1g
+    PATCH_RETRY_INTERVAL=120
+    STALE_PATCH_ENTRY_HOLD_TIME=10
+    mysql_core_file=db/mysql/optimized/current/ranger_core_db_mysql.sql
+    mysql_audit_file=db/mysql/xa_audit_db.sql
+    oracle_core_file=db/oracle/optimized/current/ranger_core_db_oracle.sql
+    oracle_audit_file=db/oracle/xa_audit_db_oracle.sql
+    postgres_core_file=db/postgres/optimized/current/ranger_core_db_postgres.sql
+    postgres_audit_file=db/postgres/xa_audit_db_postgres.sql
+    sqlserver_core_file=db/sqlserver/optimized/current/ranger_core_db_sqlserver.sql
+    sqlserver_audit_file=db/sqlserver/xa_audit_db_sqlserver.sql
+    sqlanywhere_core_file=db/sqlanywhere/optimized/current/ranger_core_db_sqlanywhere.sql
+    sqlanywhere_audit_file=db/sqlanywhere/xa_audit_db_sqlanywhere.sql
+    cred_keystore_filename=$app_home/WEB-INF/classes/conf/.jceks/rangeradmin.jceks
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ranger-admin
+spec:
+  replicas: 1
+  selector: { matchLabels: { component: ranger-admin } }
+  template:
+    metadata: { labels: { component: ranger-admin } }
+    spec:
+      initContainers:
+      - name: wait-db
+        image: postgres:12
+        command: ["sh","-c","until PGPASSWORD=rangerR0cks! psql -h ranger-db -U postgres -c 'SELECT 1' >/dev/null 2>&1; do echo waiting ranger-db; sleep 3; done"]
+      containers:
+      - name: ranger
+        image: apache/ranger:2.8.0
+        env:
+        - { name: RANGER_VERSION, value: "2.8.0" }
+        - { name: RANGER_DB_TYPE, value: "postgres" }
+        ports: [ { containerPort: 6080, name: http } ]
+        readinessProbe:
+          httpGet: { path: /login.jsp, port: 6080 }
+          initialDelaySeconds: 90
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+        volumeMounts:
+        - { name: install-props, mountPath: /opt/ranger/admin/install.properties, subPath: install.properties }
+      volumes:
+      - { name: install-props, configMap: { name: ranger-admin-install } }

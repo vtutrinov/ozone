@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: scm
+spec:
+  serviceName: scm
+  replicas: 1
+  selector:
+    matchLabels: { app: ozone, component: scm }
+  template:
+    metadata:
+      labels: { app: ozone, component: scm }
+    spec:
+      securityContext: { fsGroup: 1000 }
+      initContainers:
+      - name: merge-conf
+        image: apache/ozone-test:local
+        command: ["sh","-c","set -e; cp -v /opt/ozone/etc/hadoop/* /merged/; cp -fv /cluster-conf/* /merged/"]
+        volumeMounts:
+        - { name: cluster-conf, mountPath: /cluster-conf, readOnly: true }
+        - { name: merged-conf,  mountPath: /merged }
+      - name: init-scm
+        image: apache/ozone-test:local
+        command: ["bash","-lc","if [ ! -e /data/metadata/scm/current/VERSION ]; then ozone scm --init; fi"]
+        volumeMounts:
+        - { name: data,        mountPath: /data }
+        - { name: merged-conf, mountPath: /etc/hadoop,                readOnly: true }
+        - { name: keytabs,     mountPath: /etc/security/keytabs,      readOnly: true }
+        - { name: krb5,        mountPath: /etc/krb5.conf, subPath: krb5.conf, readOnly: true }
+      containers:
+      - name: scm
+        image: apache/ozone-test:local
+        command: ["bash","-lc","ozone scm"]
+        ports:
+        - { containerPort: 9876, name: ui }
+        - { containerPort: 9861, name: datanode-rpc }
+        - { containerPort: 9860, name: client-rpc }
+        - { containerPort: 9863, name: block-rpc }
+        # Step M's SIMPLE-sibling RPC port.
+        - { containerPort: 9866, name: service-rpc }
+        livenessProbe: { tcpSocket: { port: 9861 }, initialDelaySeconds: 60 }
+        volumeMounts:
+        - { name: data,        mountPath: /data }
+        - { name: merged-conf, mountPath: /etc/hadoop,                readOnly: true }
+        - { name: keytabs,     mountPath: /etc/security/keytabs,      readOnly: true }
+        - { name: krb5,        mountPath: /etc/krb5.conf, subPath: krb5.conf, readOnly: true }
+      volumes:
+      - { name: cluster-conf, configMap: { name: config-default } }
+      - { name: merged-conf,  emptyDir: {} }
+      - { name: keytabs,      secret:   { secretName: keytabs } }
+      - { name: krb5,         configMap: { name: krb5 } }
+  volumeClaimTemplates:
+  - metadata: { name: data }
+    spec:
+      accessModes: [ReadWriteOnce]
+      resources: { requests: { storage: 4Gi } }

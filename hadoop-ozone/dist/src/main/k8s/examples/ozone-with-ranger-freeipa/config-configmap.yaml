@@ -1,0 +1,210 @@
+# Two ConfigMaps:
+# - `config-default` for SCM/DN/S3G (no group mapping, no Ranger plugin classes
+#   in core-site.xml — those daemons don't authorize per-user requests).
+# - `config-om` for OzoneManager (adds IpaGroupMapping + IPA properties so
+#   ugi.getGroupNames() resolves against LDAP and ranger-ozone-security.xml so
+#   the authorizer can reach Ranger Admin).
+#
+# Splitting like this keeps SCM/DN/S3G from needing the ranger-ipa-userstore
+# jar on their classpath — they wouldn't use it anyway and they'd start a
+# pointless LDAP sync thread per pod.
+#
+# Auth model: split-Kerberos (external=KERBEROS, interservice=SIMPLE) —
+# mirrors `ozone-split-kerberos-external-kdc`. Principals are short, stable,
+# pre-baked into apache/ozone-testkrb5: `om/om`, `scm/scm`, `dn/dn`, `s3g/s3g`.
+# Step M/N gives the internal OM↔SCM and S3G↔OM hops their own SIMPLE
+# sibling RPC ports (9866 and 9864 respectively) — without that, the
+# OM-side `getScmContainerClient(internalCaller=true)` dials SCM's
+# Kerberos-only main port and wedges on `getContainerWithPipelineBatch`.
+#
+# RATIS: 3 datanodes, `replication=THREE` by default. With 1 DN the
+# data-plane consensus stalls on read even though SCM returns a pipeline.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-default
+data:
+  ozone-site.xml: |
+    <?xml version="1.0"?>
+    <configuration>
+      <property><name>ozone.om.address</name><value>om-0.om.ozone-test.svc.cluster.local</value></property>
+      <property><name>ozone.scm.names</name><value>scm-0.scm.ozone-test.svc.cluster.local</value></property>
+      <property><name>ozone.scm.block.client.address</name><value>scm-0.scm.ozone-test.svc.cluster.local</value></property>
+      <property><name>ozone.scm.client.address</name><value>scm-0.scm.ozone-test.svc.cluster.local</value></property>
+      <property><name>hdds.datanode.dir</name><value>/data/storage</value></property>
+      <property><name>ozone.scm.datanode.id.dir</name><value>/data</value></property>
+      <property><name>ozone.metadata.dirs</name><value>/data/metadata</value></property>
+      <property><name>ozone.replication.allowed-configs</name><value>^(STANDALONE|RATIS)/(ONE|THREE)$</value></property>
+      <property><name>ozone.server.default.replication</name><value>THREE</value></property>
+      <property><name>ozone.server.default.replication.type</name><value>RATIS</value></property>
+      <property><name>ozone.datanode.pipeline.limit</name><value>1</value></property>
+      <property><name>dfs.datanode.use.datanode.hostname</name><value>true</value></property>
+      <property><name>hdds.scm.safemode.min.datanode</name><value>3</value></property>
+
+      <!-- split-Kerberos: external clients use Kerberos, OM↔SCM and DN↔SCM
+           inter-service traffic stays SIMPLE on the sibling RPC ports. -->
+      <property><name>ozone.security.enabled</name><value>true</value></property>
+      <property><name>ozone.security.kerberos.external.enabled</name><value>true</value></property>
+      <property><name>ozone.security.kerberos.interservice.enabled</name><value>false</value></property>
+      <property><name>hdds.grpc.tls.enabled</name><value>false</value></property>
+      <property><name>hdds.block.token.enabled</name><value>true</value></property>
+      <property><name>hdds.container.token.enabled</name><value>true</value></property>
+
+      <!-- Principals — short, stable, NOT FQDN-bound (pre-baked in
+           apache/ozone-testkrb5:20230318-1). -->
+      <property><name>ozone.om.kerberos.principal</name><value>om/om@EXAMPLE.COM</value></property>
+      <property><name>ozone.om.kerberos.keytab.file</name><value>/etc/security/keytabs/om.keytab</value></property>
+      <property><name>hdds.scm.kerberos.principal</name><value>scm/scm@EXAMPLE.COM</value></property>
+      <property><name>hdds.scm.kerberos.keytab.file</name><value>/etc/security/keytabs/scm.keytab</value></property>
+      <property><name>dfs.datanode.kerberos.principal</name><value>dn/dn@EXAMPLE.COM</value></property>
+      <property><name>dfs.datanode.kerberos.keytab.file</name><value>/etc/security/keytabs/dn.keytab</value></property>
+      <property><name>ozone.s3g.kerberos.principal</name><value>s3g/s3g@EXAMPLE.COM</value></property>
+      <property><name>ozone.s3g.kerberos.keytab.file</name><value>/etc/security/keytabs/s3g.keytab</value></property>
+
+      <!-- HTTP SPNEGO off — UIs + `ozone s3 getsecret` stay simple. -->
+      <property><name>ozone.security.http.kerberos.enabled</name><value>false</value></property>
+      <property><name>ozone.om.http.auth.type</name><value>simple</value></property>
+      <property><name>hdds.scm.http.auth.type</name><value>simple</value></property>
+      <property><name>ozone.s3g.http.auth.type</name><value>simple</value></property>
+      <property><name>ozone.s3g.secret.http.auth.type</name><value>simple</value></property>
+
+      <!-- Step M / Step N — SIMPLE-sibling RPC ports.
+           Port-only (host portion cosmetic — the daemon binds 0.0.0.0:<port>
+           on its pod IP). `HAUtils.getScmContainerClient(conf, null, true)`
+           reads ozone.scm.service.rpc-address, extracts the port and
+           rewrites ozone.scm.client.port to it. Same shape on OM for
+           S3G→OM internal calls. -->
+      <property><name>ozone.scm.service.rpc-address</name><value>0.0.0.0:9866</value></property>
+      <property><name>ozone.om.service.rpc-address</name><value>0.0.0.0:9864</value></property>
+
+      <property><name>ozone.acl.enabled</name><value>true</value></property>
+      <property><name>ozone.administrators</name><value>om,scm,dn,s3g,testuser2</value></property>
+      <property><name>ozone.s3.administrators</name><value>om,s3g,testuser2</value></property>
+
+      <!-- Map S3 bucket namespace onto vol1 so the same Ranger policies
+           that guard vol1/bucket{1,2,3} apply to S3 requests. -->
+      <property><name>ozone.s3g.volume.name</name><value>vol1</value></property>
+    </configuration>
+  core-site.xml: |
+    <?xml version="1.0"?>
+    <configuration>
+      <property><name>hadoop.security.authentication</name><value>kerberos</value></property>
+      <property><name>hadoop.security.authorization</name><value>false</value></property>
+      <property><name>hadoop.security.auth_to_local</name><value>DEFAULT</value></property>
+      <property><name>ipc.client.fallback-to-simple-auth-allowed</name><value>true</value></property>
+    </configuration>
+  log4j.properties: |
+    log4j.rootLogger=INFO, stdout
+    log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+    log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+    log4j.appender.stdout.layout.ConversionPattern=%d{yyyy-MM-dd HH:mm:ss} %-5p %c{1}:%L - %m%n
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-om
+data:
+  ozone-site.xml: |
+    <?xml version="1.0"?>
+    <configuration>
+      <property><name>ozone.om.address</name><value>om-0.om.ozone-test.svc.cluster.local</value></property>
+      <property><name>ozone.scm.names</name><value>scm-0.scm.ozone-test.svc.cluster.local</value></property>
+      <property><name>ozone.scm.block.client.address</name><value>scm-0.scm.ozone-test.svc.cluster.local</value></property>
+      <property><name>ozone.scm.client.address</name><value>scm-0.scm.ozone-test.svc.cluster.local</value></property>
+      <property><name>ozone.metadata.dirs</name><value>/data/metadata</value></property>
+      <property><name>ozone.replication.allowed-configs</name><value>^(STANDALONE|RATIS)/(ONE|THREE)$</value></property>
+      <property><name>ozone.server.default.replication</name><value>THREE</value></property>
+      <property><name>ozone.server.default.replication.type</name><value>RATIS</value></property>
+      <property><name>ozone.datanode.pipeline.limit</name><value>1</value></property>
+      <property><name>hdds.scm.safemode.min.datanode</name><value>3</value></property>
+
+      <property><name>ozone.security.enabled</name><value>true</value></property>
+      <property><name>ozone.security.kerberos.external.enabled</name><value>true</value></property>
+      <property><name>ozone.security.kerberos.interservice.enabled</name><value>false</value></property>
+      <property><name>hdds.grpc.tls.enabled</name><value>false</value></property>
+      <property><name>hdds.block.token.enabled</name><value>true</value></property>
+      <property><name>hdds.container.token.enabled</name><value>true</value></property>
+
+      <property><name>ozone.om.kerberos.principal</name><value>om/om@EXAMPLE.COM</value></property>
+      <property><name>ozone.om.kerberos.keytab.file</name><value>/etc/security/keytabs/om.keytab</value></property>
+      <property><name>hdds.scm.kerberos.principal</name><value>scm/scm@EXAMPLE.COM</value></property>
+      <property><name>hdds.scm.kerberos.keytab.file</name><value>/etc/security/keytabs/scm.keytab</value></property>
+      <property><name>dfs.datanode.kerberos.principal</name><value>dn/dn@EXAMPLE.COM</value></property>
+      <property><name>dfs.datanode.kerberos.keytab.file</name><value>/etc/security/keytabs/dn.keytab</value></property>
+      <property><name>ozone.s3g.kerberos.principal</name><value>s3g/s3g@EXAMPLE.COM</value></property>
+      <property><name>ozone.s3g.kerberos.keytab.file</name><value>/etc/security/keytabs/s3g.keytab</value></property>
+
+      <property><name>ozone.security.http.kerberos.enabled</name><value>false</value></property>
+      <property><name>ozone.om.http.auth.type</name><value>simple</value></property>
+      <property><name>hdds.scm.http.auth.type</name><value>simple</value></property>
+      <property><name>ozone.s3g.http.auth.type</name><value>simple</value></property>
+      <property><name>ozone.s3g.secret.http.auth.type</name><value>simple</value></property>
+
+      <property><name>ozone.scm.service.rpc-address</name><value>0.0.0.0:9866</value></property>
+      <property><name>ozone.om.service.rpc-address</name><value>0.0.0.0:9864</value></property>
+
+      <property><name>ozone.acl.enabled</name><value>true</value></property>
+      <property><name>ozone.acl.authorizer.class</name><value>org.apache.ranger.authorization.ozone.authorizer.RangerOzoneAuthorizer</value></property>
+      <property><name>ozone.administrators</name><value>om,scm,dn,s3g,testuser2</value></property>
+      <property><name>ozone.s3.administrators</name><value>om,s3g,testuser2</value></property>
+
+      <property><name>ozone.s3g.volume.name</name><value>vol1</value></property>
+    </configuration>
+  core-site.xml: |
+    <?xml version="1.0"?>
+    <configuration>
+      <property><name>hadoop.security.authentication</name><value>kerberos</value></property>
+      <property><name>hadoop.security.authorization</name><value>false</value></property>
+      <property><name>hadoop.security.auth_to_local</name><value>DEFAULT</value></property>
+      <property><name>ipc.client.fallback-to-simple-auth-allowed</name><value>true</value></property>
+      <property><name>hadoop.security.group.mapping</name><value>org.apache.ranger.plugin.ipa.IpaGroupMapping</value></property>
+      <property><name>org.apache.ranger.ipa.enabled</name><value>true</value></property>
+      <property><name>org.apache.ranger.ipa.ldap.url</name><value>ldap://ldap.ozone-test.svc.cluster.local:389</value></property>
+      <property><name>org.apache.ranger.ipa.ldap.base.dn</name><value>dc=example,dc=test</value></property>
+      <property><name>org.apache.ranger.ipa.ldap.user.search.base</name><value>ou=users,ou=accounts</value></property>
+      <property><name>org.apache.ranger.ipa.ldap.user.filter</name><value>(objectClass=person)</value></property>
+      <property><name>org.apache.ranger.ipa.ldap.user.name.attr</name><value>uid</value></property>
+      <property><name>org.apache.ranger.ipa.ldap.group.search.base</name><value>ou=groups,ou=accounts</value></property>
+      <property><name>org.apache.ranger.ipa.ldap.group.filter</name><value>(objectClass=groupOfNames)</value></property>
+      <property><name>org.apache.ranger.ipa.ldap.group.name.attr</name><value>cn</value></property>
+      <property><name>org.apache.ranger.ipa.ldap.group.member.attr</name><value>member</value></property>
+      <property><name>org.apache.ranger.ipa.ldap.bind.dn.file</name><value>/etc/ldap-creds/bind-dn</value></property>
+      <property><name>org.apache.ranger.ipa.ldap.bind.password.file</name><value>/etc/ldap-creds/bind-password</value></property>
+      <property><name>org.apache.ranger.ipa.sync.interval.ms</name><value>10000</value></property>
+    </configuration>
+  ranger-ozone-security.xml: |
+    <?xml version="1.0"?>
+    <configuration>
+      <property><name>ranger.plugin.ozone.service.name</name><value>ozonedev</value></property>
+      <property><name>ranger.plugin.ozone.policy.source.impl</name><value>org.apache.ranger.admin.client.RangerAdminRESTClient</value></property>
+      <property><name>ranger.plugin.ozone.policy.rest.url</name><value>http://ranger-admin:6080</value></property>
+      <property><name>ranger.plugin.ozone.policy.pollIntervalMs</name><value>5000</value></property>
+      <property><name>ranger.plugin.ozone.policy.cache.dir</name><value>/tmp/ranger/policycache</value></property>
+      <!-- ranger-admin uses HTTP basic auth, not SPNEGO. Without this, the
+           policy poll under kerberos UGI would 401 against ranger-admin.
+           Key is `<propertyPrefix>.forceNonKerberos` where propertyPrefix
+           is `ranger.plugin.<service-type>` (see
+           AbstractRangerAdminClient#init at line 51). -->
+      <property><name>ranger.plugin.ozone.forceNonKerberos</name><value>true</value></property>
+    </configuration>
+  ranger-ozone-audit.xml: |
+    <?xml version="1.0"?>
+    <configuration>
+      <property><name>xasecure.audit.is.enabled</name><value>false</value></property>
+    </configuration>
+  log4j.properties: |
+    log4j.rootLogger=INFO, stdout
+    log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+    log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+    log4j.appender.stdout.layout.ConversionPattern=%d{yyyy-MM-dd HH:mm:ss} %-5p %c{1}:%L - %m%n
+    log4j.logger.org.apache.ranger.plugin.ipa=DEBUG
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ldap-bind
+type: Opaque
+stringData:
+  bind-dn:       "cn=admin,dc=example,dc=test"
+  bind-password: "AdminPass1!"

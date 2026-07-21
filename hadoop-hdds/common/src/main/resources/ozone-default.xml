@@ -1953,6 +1953,7 @@
     </description>
   </property>
   <property>
+<<<<<<< HEAD
     <name>ozone.security.kerberos.acceptor-only.enabled</name>
     <value>true</value>
     <tag>OZONE, SECURITY, KERBEROS</tag>
@@ -1972,6 +1973,8 @@
     </description>
   </property>
   <property>
+=======
+>>>>>>> e297102155 ([SDPOZN-2458] Step A: split-Kerberos foundation — config keys, accessors, validation)
     <name>ozone.security.http.kerberos.enabled</name>
     <value>false</value>
     <tag>OZONE, SECURITY, KERBEROS</tag>

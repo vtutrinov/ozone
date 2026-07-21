@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: scm
+spec:
+  publishNotReadyAddresses: true
+  clusterIP: None
+  selector:
+    app: ozone
+    component: scm
+  ports:
+  - { name: ui,            port: 9876 }
+  - { name: datanode-rpc,  port: 9861 }
+  - { name: client-rpc,    port: 9860 }
+  - { name: block-rpc,     port: 9863 }
+  # Step M's SIMPLE-sibling RPC port — OM dials this via HAUtils'
+  # internal-caller port rewrite (ozone.scm.service.rpc-address).
+  - { name: service-rpc,   port: 9866 }

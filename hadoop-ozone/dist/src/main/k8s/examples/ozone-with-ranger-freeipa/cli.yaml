@@ -1,0 +1,45 @@
+# Long-running pod with the same apache/ozone-test image the cluster uses,
+# pre-configured against om-0.om. Use it for ad-hoc `ozone sh` commands.
+#
+# Under split-Kerberos you have to kinit before talking to OM:
+#
+#   kubectl -n ozone-test exec -it cli -- bash
+#   kinit -kt /testuser-keytabs/testuser.keytab testuser@EXAMPLE.COM
+#   ozone sh volume list /
+#
+# It mounts config-default (no IpaGroupMapping, no LDAP creds) — group
+# resolution happens server-side on OM.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cli
+  labels:
+    app: ozone
+    component: cli
+spec:
+  restartPolicy: Always
+  initContainers:
+  - name: merge-conf
+    image: apache/ozone-test:local
+    imagePullPolicy: Never
+    command: ["sh","-c","set -e; cp -v /opt/ozone/etc/hadoop/* /merged/; cp -fv /cluster-conf/* /merged/"]
+    volumeMounts:
+    - { name: cluster-conf, mountPath: /cluster-conf, readOnly: true }
+    - { name: merged-conf,  mountPath: /merged }
+  - name: wait-om
+    image: busybox:1.36
+    command: ["sh","-c","until nc -z om-0.om 9862; do echo waiting om; sleep 5; done"]
+  containers:
+  - name: cli
+    image: apache/ozone-test:local
+    imagePullPolicy: Never
+    command: ["bash","-lc","sleep infinity"]
+    volumeMounts:
+    - { name: merged-conf,     mountPath: /etc/hadoop,           readOnly: true }
+    - { name: testuser-keytabs,mountPath: /testuser-keytabs,     readOnly: true }
+    - { name: krb5,            mountPath: /etc/krb5.conf, subPath: krb5.conf, readOnly: true }
+  volumes:
+  - { name: cluster-conf,     configMap: { name: config-default } }
+  - { name: merged-conf,      emptyDir: {} }
+  - { name: testuser-keytabs, secret:    { secretName: testuser-keytabs } }
+  - { name: krb5,             configMap: { name: krb5 } }

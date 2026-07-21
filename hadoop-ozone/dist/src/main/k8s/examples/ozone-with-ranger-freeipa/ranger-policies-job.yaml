@@ -1,0 +1,145 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ranger-policies-bootstrap
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+      - name: wait-ranger
+        image: curlimages/curl:8.10.1
+        command: ["sh","-c","until curl -sf -u admin:RangerAdmin1! http://ranger-admin:6080/service/public/v2/api/servicedef/ >/dev/null; do echo waiting ranger; sleep 10; done"]
+      containers:
+      - name: seed
+        image: python:3.11-alpine
+        env:
+        - { name: RANGER_URL,  value: http://ranger-admin:6080 }
+        - { name: RANGER_USER, value: admin }
+        - { name: RANGER_PASS, value: RangerAdmin1! }
+        command:
+        - python3
+        - -c
+        - |
+          import json, os, sys, urllib.request, urllib.error, base64
+          URL, USER, PASS = os.environ['RANGER_URL'], os.environ['RANGER_USER'], os.environ['RANGER_PASS']
+          AUTH = 'Basic ' + base64.b64encode(f'{USER}:{PASS}'.encode()).decode()
+
+          def call(method, path, body=None):
+              data = json.dumps(body).encode() if body is not None else None
+              req = urllib.request.Request(URL + path, data=data, method=method,
+                                           headers={'Authorization': AUTH, 'Content-Type': 'application/json'})
+              try:
+                  r = urllib.request.urlopen(req, timeout=30)
+                  return r.status, r.read().decode()
+              except urllib.error.HTTPError as e:
+                  return e.code, e.read().decode()
+
+          # 1. service
+          code, body = call('POST', '/service/public/v2/api/service', {
+              'name': 'ozonedev', 'type': 'ozone', 'isEnabled': True,
+              'configs': {
+                  'username': 'admin', 'password': 'x',
+                  'ozone.om.address': 'om-0.om.ozone-test.svc.cluster.local:9862',
+                  'ozone.om.http-address': 'om-0.om.ozone-test.svc.cluster.local:9874',
+                  'hadoop.security.authentication': 'simple',
+              }
+          })
+          print('service create:', code, body[:200] if code >= 300 else 'OK')
+
+          # 2. users + groups (om is also a user — needed for acl-bootstrap to seed buckets)
+          for u in ('testuser', 'testuser2', 'om'):
+              # Ranger requires email local part >= 3 chars; pad short usernames.
+              email = f'{u if len(u) >= 3 else u + "user"}@example.com'
+              code, body = call('POST', '/service/xusers/secure/users', {
+                  'name': u, 'firstName': u, 'lastName': 'Test',
+                  'emailAddress': email,
+                  'password': 'Ignore1234!', 'userRoleList': ['ROLE_USER']
+              })
+              print(f'user {u}:', code, 'OK' if code < 300 else body[:200])
+          for g in ('group1', 'group2'):
+              code, body = call('POST', '/service/xusers/groups', {'name': g, 'description': g})
+              print(f'group {g}:', code, 'OK' if code < 300 else body[:200])
+
+          def post_policy(p):
+              code, body = call('POST', '/service/public/v2/api/policy', p)
+              if code < 300:
+                  print(f"policy {p['name']}: created")
+              elif 'Another policy already exists for this name' in body:
+                  print(f"policy {p['name']}: exists (skip)")
+              else:
+                  print(f"policy {p['name']}: FAILED {code}: {body[:300]}")
+                  sys.exit(1)
+
+          ACCESSES_ALL = [{'type': t, 'isAllowed': True} for t in
+                          ('read', 'write', 'list', 'create', 'delete', 'read_acl', 'write_acl')]
+          ACCESSES_RW  = [{'type': t, 'isAllowed': True} for t in
+                          ('read', 'write', 'list', 'create', 'delete')]
+          ACCESSES_R   = [{'type': t, 'isAllowed': True} for t in ('read', 'list')]
+
+          # 0. vol1 needs to be readable by every test identity — Ranger
+          # checks volume access before drilling into buckets/keys. Without
+          # this, even an explicit bucket grant returns PERMISSION_DENIED on
+          # the parent volume.
+          post_policy({
+              'service': 'ozonedev', 'name': 'p-vol1-traverse', 'isEnabled': True,
+              'resources': {'volume': {'values': ['vol1']}},
+              'policyItems': [{
+                  'accesses': ACCESSES_R,
+                  'users': ['testuser', 'testuser2'],
+                  'groups': ['group1', 'group2'],
+              }],
+          })
+          post_policy({
+              'service': 'ozonedev', 'name': 'p-testuser-bucket1', 'isEnabled': True,
+              'resources': {'volume': {'values': ['vol1']}, 'bucket': {'values': ['bucket1']},
+                            'key': {'values': ['*'], 'isRecursive': True}},
+              'policyItems': [{'accesses': ACCESSES_RW, 'users': ['testuser']}],
+          })
+          post_policy({
+              'service': 'ozonedev', 'name': 'p-group1-bucket2-r', 'isEnabled': True,
+              'resources': {'volume': {'values': ['vol1']}, 'bucket': {'values': ['bucket2']},
+                            'key': {'values': ['*'], 'isRecursive': True}},
+              'policyItems': [{'accesses': ACCESSES_R, 'groups': ['group1']}],
+          })
+          post_policy({
+              'service': 'ozonedev', 'name': 'p-group2-bucket3-rw', 'isEnabled': True,
+              'resources': {'volume': {'values': ['vol1']}, 'bucket': {'values': ['bucket3']},
+                            'key': {'values': ['*'], 'isRecursive': True}},
+              'policyItems': [{'accesses': ACCESSES_RW, 'groups': ['group2']}],
+          })
+
+          # 4. testuser2 superuser via UPDATE of the existing default policy
+          # (Ranger refuses a new policy that overlaps an existing one on the same resource).
+          code, body = call('GET', '/service/public/v2/api/policy?serviceName=ozonedev&policyName=all%20-%20volume,%20bucket,%20key')
+          arr = json.loads(body)
+          if not arr:
+              print('default all policy not found, skipping testuser2 update'); sys.exit(1)
+          policy = arr[0]
+          if not any('testuser2' in pi.get('users', []) for pi in policy['policyItems']):
+              policy['policyItems'].append({
+                  'accesses': ACCESSES_ALL, 'users': ['testuser2'],
+                  'groups': [], 'roles': [], 'delegateAdmin': True
+              })
+              code, body = call('PUT', f"/service/public/v2/api/policy/{policy['id']}", policy)
+              print('default policy +testuser2:', code, 'OK' if code < 300 else body[:200])
+          else:
+              print('default policy already grants testuser2')
+
+          # Also grant `om` admin rights via the default policy — acl-bootstrap
+          # runs as `om` and would otherwise be denied. {OWNER} doesn't help
+          # when creating a brand-new volume.
+          code, body = call('GET', '/service/public/v2/api/policy?serviceName=ozonedev&policyName=all%20-%20volume,%20bucket,%20key')
+          policy = json.loads(body)[0]
+          if not any('om' in pi.get('users', []) for pi in policy['policyItems']):
+              policy['policyItems'].append({
+                  'accesses': ACCESSES_ALL, 'users': ['om'],
+                  'groups': [], 'roles': [], 'delegateAdmin': True
+              })
+              code, body = call('PUT', f"/service/public/v2/api/policy/{policy['id']}", policy)
+              print('default policy +om:', code, 'OK' if code < 300 else body[:200])
+          else:
+              print('default policy already grants om')
+
+          print('policies seeded')

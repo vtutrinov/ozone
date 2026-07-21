@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ldap
+spec:
+  selector:
+    component: openldap
+  ports:
+  - { name: ldap, port: 389, targetPort: 389 }
+---
+# Seed LDIF — testuser/testuser2 + group1/group2, testuser ∈ group1,
+# testuser2 ∈ group2. Mirrors the FreeIPA tree (cn=users,cn=accounts /
+# cn=groups,cn=accounts) so the plugin config is identical between this
+# test and the dropp-app prod values. base dn = dc=example,dc=test.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ldap-seed
+data:
+  01-accounts.ldif: |
+    dn: ou=accounts,dc=example,dc=test
+    objectClass: organizationalUnit
+    ou: accounts
+
+    dn: ou=users,ou=accounts,dc=example,dc=test
+    objectClass: organizationalUnit
+    ou: users
+
+    dn: ou=groups,ou=accounts,dc=example,dc=test
+    objectClass: organizationalUnit
+    ou: groups
+
+  02-users.ldif: |
+    dn: uid=testuser,ou=users,ou=accounts,dc=example,dc=test
+    objectClass: inetOrgPerson
+    uid: testuser
+    cn: testuser
+    sn: testuser
+    userPassword: TestUser1!
+
+    dn: uid=testuser2,ou=users,ou=accounts,dc=example,dc=test
+    objectClass: inetOrgPerson
+    uid: testuser2
+    cn: testuser2
+    sn: testuser2
+    userPassword: TestUser1!
+
+  03-groups.ldif: |
+    dn: cn=group1,ou=groups,ou=accounts,dc=example,dc=test
+    objectClass: groupOfNames
+    cn: group1
+    member: uid=testuser,ou=users,ou=accounts,dc=example,dc=test
+
+    dn: cn=group2,ou=groups,ou=accounts,dc=example,dc=test
+    objectClass: groupOfNames
+    cn: group2
+    member: uid=testuser2,ou=users,ou=accounts,dc=example,dc=test
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openldap
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: openldap
+  template:
+    metadata:
+      labels:
+        component: openldap
+    spec:
+      hostname: openldap
+      subdomain: ldap
+      # k8s injects LDAP_PORT/LDAP_HOST etc. env vars from the `ldap` Service
+      # into pods; osixia treats LDAP_* as configuration overrides and ends
+      # up building a malformed listen URL.
+      enableServiceLinks: false
+      containers:
+      - name: openldap
+        # LDIFs baked into the image so osixia's chown step in the init
+        # sequence succeeds (configmap mounts are read-only).
+        image: openldap-seeded:local
+        imagePullPolicy: Never
+        env:
+        - { name: LDAP_ORGANISATION,    value: "Example Test" }
+        - { name: LDAP_DOMAIN,          value: "example.test" }
+        - { name: LDAP_ADMIN_PASSWORD,  value: "AdminPass1!" }
+        # osixia parses $HOSTNAME for listen URL; an empty hostname plus the
+        # ClusterIP from the Service env vars produces a malformed URL.
+        # Force listen on all interfaces.
+        - { name: LDAP_LOG_LEVEL,       value: "256" }
+        args:
+        - "--copy-service"
+        ports:
+        - { containerPort: 389, name: ldap }
+        readinessProbe:
+          exec: { command: ["sh","-c","ldapsearch -x -H ldap://localhost -D 'cn=admin,dc=example,dc=test' -w AdminPass1! -b 'dc=example,dc=test' -s base 1.1 >/dev/null"] }
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          failureThreshold: 30

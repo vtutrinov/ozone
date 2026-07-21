@@ -1,0 +1,38 @@
+# Pre-baked KDC. The apache/ozone-testkrb5 image already has these
+# principals provisioned:
+#   om/om@EXAMPLE.COM
+#   scm/scm@EXAMPLE.COM
+#   dn/dn@EXAMPLE.COM
+#   s3g/s3g@EXAMPLE.COM
+# All short and stable — no pod-FQDN coupling. deploy.sh adds
+# testuser@EXAMPLE.COM and testuser2@EXAMPLE.COM on top and extracts
+# every keytab into a Secret used by the daemons + client jobs.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kdc
+spec:
+  ports:
+  - { port: 88, name: kerberos,     protocol: TCP }
+  - { port: 88, name: kerberos-udp, protocol: UDP }
+  selector: { app: ozone, component: kdc }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kdc
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: ozone, component: kdc }
+  template:
+    metadata:
+      labels: { app: ozone, component: kdc }
+    spec:
+      containers:
+      - name: kdc
+        image: apache/ozone-testkrb5:20230318-1
+        command: ["krb5kdc", "-n"]
+        ports:
+        - { containerPort: 88, protocol: TCP }
+        - { containerPort: 88, protocol: UDP }

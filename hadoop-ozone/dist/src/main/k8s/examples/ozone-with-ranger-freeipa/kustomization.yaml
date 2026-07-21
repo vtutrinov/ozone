@@ -1,0 +1,23 @@
+namespace: ozone-test
+
+# kdc.yaml and krb5-configmap.yaml are applied by deploy.sh before this
+# kustomize step (so the keytabs Secret can be populated from the running
+# KDC before any daemon starts). They're not listed here.
+resources:
+- namespace.yaml
+- config-configmap.yaml
+- openldap.yaml
+- ranger-admin.yaml
+- om-service.yaml
+- om-statefulset.yaml
+- scm-service.yaml
+- scm-statefulset.yaml
+- datanode-service.yaml
+- datanode-statefulset.yaml
+- s3g-service.yaml
+- s3g-statefulset.yaml
+- ranger-policies-job.yaml
+- acl-bootstrap-job.yaml
+- acl-test-job.yaml
+- acl-test-s3-job.yaml
+- cli.yaml

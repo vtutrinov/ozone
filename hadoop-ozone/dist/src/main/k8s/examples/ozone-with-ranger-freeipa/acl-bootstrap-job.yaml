@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: acl-bootstrap
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: acl-test-sa
+      initContainers:
+      - name: merge-conf
+        image: apache/ozone-test:local
+        command: ["sh","-c","set -e; cp -v /opt/ozone/etc/hadoop/* /merged/; cp -fv /cluster-conf/* /merged/"]
+        volumeMounts:
+        - { name: cluster-conf, mountPath: /cluster-conf, readOnly: true }
+        - { name: merged-conf,  mountPath: /merged }
+      - name: wait-om
+        image: busybox:1.36
+        command: ["sh","-c","until nc -z om-0.om 9862; do echo waiting om; sleep 5; done"]
+      - name: wait-policies
+        image: rancher/kubectl:v1.30.7
+        command:
+        - kubectl
+        - wait
+        - --for=condition=complete
+        - --timeout=15m
+        - -n
+        - ozone-test
+        - job/ranger-policies-bootstrap
+      - name: warmup
+        image: busybox:1.36
+        command: ["sh","-c","sleep 20"]
+      containers:
+      - name: seed
+        image: apache/ozone-test:local
+        # Under split-Kerberos the seed step kinits as om/om@EXAMPLE.COM
+        # (the OM service identity) — same principal that the OM daemons
+        # run as, so it lands in ozone.administrators.
+        command:
+        - bash
+        - -lc
+        - |
+          set -eu
+          kinit -kt /etc/security/keytabs/om.keytab om/om@EXAMPLE.COM
+          klist
+          ozone sh volume create vol1                                || true
+          ozone sh bucket create vol1/bucket1                        || true
+          ozone sh bucket create vol1/bucket2                        || true
+          ozone sh bucket create vol1/bucket3                        || true
+          echo seed > /tmp/seed
+          ozone sh key put o3://om/vol1/bucket2/seed /tmp/seed       || true
+          ozone sh key put o3://om/vol1/bucket3/seed /tmp/seed       || true
+          echo "seeded"
+        volumeMounts:
+        - { name: merged-conf, mountPath: /etc/hadoop,           readOnly: true }
+        - { name: keytabs,     mountPath: /etc/security/keytabs, readOnly: true }
+        - { name: krb5,        mountPath: /etc/krb5.conf, subPath: krb5.conf, readOnly: true }
+      volumes:
+      - { name: cluster-conf, configMap: { name: config-default } }
+      - { name: merged-conf,  emptyDir: {} }
+      - { name: keytabs,      secret:    { secretName: keytabs } }
+      - { name: krb5,         configMap: { name: krb5 } }
