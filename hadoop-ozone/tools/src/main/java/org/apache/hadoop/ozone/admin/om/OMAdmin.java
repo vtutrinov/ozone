@@ -62,7 +62,8 @@ import java.util.Collection;
         UpdateRangerSubcommand.class,
         TransferOmLeaderSubCommand.class,
         FetchKeySubCommand.class,
-        RefreshBucketUsedBytesSubcommand.class
+        RefreshBucketUsedBytesSubcommand.class,
+        RangerCacheSubcommand.class
     })
 @MetaInfServices(SubcommandWithParent.class)
 public class OMAdmin extends GenericCli implements SubcommandWithParent {
