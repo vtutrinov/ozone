@@ -1,0 +1,57 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Apache Ranger 2.4 (backported from upstream master, adapted for the
+# Ranger 2.4 dev-support/ranger-docker layout).
+#
+# Requires Apache Ranger source in $RANGER_SOURCE_DIR (for the postgres
+# init script).
+
+services:
+  ranger-db:
+    image: ${RANGER_DB_IMAGE}:${RANGER_DB_IMAGE_VERSION}
+    hostname: ranger-db
+    dns_search: .
+    environment:
+      POSTGRES_PASSWORD: "rangerR0cks!"
+    volumes:
+      # Ranger 2.4 keeps init_postgres.sh in dev-support/ranger-docker/config
+      - ${RANGER_SOURCE_DIR}/dev-support/ranger-docker/config/init_postgres.sh:/docker-entrypoint-initdb.d/init_postgres.sh
+    healthcheck:
+      test: 'su -c "pg_isready -q" postgres'
+      interval: 10s
+      timeout: 2s
+      retries: 30
+
+  ranger:
+    image: ${RANGER_IMAGE}:${RANGER_IMAGE_VERSION}
+    hostname: ranger
+    dns_search: .
+    ports:
+      - 6080:6080
+    depends_on:
+      ranger-db:
+        condition: service_healthy
+    environment:
+      RANGER_VERSION: ${RANGER_VERSION}
+      RANGER_DB_TYPE: postgres
+    healthcheck:
+      # setup.sh + admin start take a few minutes on first boot;
+      # the ranger image has no curl, use python3
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6080/login.jsp')"]
+      interval: 5s
+      timeout: 3s
+      retries: 120

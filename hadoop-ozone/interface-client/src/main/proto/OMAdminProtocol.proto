@@ -69,6 +69,31 @@ message DecommissionOMResponse {
     optional string errorMsg = 3;
 }
 
+enum RangerCacheOpType {
+    RANGER_CACHE_STATUS            = 1;
+    RANGER_CACHE_INVALIDATE        = 2;
+    RANGER_CACHE_INVALIDATE_POLICY = 3;
+    RANGER_CACHE_INVALIDATE_ROLE   = 4;
+    RANGER_CACHE_EXTEND            = 5;
+}
+
+message RangerCacheControlRequest {
+    required RangerCacheOpType op = 1;
+    // policy or role name for INVALIDATE_POLICY / INVALIDATE_ROLE
+    optional string name = 2;
+    // validity extension for EXTEND, relative to the OM node clock
+    optional uint64 ttlMillis = 3;
+}
+
+message RangerCacheControlResponse {
+    required bool success = 1;
+    optional string errorMsg = 2;
+    // JSON cache state document, set for STATUS
+    optional string statusJson = 3;
+    // whether the named policy/role existed, set for INVALIDATE_POLICY/ROLE
+    optional bool entryFound = 4;
+}
+
 /**
  The service for OM admin operations.
 */
@@ -81,4 +106,9 @@ service OzoneManagerAdminService {
     // RPC request from admin to remove an OM from the cluster
     rpc decommission(DecommissionOMRequest)
     returns(DecommissionOMResponse);
+
+    // RPC request from admin to control the Ranger policy-cache state
+    // on this OM node (node-local, not replicated via Ratis)
+    rpc rangerCacheControl(RangerCacheControlRequest)
+    returns(RangerCacheControlResponse);
 }

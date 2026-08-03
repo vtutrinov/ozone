@@ -1,0 +1,1776 @@
+diff --git a/agents-common/src/main/java/org/apache/ranger/plugin/service/RangerBasePlugin.java b/agents-common/src/main/java/org/apache/ranger/plugin/service/RangerBasePlugin.java
+index f83b5868c..fe9b43f3e 100644
+--- a/agents-common/src/main/java/org/apache/ranger/plugin/service/RangerBasePlugin.java
++++ b/agents-common/src/main/java/org/apache/ranger/plugin/service/RangerBasePlugin.java
+@@ -73,6 +73,9 @@ public class RangerBasePlugin {
+ 	private final boolean                     enableImplicitUserStoreEnricher;
+ 	private final boolean                     dedupStrings;
+ 	private       boolean                     isUserStoreEnricherAddedImplcitly = false;
++	// full (post-delta) snapshot of the last applied policies; used by
++	// cache-control operations to rebuild the engine with entries removed
++	private volatile ServicePolicies          lastAppliedServicePolicies;
+ 
+ 
+ 	public RangerBasePlugin(String serviceType, String appId) {
+@@ -178,7 +181,40 @@ public RangerRoles getRoles() {
+ 		return this.roles;
+ 	}
+ 
+-	public void setRoles(RangerRoles roles) {
++	/**
++	 * @return time of the last successful round-trip to Ranger Admin
++	 * (including "no update" responses), or -1 when no refresher is running.
++	 */
++	public long getLastActiveAdminContactTimeMs() {
++		PolicyRefresher refresher = this.refresher;
++
++		return refresher != null ? refresher.getLastActiveAdminContactTimeMs() : -1L;
++	}
++
++	/**
++	 * @return the full (post-delta) snapshot of the last applied policies,
++	 * or null if no policies have been applied yet.
++	 */
++	public ServicePolicies getLastAppliedServicePolicies() {
++		return this.lastAppliedServicePolicies;
++	}
++
++	/**
++	 * Forces the next refresher poll to download the full policy and role
++	 * sets from Ranger Admin, bypassing version-based "no update" replies.
++	 * Non-blocking: the regular polling cycle picks it up.
++	 */
++	public void resetPolicyAndRoleVersions() {
++		PolicyRefresher refresher = this.refresher;
++
++		if (refresher != null) {
++			refresher.resetLastKnownVersions();
++		}
++	}
++
++	// synchronized: called from the refresher thread and, since cache
++	// invalidation support, also from OM admin RPC threads
++	public synchronized void setRoles(RangerRoles roles) {
+ 		this.roles = roles;
+ 
+ 		RangerPolicyEngine policyEngine = this.policyEngine;
+@@ -278,7 +314,11 @@ public long getUserStoreVersion() {
+ 		return ret != null ? ret : -1L;
+ 	}
+ 
+-	public void setPolicies(ServicePolicies policies) {
++	// synchronized: the read-modify-write of policyEngine (read old, build
++	// new, install, release old) is only safe single-threaded; called from
++	// the refresher thread and, since cache invalidation support, also from
++	// OM admin RPC threads
++	public synchronized void setPolicies(ServicePolicies policies) {
+ 		if (LOG.isDebugEnabled()) {
+ 			LOG.debug("==> setPolicies(" + policies + ")");
+ 		}
+@@ -420,6 +460,8 @@ public void setPolicies(ServicePolicies policies) {
+ 						((RangerPolicyEngineImpl) oldPolicyEngine).releaseResources(!isPolicyEngineShared);
+ 					}
+ 
++					this.lastAppliedServicePolicies = usePolicyDeltas ? servicePolicies : policies;
++
+ 					if (this.refresher != null) {
+ 						this.refresher.saveToCache(usePolicyDeltas ? servicePolicies : policies);
+ 					}
+diff --git a/agents-common/src/main/java/org/apache/ranger/plugin/util/PolicyRefresher.java b/agents-common/src/main/java/org/apache/ranger/plugin/util/PolicyRefresher.java
+index be022d4f5..14bb0f0a7 100644
+--- a/agents-common/src/main/java/org/apache/ranger/plugin/util/PolicyRefresher.java
++++ b/agents-common/src/main/java/org/apache/ranger/plugin/util/PolicyRefresher.java
+@@ -27,6 +27,7 @@
+ import java.util.Timer;
+ import java.util.concurrent.BlockingQueue;
+ import java.util.concurrent.LinkedBlockingQueue;
++import java.util.concurrent.atomic.AtomicLong;
+ 
+ import org.apache.commons.lang.StringUtils;
+ import org.apache.ranger.admin.client.RangerAdminClient;
+@@ -56,10 +57,14 @@ public class PolicyRefresher extends Thread {
+ 	private final Gson                           gson;
+ 	private final BlockingQueue<DownloadTrigger> policyDownloadQueue = new LinkedBlockingQueue<>();
+ 	private       Timer                          policyDownloadTimer;
+-	private       long                           lastKnownVersion    = -1L;
++	// volatile: reset from OM admin RPC threads via resetLastKnownVersions()
++	private volatile long                        lastKnownVersion    = -1L;
+ 	private       long                           lastActivationTimeInMillis;
+ 	private       boolean                        policiesSetInPlugin;
+ 	private       boolean                        serviceDefSetInPlugin;
++	// time of the last successful round-trip to Ranger Admin, including
++	// "no update" (304) responses; NOT advanced on connection failures
++	private final AtomicLong                     lastActiveAdminContactTimeMs = new AtomicLong(System.currentTimeMillis());
+ 
+ 
+ 	public PolicyRefresher(RangerBasePlugin plugIn) {
+@@ -95,6 +100,7 @@ public PolicyRefresher(RangerBasePlugin plugIn) {
+ 		this.rangerAdmin                   = (adminClient != null) ? adminClient : pluginContext.createAdminClient(pluginConfig);
+ 		this.gson                          = gson;
+ 		this.rolesProvider                 = new RangerRolesProvider(getServiceType(), appId, getServiceName(), rangerAdmin,  cacheDir, pluginConfig);
++		this.rolesProvider.setAdminContactClock(lastActiveAdminContactTimeMs);
+ 		this.pollingIntervalMs             = pluginConfig.getLong(propertyPrefix + ".policy.pollIntervalMs", 30 * 1000);
+ 
+ 		setName("PolicyRefresher(serviceName=" + serviceName + ")-" + getId());
+@@ -136,6 +142,21 @@ public long getLastActivationTimeInMillis() {
+ 		return lastActivationTimeInMillis;
+ 	}
+ 
++	public long getLastActiveAdminContactTimeMs() {
++		return lastActiveAdminContactTimeMs.get();
++	}
++
++	/**
++	 * Forces the next poll cycle to download the full policy and role sets
++	 * from Ranger Admin instead of a version-based "no update" response.
++	 * Used after cache invalidation so the authoritative state is restored
++	 * even when the version known to Ranger Admin has not changed.
++	 */
++	public void resetLastKnownVersions() {
++		this.lastKnownVersion = -1L;
++		rolesProvider.resetLastKnownRoleVersion();
++	}
++
+ 	public void setLastActivationTimeInMillis(long lastActivationTimeInMillis) {
+ 		this.lastActivationTimeInMillis = lastActivationTimeInMillis;
+ 	}
+@@ -315,6 +336,10 @@ private ServicePolicies loadPolicyfromPolicyAdmin() throws RangerServiceNotFound
+ 		try {
+ 			svcPolicies = rangerAdmin.getServicePoliciesIfUpdated(lastKnownVersion, lastActivationTimeInMillis);
+ 
++			// reaching this line means Ranger Admin responded (updated
++			// policies or a "no update" answer) - the admin is reachable
++			lastActiveAdminContactTimeMs.set(System.currentTimeMillis());
++
+ 			boolean isUpdated = svcPolicies != null;
+ 
+ 			if(isUpdated) {
+@@ -334,6 +359,9 @@ private ServicePolicies loadPolicyfromPolicyAdmin() throws RangerServiceNotFound
+ 				}
+ 			}
+ 		} catch (RangerServiceNotFoundException snfe) {
++			// Ranger Admin is reachable, the service is missing - do not
++			// let this look like an admin outage to cache-expiry logic
++			lastActiveAdminContactTimeMs.set(System.currentTimeMillis());
+ 			LOG.error("PolicyRefresher(serviceName=" + serviceName + "): failed to find service. Will clean up local cache of policies (" + lastKnownVersion + ")", snfe);
+ 			throw snfe;
+ 		} catch (InterruptedException interruptedException) {
+diff --git a/agents-common/src/main/java/org/apache/ranger/plugin/util/RangerRolesProvider.java b/agents-common/src/main/java/org/apache/ranger/plugin/util/RangerRolesProvider.java
+index a7a9432cc..f2b7c562a 100644
+--- a/agents-common/src/main/java/org/apache/ranger/plugin/util/RangerRolesProvider.java
++++ b/agents-common/src/main/java/org/apache/ranger/plugin/util/RangerRolesProvider.java
+@@ -53,9 +53,13 @@ public class RangerRolesProvider {
+ 	private final boolean           disableCacheIfServiceNotFound;
+ 
+ 	private long	lastActivationTimeInMillis;
+-	private long    lastKnownRoleVersion = -1L;
++	// volatile: reset from OM admin RPC threads via resetLastKnownRoleVersion()
++	private volatile long lastKnownRoleVersion = -1L;
+ 	private boolean rangerUserGroupRolesSetInPlugin;
+ 	private boolean serviceDefSetInPlugin;
++	// shared with PolicyRefresher: advanced on every successful admin
++	// round-trip (including "no update"); may be null when unused
++	private java.util.concurrent.atomic.AtomicLong adminContactClock;
+ 
+ 	public RangerRolesProvider(String serviceType, String appId, String serviceName, RangerAdminClient rangerAdmin, String cacheDir, RangerPluginConfig config) {
+ 		if (LOG.isDebugEnabled()) {
+@@ -103,6 +107,14 @@ public void setLastActivationTimeInMillis(long lastActivationTimeInMillis) {
+ 		this.lastActivationTimeInMillis = lastActivationTimeInMillis;
+ 	}
+ 
++	public void setAdminContactClock(java.util.concurrent.atomic.AtomicLong adminContactClock) {
++		this.adminContactClock = adminContactClock;
++	}
++
++	public void resetLastKnownRoleVersion() {
++		this.lastKnownRoleVersion = -1L;
++	}
++
+ 	public void loadUserGroupRoles(RangerBasePlugin plugIn) throws InterruptedException {
+ 
+ 		if(LOG.isDebugEnabled()) {
+@@ -184,6 +196,11 @@ private RangerRoles loadUserGroupRolesFromAdmin() throws RangerServiceNotFoundEx
+ 		try {
+ 			roles = rangerAdmin.getRolesIfUpdated(lastKnownRoleVersion, lastActivationTimeInMillis);
+ 
++			// admin responded (updated roles or "no update") - reachable
++			if (adminContactClock != null) {
++				adminContactClock.set(System.currentTimeMillis());
++			}
++
+ 			boolean isUpdated = roles != null;
+ 
+ 			if(isUpdated) {
+diff --git a/agents-common/src/test/java/org/apache/ranger/plugin/util/TestPolicyRefresherAdminContact.java b/agents-common/src/test/java/org/apache/ranger/plugin/util/TestPolicyRefresherAdminContact.java
+new file mode 100644
+index 000000000..55abcdef8
+--- /dev/null
++++ b/agents-common/src/test/java/org/apache/ranger/plugin/util/TestPolicyRefresherAdminContact.java
+@@ -0,0 +1,142 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.ranger.plugin.util;
++
++import java.util.concurrent.atomic.AtomicLong;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.ranger.admin.client.AbstractRangerAdminClient;
++import org.apache.ranger.plugin.service.RangerBasePlugin;
++import org.junit.After;
++import org.junit.Assert;
++import org.junit.Test;
++
++/**
++ * Verifies that PolicyRefresher advances the last-successful-admin-contact
++ * timestamp on successful round-trips (both "updated" and "no update"
++ * responses) and does NOT advance it when Ranger Admin is unreachable.
++ */
++public class TestPolicyRefresherAdminContact {
++
++	enum StubMode { NO_UPDATE, FAIL }
++
++	private static volatile StubMode stubMode = StubMode.NO_UPDATE;
++	private static final AtomicLong LAST_REQUESTED_POLICY_VERSION = new AtomicLong(Long.MIN_VALUE);
++
++	/**
++	 * Stub admin client: "no update" (returns null) or connection failure.
++	 */
++	public static class StubAdminClient extends AbstractRangerAdminClient {
++		@Override
++		public void init(String serviceName, String appId, String configPropertyPrefix, Configuration config) {
++		}
++
++		@Override
++		public ServicePolicies getServicePoliciesIfUpdated(long lastKnownVersion, long lastActivationTimeInMillis) throws Exception {
++			LAST_REQUESTED_POLICY_VERSION.set(lastKnownVersion);
++
++			if (stubMode == StubMode.FAIL) {
++				throw new Exception("simulated: Ranger Admin unreachable");
++			}
++
++			return null; // 304 - no update
++		}
++
++		@Override
++		public RangerRoles getRolesIfUpdated(long lastKnownRoleVersion, long lastActivationTimeInMills) throws Exception {
++			if (stubMode == StubMode.FAIL) {
++				throw new Exception("simulated: Ranger Admin unreachable");
++			}
++
++			return null; // 304 - no update
++		}
++	}
++
++	private PolicyRefresher refresher;
++
++	@After
++	public void cleanup() {
++		if (refresher != null) {
++			refresher.stopRefresher();
++			refresher = null;
++		}
++	}
++
++	private PolicyRefresher newRefresher() {
++		RangerBasePlugin plugin = new RangerBasePlugin("ozone", "testsvc", "testapp");
++
++		plugin.getConfig().set("ranger.plugin.ozone.policy.source.impl", StubAdminClient.class.getName());
++		plugin.getConfig().set("ranger.plugin.ozone.policy.cache.dir", "target/policycache-" + System.nanoTime());
++		plugin.getConfig().set("ranger.plugin.ozone.policy.pollIntervalMs", "3600000");
++
++		return new PolicyRefresher(plugin);
++	}
++
++	private void forceRefreshCycle() throws InterruptedException {
++		refresher.syncPoliciesWithAdmin(new DownloadTrigger());
++	}
++
++	@Test
++	public void contactTimeAdvancesOnNoUpdateButNotOnFailure() throws Exception {
++		stubMode  = StubMode.NO_UPDATE;
++		refresher = newRefresher();
++
++		long beforeStart = refresher.getLastActiveAdminContactTimeMs();
++
++		Thread.sleep(5);
++		refresher.startRefresher(); // initial synchronous load, "no update"
++
++		long afterNoUpdate = refresher.getLastActiveAdminContactTimeMs();
++		Assert.assertTrue("contact time must advance on a 'no update' response",
++				afterNoUpdate > beforeStart);
++
++		stubMode = StubMode.FAIL;
++		Thread.sleep(5);
++		forceRefreshCycle();
++
++		Assert.assertEquals("contact time must NOT advance while admin is unreachable",
++				afterNoUpdate, refresher.getLastActiveAdminContactTimeMs());
++
++		stubMode = StubMode.NO_UPDATE;
++		Thread.sleep(5);
++		forceRefreshCycle();
++
++		Assert.assertTrue("contact time must advance again after admin recovers",
++				refresher.getLastActiveAdminContactTimeMs() > afterNoUpdate);
++	}
++
++	@Test
++	public void resetForcesFullDownloadOnNextCycle() throws Exception {
++		stubMode  = StubMode.NO_UPDATE;
++		refresher = newRefresher();
++
++		refresher.startRefresher();
++		Assert.assertEquals(-1L, LAST_REQUESTED_POLICY_VERSION.get());
++
++		// no updated policies were returned, so lastKnownVersion stays -1;
++		// simulate a known version to see the reset take effect
++		refresher.setLastActivationTimeInMillis(System.currentTimeMillis());
++
++		refresher.resetLastKnownVersions();
++		forceRefreshCycle();
++
++		Assert.assertEquals("reset must force a full (version -1) download request",
++				-1L, LAST_REQUESTED_POLICY_VERSION.get());
++	}
++}
+diff --git a/distro/src/main/assembly/admin-web.xml b/distro/src/main/assembly/admin-web.xml
+index 6a498153d..fe1401333 100644
+--- a/distro/src/main/assembly/admin-web.xml
++++ b/distro/src/main/assembly/admin-web.xml
+@@ -178,10 +178,10 @@
+         <directoryMode>755</directoryMode>
+         <fileMode>644</fileMode>
+         <includes>
+-          <include>org.apache.hadoop:hadoop-ozone-common:jar:${ozone.version}</include>
+-          <include>org.apache.hadoop:hadoop-ozone-client:jar:${ozone.version}</include>
+-          <include>org.apache.hadoop:hadoop-hdds-common:jar:${ozone.version}</include>
+-          <include>org.apache.hadoop:hadoop-hdds-client:jar:${ozone.version}</include>
++          <include>org.apache.ozone:ozone-common:jar:${ozone.version}</include>
++          <include>org.apache.ozone:ozone-client:jar:${ozone.version}</include>
++          <include>org.apache.ozone:hdds-common:jar:${ozone.version}</include>
++          <include>org.apache.ozone:hdds-client:jar:${ozone.version}</include>
+           <include>org.apache.commons:commons-compress:jar:1.4.1</include>
+           <include>commons-net:commons-net:jar:${commons.net.version}</include>
+           <include>com.google.guava:guava</include>
+diff --git a/distro/src/main/assembly/plugin-ozone.xml b/distro/src/main/assembly/plugin-ozone.xml
+index 4962ea615..2fe63ad42 100644
+--- a/distro/src/main/assembly/plugin-ozone.xml
++++ b/distro/src/main/assembly/plugin-ozone.xml
+@@ -64,8 +64,8 @@
+                     <include>org.slf4j:slf4j-api:jar:${slf4j-api.version}</include>
+                     <include>org.apache.hadoop:hadoop-common:jar:${hadoop.version}</include>
+                     <include>org.apache.hadoop:hadoop-auth:jar:${hadoop.version}</include>
+-                    <include>org.apache.hadoop:hadoop-ozone:jar:${ozone.version}</include>
+-                    <include>org.apache.hadoop:hadoop-hdds:jar:${ozone.version}</include>
++                    <include>org.apache.ozone:ozone-common:jar:${ozone.version}</include>
++                    <include>org.apache.ozone:hdds-common:jar:${ozone.version}</include>
+                     <include>com.fasterxml.woodstox:woodstox-core:jar:${fasterxml.woodstox.version}</include>
+                     <include>org.codehaus.woodstox:stax2-api:jar:${codehaus.woodstox.stax2api.version}</include>
+                     <include>com.sun.jersey:jersey-core</include>
+diff --git a/plugin-ozone/conf/ranger-ozone-security-changes.cfg b/plugin-ozone/conf/ranger-ozone-security-changes.cfg
+index 30eae3ec9..ea3b03fc4 100644
+--- a/plugin-ozone/conf/ranger-ozone-security-changes.cfg
++++ b/plugin-ozone/conf/ranger-ozone-security-changes.cfg
+@@ -25,4 +25,5 @@ ranger.plugin.ozone.policy.rest.ssl.config.file    %COMPONENT_INSTALL_DIR_NAME%/
+ ranger.plugin.ozone.policy.pollIntervalMs          30000                                     mod create-if-not-exists
+ ranger.plugin.ozone.policy.cache.dir               %POLICY_CACHE_FILE_PATH%                  mod create-if-not-exists
+ ranger.policy.rest.client.connection.timeoutMs	   120000									 mod create-if-not-exists
+-ranger.policy.rest.client.read.timeoutMs		   30000									 mod create-if-not-exists
+\ No newline at end of file
++ranger.policy.rest.client.read.timeoutMs		   30000									 mod create-if-not-exists
++ranger.plugin.ozone.policy.cache.expiryMs          %POLICY_CACHE_EXPIRY_MS%                 mod create-if-not-exists
+diff --git a/plugin-ozone/conf/ranger-ozone-security.xml b/plugin-ozone/conf/ranger-ozone-security.xml
+index 40ebdb68c..6cb841ba7 100644
+--- a/plugin-ozone/conf/ranger-ozone-security.xml
++++ b/plugin-ozone/conf/ranger-ozone-security.xml
+@@ -65,6 +65,17 @@
+ 		</description>
+ 	</property>
+ 
++	<property>
++		<name>ranger.plugin.ozone.policy.cache.expiryMs</name>
++		<value>0</value>
++		<description>
++			How long cached policies stay valid without a successful contact
++			with Ranger Admin, in milliseconds. When the interval is exceeded
++			all access requests are denied until Ranger Admin is reachable
++			again. 0 = cache never expires (legacy behavior).
++		</description>
++	</property>
++
+ 	<property>
+ 		<name>ranger.plugin.ozone.policy.rest.client.connection.timeoutMs</name>
+ 		<value>120000</value>
+diff --git a/plugin-ozone/pom.xml b/plugin-ozone/pom.xml
+index d0533f8d8..20038a996 100644
+--- a/plugin-ozone/pom.xml
++++ b/plugin-ozone/pom.xml
+@@ -94,13 +94,13 @@ limitations under the License.
+             <version>${httpcomponents.httpcore.version}</version>
+         </dependency>
+         <dependency>
+-            <groupId>org.apache.hadoop</groupId>
+-            <artifactId>hadoop-ozone-common</artifactId>
++            <groupId>org.apache.ozone</groupId>
++            <artifactId>ozone-common</artifactId>
+ 	        <version>${ozone.version}</version>
+         </dependency>
+         <dependency>
+-            <groupId>org.apache.hadoop</groupId>
+-            <artifactId>hadoop-hdds-common</artifactId>
++            <groupId>org.apache.ozone</groupId>
++            <artifactId>hdds-common</artifactId>
+ 	        <version>${ozone.version}</version>
+             <exclusions>
+                 <exclusion>
+@@ -110,8 +110,8 @@ limitations under the License.
+             </exclusions>
+         </dependency>
+         <dependency>
+-            <groupId>org.apache.hadoop</groupId>
+-            <artifactId>hadoop-ozone-client</artifactId>
++            <groupId>org.apache.ozone</groupId>
++            <artifactId>ozone-client</artifactId>
+ 	        <version>${ozone.version}</version>
+         </dependency>
+ 	<dependency>
+@@ -125,5 +125,9 @@ limitations under the License.
+             <version>${slf4j.version}</version>
+ 	    <scope>test</scope>
+         </dependency>
++        <dependency>
++            <groupId>junit</groupId>
++            <artifactId>junit</artifactId>
++        </dependency>
+     </dependencies>
+ </project>
+diff --git a/plugin-ozone/scripts/install.properties b/plugin-ozone/scripts/install.properties
+index fcb74a93e..852cbd279 100644
+--- a/plugin-ozone/scripts/install.properties
++++ b/plugin-ozone/scripts/install.properties
+@@ -32,6 +32,14 @@ POLICY_MGR_URL=
+ #
+ REPOSITORY_NAME=
+ 
++#
++# How long cached policies stay valid without a successful contact with
++# Ranger Admin, in milliseconds. When exceeded, ALL access requests are
++# denied until Ranger Admin is reachable again (fail-closed).
++# 0 = cache never expires (legacy behavior).
++#
++POLICY_CACHE_EXPIRY_MS=0
++
+ # AUDIT configuration with V3 properties
+ 
+ #Should audit be summarized at source
+diff --git a/plugin-ozone/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneAuthorizer.java b/plugin-ozone/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneAuthorizer.java
+index 12e647ca3..73d3089ef 100644
+--- a/plugin-ozone/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneAuthorizer.java
++++ b/plugin-ozone/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneAuthorizer.java
+@@ -21,6 +21,9 @@
+ package org.apache.ranger.authorization.ozone.authorizer;
+ 
+ import com.google.common.collect.Sets;
++import org.apache.hadoop.metrics2.MetricsSystem;
++import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
++import org.apache.hadoop.ozone.security.acl.AuthorizerCacheControl;
+ import org.apache.hadoop.ozone.security.acl.IAccessAuthorizer;
+ import org.apache.hadoop.ozone.security.acl.IOzoneObj;
+ import org.apache.hadoop.ozone.security.acl.OzoneObj;
+@@ -28,17 +31,34 @@
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.ranger.audit.provider.MiscUtil;
+ import org.apache.ranger.plugin.audit.RangerDefaultAuditHandler;
++import org.apache.ranger.plugin.model.RangerPolicy;
++import org.apache.ranger.plugin.model.RangerRole;
+ import org.apache.ranger.plugin.policyengine.RangerAccessRequestImpl;
+ import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
+ import org.apache.ranger.plugin.policyengine.RangerAccessResult;
+ import org.apache.ranger.plugin.service.RangerBasePlugin;
+ import org.apache.ranger.plugin.util.RangerPerfTracer;
++import org.apache.ranger.plugin.util.RangerRoles;
++import org.apache.ranger.plugin.util.ServicePolicies;
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
++import java.io.IOException;
++import java.lang.management.ManagementFactory;
++import java.util.ArrayList;
+ import java.util.Date;
++import java.util.HashMap;
++import java.util.HashSet;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++import java.util.function.IntSupplier;
++import java.util.function.LongSupplier;
+ 
+-public class RangerOzoneAuthorizer implements IAccessAuthorizer {
++import javax.management.MBeanServer;
++import javax.management.ObjectName;
++
++public class RangerOzoneAuthorizer implements IAccessAuthorizer, AuthorizerCacheControl {
+ 	public static final String ACCESS_TYPE_READ = "read";
+ 	public static final String ACCESS_TYPE_WRITE = "write";
+ 	public static final String ACCESS_TYPE_CREATE = "create";
+@@ -56,15 +76,114 @@ public class RangerOzoneAuthorizer implements IAccessAuthorizer {
+ 
+     private static final Logger LOG = LoggerFactory.getLogger(RangerOzoneAuthorizer.class);
+ 
++	public static final String CACHE_EXPIRY_PROP_SUFFIX = ".policy.cache.expiryMs";
++
+ 	private static volatile RangerBasePlugin rangerPlugin = null;
++	private static volatile RangerOzoneCacheGuard cacheGuard = null;
+ 	RangerDefaultAuditHandler auditHandler = null;
+ 
+ 	public RangerOzoneAuthorizer() {
+-		rangerPlugin = new RangerBasePlugin("ozone", "ozone");
++		RangerBasePlugin plugin = new RangerBasePlugin("ozone", "ozone");
+ 
+-		rangerPlugin.init(); // this will initialize policy engine and policy refresher
++		plugin.init(); // this will initialize policy engine and policy refresher
+ 		auditHandler = new RangerDefaultAuditHandler();
+-		rangerPlugin.setResultProcessor(auditHandler);
++		plugin.setResultProcessor(auditHandler);
++
++		long expiryMs = plugin.getConfig().getLong(
++				plugin.getConfig().getPropertyPrefix() + CACHE_EXPIRY_PROP_SUFFIX, 0L);
++		// anonymous classes instead of lambdas/method references: the PMD
++		// version used by the build fails to parse them
++		final RangerBasePlugin pluginRef = plugin;
++		RangerOzoneCacheGuard guard = new RangerOzoneCacheGuard(expiryMs,
++				new LongSupplier() {
++					@Override
++					public long getAsLong() {
++						return pluginRef.getLastActiveAdminContactTimeMs();
++					}
++				},
++				new IntSupplier() {
++					@Override
++					public int getAsInt() {
++						return countPolicies(pluginRef);
++					}
++				},
++				new IntSupplier() {
++					@Override
++					public int getAsInt() {
++						return countRoles(pluginRef);
++					}
++				});
++
++		registerCacheGuardMBean(guard);
++		registerCacheGuardMetricsSource(guard);
++
++		// only fully initialized objects are published to the static fields
++		rangerPlugin = plugin;
++		cacheGuard   = guard;
++
++		LOG.info("Policy cache expiry: " + (expiryMs > 0 ? expiryMs + " ms" : "disabled (cache never expires)"));
++	}
++
++	private static int countPolicies(RangerBasePlugin plugin) {
++		ServicePolicies snapshot = plugin.getLastAppliedServicePolicies();
++		if (snapshot == null) {
++			return 0;
++		}
++
++		int count = snapshot.getPolicies() != null ? snapshot.getPolicies().size() : 0;
++
++		if (snapshot.getSecurityZones() != null) {
++			for (ServicePolicies.SecurityZoneInfo zone : snapshot.getSecurityZones().values()) {
++				if (zone.getPolicies() != null) {
++					count += zone.getPolicies().size();
++				}
++			}
++		}
++
++		return count;
++	}
++
++	private static int countRoles(RangerBasePlugin plugin) {
++		RangerRoles roles = plugin.getRoles();
++
++		return roles != null && roles.getRangerRoles() != null ? roles.getRangerRoles().size() : 0;
++	}
++
++	private static void registerCacheGuardMetricsSource(RangerOzoneCacheGuard guard) {
++		try {
++			MetricsSystem metricsSystem = DefaultMetricsSystem.instance();
++
++			try {
++				metricsSystem.unregisterSource(RangerOzoneCacheGuardMetricsSource.SOURCE_NAME);
++			} catch (Exception ignored) {
++				// not registered yet - the common case
++			}
++
++			metricsSystem.register(RangerOzoneCacheGuardMetricsSource.SOURCE_NAME,
++					"Ranger ozone policy cache guard metrics",
++					new RangerOzoneCacheGuardMetricsSource(guard));
++
++			LOG.info("Registered metrics2 source '" + RangerOzoneCacheGuardMetricsSource.SOURCE_NAME
++					+ "' - cache metrics are exported on the host /prom endpoint");
++		} catch (Throwable t) {
++			LOG.warn("Failed to register the cache guard metrics2 source - cache metrics will not appear on /prom", t);
++		}
++	}
++
++	private static void registerCacheGuardMBean(RangerOzoneCacheGuard guard) {
++		try {
++			ObjectName name = new ObjectName("org.apache.ranger.plugin.ozone:type=PolicyCacheGuard");
++			MBeanServer server = ManagementFactory.getPlatformMBeanServer();
++
++			if (server.isRegistered(name)) {
++				server.unregisterMBean(name); // authorizer re-instantiation
++			}
++			server.registerMBean(guard, name);
++
++			LOG.info("Registered policy cache guard MBean: " + name);
++		} catch (Exception e) {
++			LOG.warn("Failed to register policy cache guard MBean - cache metrics will only be available via getCacheStatus()", e);
++		}
+ 	}
+ 
+ 	@Override
+@@ -91,6 +210,13 @@ public boolean checkAccess(IOzoneObj ozoneObject, RequestContext context) {
+ 			return returnValue;
+ 		}
+ 
++		// fail closed when the policy cache is expired or invalidated;
++		// deliberately placed before the S3+VOLUME allow-by-default shortcut
++		RangerOzoneCacheGuard guard = cacheGuard;
++		if (guard != null && !guard.allowAccess()) {
++			return false;
++		}
++
+ 		//TODO: If sorce type is S3 and resource is volume, then allow it by default
+ 		if (ozoneObj.getStoreType() == OzoneObj.StoreType.S3 && ozoneObj.getResourceType() == OzoneObj.ResourceType.VOLUME) {
+ 			if (LOG.isDebugEnabled()) {
+@@ -171,6 +297,180 @@ public boolean checkAccess(IOzoneObj ozoneObject, RequestContext context) {
+ 		return returnValue;
+ 	}
+ 
++	@Override
++	public void invalidateCache() throws IOException {
++		RangerOzoneCacheGuard guard = requireGuard();
++
++		LOG.warn("Invalidating the whole policy cache - all accesses will be denied until Ranger Admin is contacted successfully");
++
++		// reset versions BEFORE stamping the invalidation: a poll finishing
++		// in between would otherwise complete as "no update" (304), advance
++		// the contact clock past invalidatedAt and clear the invalidation
++		// without any policy re-download. The residual race is limited to
++		// requests already in flight when this line executes.
++		rangerPlugin.resetPolicyAndRoleVersions();
++		guard.invalidate();
++	}
++
++	@Override
++	public boolean invalidateCachedPolicy(String policyName) throws IOException {
++		RangerOzoneCacheGuard guard = requireGuard();
++
++		ServicePolicies snapshot = rangerPlugin.getLastAppliedServicePolicies();
++		if (snapshot == null) {
++			throw new IOException("No policy snapshot available yet - the plugin has not applied any policies");
++		}
++
++		boolean found = false;
++
++		ServicePolicies copy = new ServicePolicies();
++		copy.setServiceName(snapshot.getServiceName());
++		copy.setServiceId(snapshot.getServiceId());
++		// version -1, NOT the snapshot version: setPolicies persists this
++		// filtered copy to the disk policy-cache, and after an OM restart
++		// the version from the cache file becomes lastKnownVersion. With
++		// the original version Ranger Admin would answer 304 forever and
++		// the invalidated policy would never be restored.
++		copy.setPolicyVersion(-1L);
++		copy.setPolicyUpdateTime(snapshot.getPolicyUpdateTime());
++		copy.setServiceDef(snapshot.getServiceDef());
++		copy.setAuditMode(snapshot.getAuditMode());
++		copy.setTagPolicies(snapshot.getTagPolicies());
++		copy.setServiceConfig(snapshot.getServiceConfig());
++		copy.setPolicyDeltas(null); // force the full-snapshot path in setPolicies
++
++		List<RangerPolicy> filtered = new ArrayList<>();
++		if (snapshot.getPolicies() != null) {
++			for (RangerPolicy policy : snapshot.getPolicies()) {
++				if (policyName.equals(policy.getName())) {
++					found = true;
++				} else {
++					filtered.add(policy);
++				}
++			}
++		}
++		copy.setPolicies(filtered);
++
++		if (snapshot.getSecurityZones() != null) {
++			Map<String, ServicePolicies.SecurityZoneInfo> zonesCopy = new HashMap<>();
++			for (Map.Entry<String, ServicePolicies.SecurityZoneInfo> entry : snapshot.getSecurityZones().entrySet()) {
++				ServicePolicies.SecurityZoneInfo zone = entry.getValue();
++
++				if (zone.getPolicies() == null) {
++					// delta mode: the snapshot's zone carries policyDeltas
++					// instead of a full policy list. Rebuilding it here would
++					// wipe all zone policies - pass the zone through as-is
++					// (the named policy cannot be filtered from this zone).
++					zonesCopy.put(entry.getKey(), zone);
++					continue;
++				}
++
++				ServicePolicies.SecurityZoneInfo zoneCopy = new ServicePolicies.SecurityZoneInfo();
++
++				zoneCopy.setZoneName(zone.getZoneName());
++				zoneCopy.setResources(zone.getResources());
++				zoneCopy.setContainsAssociatedTagService(zone.getContainsAssociatedTagService());
++				zoneCopy.setPolicyDeltas(null);
++
++				List<RangerPolicy> zoneFiltered = new ArrayList<>();
++				for (RangerPolicy policy : zone.getPolicies()) {
++					if (policyName.equals(policy.getName())) {
++						found = true;
++					} else {
++						zoneFiltered.add(policy);
++					}
++				}
++				zoneCopy.setPolicies(zoneFiltered);
++
++				zonesCopy.put(entry.getKey(), zoneCopy);
++			}
++			copy.setSecurityZones(zonesCopy);
++		}
++
++		if (!found) {
++			return false;
++		}
++
++		LOG.warn("Invalidating cached policy '" + policyName + "' - it stays removed until the next successful sync with Ranger Admin");
++
++		guard.recordEntryInvalidation();
++		rangerPlugin.resetPolicyAndRoleVersions();
++		rangerPlugin.setPolicies(copy);
++
++		return true;
++	}
++
++	@Override
++	public boolean invalidateCachedRole(String roleName) throws IOException {
++		RangerOzoneCacheGuard guard = requireGuard();
++
++		RangerRoles roles = rangerPlugin.getRoles();
++		if (roles == null || roles.getRangerRoles() == null) {
++			return false;
++		}
++
++		boolean found = false;
++		Set<RangerRole> filtered = new HashSet<>();
++		for (RangerRole role : roles.getRangerRoles()) {
++			if (roleName.equals(role.getName())) {
++				found = true;
++			} else {
++				filtered.add(role);
++			}
++		}
++
++		if (!found) {
++			return false;
++		}
++
++		LOG.warn("Invalidating cached role '" + roleName + "' - it stays removed until the next successful sync with Ranger Admin");
++
++		guard.recordEntryInvalidation();
++
++		RangerRoles copy = new RangerRoles();
++		copy.setServiceName(roles.getServiceName());
++		// version -1 so a restart-from-cache cannot resurrect the removed
++		// role behind a 304 "no update" response
++		copy.setRoleVersion(-1L);
++		copy.setRangerRoles(filtered);
++
++		rangerPlugin.resetPolicyAndRoleVersions();
++		rangerPlugin.setRoles(copy);
++
++		return true;
++	}
++
++	@Override
++	public void extendCacheValidity(long extensionMillis) throws IOException {
++		RangerOzoneCacheGuard guard = requireGuard();
++
++		if (extensionMillis <= 0) {
++			throw new IOException("Cache validity extension must be positive: " + extensionMillis);
++		}
++
++		LOG.info("Extending policy cache validity by " + extensionMillis + " ms");
++
++		guard.extendValidity(extensionMillis);
++	}
++
++	@Override
++	public String getCacheStatus() throws IOException {
++		RangerOzoneCacheGuard guard = requireGuard();
++
++		return guard.statusJson(rangerPlugin.getServiceName(),
++				rangerPlugin.getPoliciesVersion(), rangerPlugin.getRolesVersion());
++	}
++
++	private RangerOzoneCacheGuard requireGuard() throws IOException {
++		RangerOzoneCacheGuard guard = cacheGuard;
++
++		if (guard == null || rangerPlugin == null) {
++			throw new IOException("Authorizer is not initialized");
++		}
++
++		return guard;
++	}
++
+ 	private String mapToRangerAccessType(ACLType operation) {
+ 		String rangerAccessType = null;
+ 		switch (operation) {
+diff --git a/plugin-ozone/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneCacheGuard.java b/plugin-ozone/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneCacheGuard.java
+new file mode 100644
+index 000000000..4b892adf0
+--- /dev/null
++++ b/plugin-ozone/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneCacheGuard.java
+@@ -0,0 +1,286 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ */
++
++package org.apache.ranger.authorization.ozone.authorizer;
++
++import java.util.concurrent.atomic.AtomicLong;
++import java.util.concurrent.atomic.AtomicReference;
++import java.util.function.IntSupplier;
++import java.util.function.LongSupplier;
++
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++
++import com.google.gson.JsonObject;
++
++/**
++ * Fail-closed state machine for the ozone plugin policy cache.
++ *
++ * The cache is considered valid while Ranger Admin has been successfully
++ * contacted within the configured expiry interval, or while an
++ * administrator-granted validity extension is in effect. When the cache is
++ * expired or explicitly invalidated, every access check must be denied.
++ *
++ * Metrics: a "hit" is an access check evaluated against a valid cache, a
++ * "miss" is an access check denied by the guard. hitCount/missCount cover
++ * the current cache-state window (reset on every state transition);
++ * totalHitCount/totalMissCount cover the plugin lifetime.
++ *
++ * All state is in-memory and node-local; nothing survives a process
++ * restart. Thread-safe without locks: single volatile/atomic fields only.
++ */
++public class RangerOzoneCacheGuard implements RangerOzoneCacheGuardMXBean {
++	private static final Logger LOG = LoggerFactory.getLogger(RangerOzoneCacheGuard.class);
++
++	private static final long DENY_LOG_INTERVAL_MS = 30 * 1000L;
++
++	/** Cache lifecycle states. */
++	public enum State { DISABLED, FRESH, EXTENDED, EXPIRED, INVALIDATED }
++
++	private final long         expiryMs;
++	private final long         initTimeMs;
++	private final LongSupplier clock;
++	private final LongSupplier lastContactSupplier;
++	private final IntSupplier  policySizeSupplier;
++	private final IntSupplier  roleSizeSupplier;
++
++	private final AtomicLong invalidatedAtMs      = new AtomicLong(0);
++	private final AtomicLong extensionDeadlineMs  = new AtomicLong(0);
++	private final AtomicLong lastDenyLogTimeMs    = new AtomicLong(0);
++	private final AtomicReference<State> lastLoggedState = new AtomicReference<>(null);
++
++	// current cache-state window (reset on every state transition)
++	private final AtomicLong hitCount             = new AtomicLong(0);
++	private final AtomicLong missCount            = new AtomicLong(0);
++	// plugin lifetime
++	private final AtomicLong totalHitCount        = new AtomicLong(0);
++	private final AtomicLong totalMissCount       = new AtomicLong(0);
++	private final AtomicLong extendTTLTotalCount  = new AtomicLong(0);
++	private final AtomicLong invalidateTotalCount = new AtomicLong(0);
++
++	// NOTE: no lambdas/method references in this module - the PMD version
++	// used by the build fails to parse them
++	private static final LongSupplier SYSTEM_CLOCK = new LongSupplier() {
++		@Override
++		public long getAsLong() {
++			return System.currentTimeMillis();
++		}
++	};
++
++	public RangerOzoneCacheGuard(long expiryMs, LongSupplier lastContactSupplier,
++			IntSupplier policySizeSupplier, IntSupplier roleSizeSupplier) {
++		this(expiryMs, lastContactSupplier, policySizeSupplier, roleSizeSupplier, SYSTEM_CLOCK);
++	}
++
++	// visible for testing: injectable clock
++	RangerOzoneCacheGuard(long expiryMs, LongSupplier lastContactSupplier,
++			IntSupplier policySizeSupplier, IntSupplier roleSizeSupplier, LongSupplier clock) {
++		this.expiryMs            = expiryMs;
++		this.lastContactSupplier = lastContactSupplier;
++		this.policySizeSupplier  = policySizeSupplier;
++		this.roleSizeSupplier    = roleSizeSupplier;
++		this.clock               = clock;
++		this.initTimeMs          = clock.getAsLong();
++	}
++
++	public State state() {
++		long now         = clock.getAsLong();
++		long lastContact = lastContactSupplier.getAsLong();
++		long invalidated = invalidatedAtMs.get();
++
++		// explicit invalidation holds until a successful admin contact
++		// newer than the invalidation; it wins over extensions
++		if (invalidated > 0 && lastContact <= invalidated) {
++			return State.INVALIDATED;
++		}
++
++		if (expiryMs <= 0) {
++			return State.DISABLED;
++		}
++
++		long extension = extensionDeadlineMs.get();
++		long deadline  = Math.max(lastContact + expiryMs, extension);
++
++		if (now > deadline) {
++			return State.EXPIRED;
++		}
++
++		return now > lastContact + expiryMs ? State.EXTENDED : State.FRESH;
++	}
++
++	/**
++	 * @return true when access checks may be evaluated against the cached
++	 * policies; false when they must be denied unconditionally.
++	 */
++	public boolean allowAccess() {
++		State state = current();
++
++		if (state == State.EXPIRED || state == State.INVALIDATED) {
++			missCount.incrementAndGet();
++			totalMissCount.incrementAndGet();
++
++			long now     = clock.getAsLong();
++			long lastLog = lastDenyLogTimeMs.get();
++
++			if (now - lastLog > DENY_LOG_INTERVAL_MS && lastDenyLogTimeMs.compareAndSet(lastLog, now)) {
++				LOG.warn("Denying all accesses: policy cache is " + state
++						+ " (lastSuccessfulAdminContact=" + lastContactSupplier.getAsLong()
++						+ ", expiryMs=" + expiryMs
++						+ ", deniedSoFar=" + totalMissCount.get() + ")");
++			}
++
++			return false;
++		}
++
++		hitCount.incrementAndGet();
++		totalHitCount.incrementAndGet();
++
++		return true;
++	}
++
++	public void invalidate() {
++		invalidatedAtMs.set(clock.getAsLong());
++		invalidateTotalCount.incrementAndGet();
++		current();
++	}
++
++	/**
++	 * Counts a per-entry (policy/role) invalidation, which affects the
++	 * policy engine but not the guard state.
++	 */
++	public void recordEntryInvalidation() {
++		invalidateTotalCount.incrementAndGet();
++	}
++
++	public void extendValidity(long extensionMs) {
++		extensionDeadlineMs.set(clock.getAsLong() + extensionMs);
++		extendTTLTotalCount.incrementAndGet();
++		current();
++	}
++
++	public long getExpiryMs() {
++		return expiryMs;
++	}
++
++	@Override
++	public String getState() {
++		return current().name();
++	}
++
++	@Override
++	public long getTtlMs() {
++		return expiryMs;
++	}
++
++	@Override
++	public long getHitCount() {
++		return hitCount.get();
++	}
++
++	@Override
++	public long getMissCount() {
++		return missCount.get();
++	}
++
++	@Override
++	public long getTotalHitCount() {
++		return totalHitCount.get();
++	}
++
++	@Override
++	public long getTotalMissCount() {
++		return totalMissCount.get();
++	}
++
++	@Override
++	public int getCurrentPolicySize() {
++		return policySizeSupplier.getAsInt();
++	}
++
++	@Override
++	public int getCurrentRoleSize() {
++		return roleSizeSupplier.getAsInt();
++	}
++
++	@Override
++	public long getExtendTTLTotalCount() {
++		return extendTTLTotalCount.get();
++	}
++
++	@Override
++	public long getInvalidateTotalCount() {
++		return invalidateTotalCount.get();
++	}
++
++	@Override
++	public long getLastSuccessfulAdminContactMs() {
++		return lastContactSupplier.getAsLong();
++	}
++
++	@Override
++	public long getMsSinceLastContact() {
++		return clock.getAsLong() - lastContactSupplier.getAsLong();
++	}
++
++	public String statusJson(String serviceName, long policiesVersion, long rolesVersion) {
++		long  now         = clock.getAsLong();
++		long  lastContact = lastContactSupplier.getAsLong();
++		State state       = current();
++
++		JsonObject json = new JsonObject();
++		json.addProperty("serviceName", serviceName);
++		json.addProperty("state", state.name());
++		json.addProperty("ttlMs", expiryMs);
++		json.addProperty("pluginInitTimeMs", initTimeMs);
++		json.addProperty("lastSuccessfulAdminContactMs", lastContact);
++		json.addProperty("msSinceLastContact", now - lastContact);
++		json.addProperty("effectiveDeadlineMs",
++				expiryMs > 0 ? Math.max(lastContact + expiryMs, extensionDeadlineMs.get()) : -1);
++		json.addProperty("extensionDeadlineMs", extensionDeadlineMs.get());
++		json.addProperty("invalidatedAtMs", invalidatedAtMs.get());
++		json.addProperty("policiesVersion", policiesVersion);
++		json.addProperty("rolesVersion", rolesVersion);
++		json.addProperty("hitCount", hitCount.get());
++		json.addProperty("missCount", missCount.get());
++		json.addProperty("totalHitCount", totalHitCount.get());
++		json.addProperty("totalMissCount", totalMissCount.get());
++		json.addProperty("currentPolicySize", policySizeSupplier.getAsInt());
++		json.addProperty("currentRoleSize", roleSizeSupplier.getAsInt());
++		json.addProperty("extendTTLTotalCount", extendTTLTotalCount.get());
++		json.addProperty("invalidateTotalCount", invalidateTotalCount.get());
++
++		return json.toString();
++	}
++
++	// evaluates the state, logs transitions at INFO and resets the
++	// per-window hit/miss counters when the state changes
++	private State current() {
++		State state = state();
++		State prev  = lastLoggedState.getAndSet(state);
++
++		if (prev != null && prev != state) {
++			LOG.info("Policy cache state changed: " + prev + " -> " + state
++					+ " (window counters reset; hits=" + hitCount.get() + ", misses=" + missCount.get() + ")");
++			hitCount.set(0);
++			missCount.set(0);
++		}
++
++		return state;
++	}
++}
+diff --git a/plugin-ozone/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneCacheGuardMXBean.java b/plugin-ozone/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneCacheGuardMXBean.java
+new file mode 100644
+index 000000000..dcb2c787c
+--- /dev/null
++++ b/plugin-ozone/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneCacheGuardMXBean.java
+@@ -0,0 +1,57 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ */
++
++package org.apache.ranger.authorization.ozone.authorizer;
++
++/**
++ * JMX view of the ozone plugin policy-cache guard. Registered by
++ * {@link RangerOzoneAuthorizer} under
++ * {@code org.apache.ranger.plugin.ozone:type=PolicyCacheGuard}.
++ *
++ * hit  = access check evaluated against a valid policy cache;
++ * miss = access check denied because the cache is expired/invalidated.
++ * hitCount/missCount cover the current cache-state window (they reset on
++ * every state transition); the total* variants cover the plugin lifetime.
++ */
++public interface RangerOzoneCacheGuardMXBean {
++
++	String getState();
++
++	long getTtlMs();
++
++	long getHitCount();
++
++	long getMissCount();
++
++	long getTotalHitCount();
++
++	long getTotalMissCount();
++
++	int getCurrentPolicySize();
++
++	int getCurrentRoleSize();
++
++	long getExtendTTLTotalCount();
++
++	long getInvalidateTotalCount();
++
++	long getLastSuccessfulAdminContactMs();
++
++	long getMsSinceLastContact();
++}
+diff --git a/plugin-ozone/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneCacheGuardMetricsSource.java b/plugin-ozone/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneCacheGuardMetricsSource.java
+new file mode 100644
+index 000000000..bf8d27a7e
+--- /dev/null
++++ b/plugin-ozone/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneCacheGuardMetricsSource.java
+@@ -0,0 +1,78 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ */
++
++package org.apache.ranger.authorization.ozone.authorizer;
++
++import org.apache.hadoop.metrics2.MetricsCollector;
++import org.apache.hadoop.metrics2.MetricsRecordBuilder;
++import org.apache.hadoop.metrics2.MetricsSource;
++import org.apache.hadoop.metrics2.lib.Interns;
++
++/**
++ * Hadoop metrics2 source for the policy-cache guard. Registered with the
++ * host process' DefaultMetricsSystem (the OzoneManager's), which makes the
++ * metrics available on the OM HTTP server's /prom endpoint (Ozone's
++ * PrometheusMetricsSink exports every metrics2 source) as
++ * ranger_policy_cache_guard_* gauges/counters, as well as via the metrics
++ * system's own JMX beans.
++ *
++ * The metrics2 interfaces are loaded from the host (OM) classloader's
++ * hadoop-common, so this class - like the authorizer itself - is bound to
++ * the same class identities as the host process.
++ */
++public class RangerOzoneCacheGuardMetricsSource implements MetricsSource {
++	public static final String SOURCE_NAME   = "RangerOzoneCacheGuard";
++	public static final String RECORD_NAME   = "RangerPolicyCacheGuard";
++	public static final String CONTEXT_NAME  = "ranger";
++
++	private final RangerOzoneCacheGuard guard;
++
++	public RangerOzoneCacheGuardMetricsSource(RangerOzoneCacheGuard guard) {
++		this.guard = guard;
++	}
++
++	@Override
++	public void getMetrics(MetricsCollector collector, boolean all) {
++		MetricsRecordBuilder rb = collector.addRecord(RECORD_NAME)
++				.setContext(CONTEXT_NAME)
++				.tag(Interns.info("state", "Current cache state"), guard.getState());
++
++		rb.addGauge(Interns.info("HitCount",
++				"Access checks evaluated against a valid cache in the current state window"), guard.getHitCount());
++		rb.addGauge(Interns.info("MissCount",
++				"Access checks denied by the cache guard in the current state window"), guard.getMissCount());
++		rb.addCounter(Interns.info("TotalHitCount",
++				"Access checks evaluated against a valid cache since plugin start"), guard.getTotalHitCount());
++		rb.addCounter(Interns.info("TotalMissCount",
++				"Access checks denied by the cache guard since plugin start"), guard.getTotalMissCount());
++		rb.addGauge(Interns.info("CurrentPolicySize",
++				"Number of policies currently in the policy engine (incl. security zones)"), guard.getCurrentPolicySize());
++		rb.addGauge(Interns.info("CurrentRoleSize",
++				"Number of roles currently cached"), guard.getCurrentRoleSize());
++		rb.addCounter(Interns.info("ExtendTTLTotalCount",
++				"Cache validity extension operations since plugin start"), guard.getExtendTTLTotalCount());
++		rb.addCounter(Interns.info("InvalidateTotalCount",
++				"Cache invalidation operations (whole cache and per-entry) since plugin start"), guard.getInvalidateTotalCount());
++		rb.addGauge(Interns.info("CacheStateOrdinal",
++				"Cache state as ordinal: 0=DISABLED 1=FRESH 2=EXTENDED 3=EXPIRED 4=INVALIDATED"),
++				guard.state().ordinal());
++		rb.addGauge(Interns.info("MsSinceLastAdminContact",
++				"Milliseconds since the last successful Ranger Admin round-trip"), guard.getMsSinceLastContact());
++	}
++}
+diff --git a/plugin-ozone/src/test/java/org/apache/ranger/authorization/ozone/authorizer/TestRangerOzoneCacheGuard.java b/plugin-ozone/src/test/java/org/apache/ranger/authorization/ozone/authorizer/TestRangerOzoneCacheGuard.java
+new file mode 100644
+index 000000000..fe3a30e5f
+--- /dev/null
++++ b/plugin-ozone/src/test/java/org/apache/ranger/authorization/ozone/authorizer/TestRangerOzoneCacheGuard.java
+@@ -0,0 +1,253 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ */
++
++package org.apache.ranger.authorization.ozone.authorizer;
++
++import java.util.concurrent.atomic.AtomicInteger;
++import java.util.concurrent.atomic.AtomicLong;
++import java.util.function.IntSupplier;
++import java.util.function.LongSupplier;
++
++import org.apache.ranger.authorization.ozone.authorizer.RangerOzoneCacheGuard.State;
++import org.junit.Assert;
++import org.junit.Test;
++
++public class TestRangerOzoneCacheGuard {
++	private static final long TTL = 60_000L;
++
++	private final AtomicLong    now         = new AtomicLong(1_000_000L);
++	private final AtomicLong    lastContact = new AtomicLong(1_000_000L);
++	private final AtomicInteger policySize  = new AtomicInteger(5);
++	private final AtomicInteger roleSize    = new AtomicInteger(2);
++
++	// anonymous classes instead of method references: the PMD version used
++	// by the build fails to parse them
++	static LongSupplier longSupplier(final AtomicLong value) {
++		return new LongSupplier() {
++			@Override
++			public long getAsLong() {
++				return value.get();
++			}
++		};
++	}
++
++	static IntSupplier intSupplier(final AtomicInteger value) {
++		return new IntSupplier() {
++			@Override
++			public int getAsInt() {
++				return value.get();
++			}
++		};
++	}
++
++	private RangerOzoneCacheGuard newGuard(long expiryMs) {
++		return new RangerOzoneCacheGuard(expiryMs, longSupplier(lastContact),
++				intSupplier(policySize), intSupplier(roleSize), longSupplier(now));
++	}
++
++	@Test
++	public void disabledTtlNeverExpires() {
++		RangerOzoneCacheGuard guard = newGuard(0);
++
++		now.addAndGet(365L * 24 * 3600 * 1000); // a year without contact
++
++		Assert.assertEquals(State.DISABLED, guard.state());
++		Assert.assertTrue(guard.allowAccess());
++	}
++
++	@Test
++	public void freshWithinTtl() {
++		RangerOzoneCacheGuard guard = newGuard(TTL);
++
++		now.addAndGet(TTL - 1);
++
++		Assert.assertEquals(State.FRESH, guard.state());
++		Assert.assertTrue(guard.allowAccess());
++	}
++
++	@Test
++	public void expiresAfterTtl() {
++		RangerOzoneCacheGuard guard = newGuard(TTL);
++
++		now.addAndGet(TTL + 1);
++
++		Assert.assertEquals(State.EXPIRED, guard.state());
++		Assert.assertFalse(guard.allowAccess());
++	}
++
++	@Test
++	public void successfulContactRevivesExpiredCache() {
++		RangerOzoneCacheGuard guard = newGuard(TTL);
++
++		now.addAndGet(TTL + 1);
++		Assert.assertFalse(guard.allowAccess());
++
++		lastContact.set(now.get()); // refresher reached Ranger Admin again
++
++		Assert.assertEquals(State.FRESH, guard.state());
++		Assert.assertTrue(guard.allowAccess());
++	}
++
++	@Test
++	public void extensionRevivesExpiredCache() {
++		RangerOzoneCacheGuard guard = newGuard(TTL);
++
++		now.addAndGet(TTL + 1);
++		Assert.assertEquals(State.EXPIRED, guard.state());
++
++		guard.extendValidity(10_000);
++
++		Assert.assertEquals(State.EXTENDED, guard.state());
++		Assert.assertTrue(guard.allowAccess());
++
++		now.addAndGet(10_001); // extension deadline passes
++
++		Assert.assertEquals(State.EXPIRED, guard.state());
++		Assert.assertFalse(guard.allowAccess());
++	}
++
++	@Test
++	public void invalidateDeniesEvenWhenTtlDisabled() {
++		RangerOzoneCacheGuard guard = newGuard(0);
++
++		guard.invalidate();
++
++		Assert.assertEquals(State.INVALIDATED, guard.state());
++		Assert.assertFalse(guard.allowAccess());
++	}
++
++	@Test
++	public void invalidationClearedByNewerAdminContact() {
++		RangerOzoneCacheGuard guard = newGuard(TTL);
++
++		now.addAndGet(1000);
++		guard.invalidate();
++		Assert.assertEquals(State.INVALIDATED, guard.state());
++
++		now.addAndGet(1000);
++		lastContact.set(now.get()); // successful sync after invalidation
++
++		Assert.assertEquals(State.FRESH, guard.state());
++		Assert.assertTrue(guard.allowAccess());
++	}
++
++	@Test
++	public void extendDoesNotOverrideInvalidation() {
++		RangerOzoneCacheGuard guard = newGuard(TTL);
++
++		now.addAndGet(1000);
++		guard.invalidate();
++		guard.extendValidity(3600_000);
++
++		Assert.assertEquals(State.INVALIDATED, guard.state());
++		Assert.assertFalse(guard.allowAccess());
++	}
++
++	@Test
++	public void hitAndMissCountersTrackAccessOutcomes() {
++		RangerOzoneCacheGuard guard = newGuard(TTL);
++
++		guard.allowAccess();
++		guard.allowAccess();
++		guard.allowAccess();
++
++		Assert.assertEquals(3, guard.getHitCount());
++		Assert.assertEquals(3, guard.getTotalHitCount());
++		Assert.assertEquals(0, guard.getMissCount());
++		Assert.assertEquals(0, guard.getTotalMissCount());
++
++		now.addAndGet(TTL + 1); // expire
++
++		guard.allowAccess(); // miss
++		guard.allowAccess(); // miss
++
++		Assert.assertEquals(2, guard.getMissCount());
++		Assert.assertEquals(2, guard.getTotalMissCount());
++		Assert.assertEquals(3, guard.getTotalHitCount());
++	}
++
++	@Test
++	public void windowCountersResetOnStateTransitionTotalsDoNot() {
++		RangerOzoneCacheGuard guard = newGuard(TTL);
++
++		guard.allowAccess(); // hit in FRESH window
++		guard.allowAccess();
++
++		now.addAndGet(TTL + 1);
++		guard.allowAccess(); // FRESH->EXPIRED transition, then miss
++
++		Assert.assertEquals("window hit counter must reset on transition", 0, guard.getHitCount());
++		Assert.assertEquals(1, guard.getMissCount());
++
++		lastContact.set(now.get()); // recover
++		guard.allowAccess(); // EXPIRED->FRESH transition, then hit
++
++		Assert.assertEquals(1, guard.getHitCount());
++		Assert.assertEquals("window miss counter must reset on transition", 0, guard.getMissCount());
++
++		Assert.assertEquals("totals survive transitions", 3, guard.getTotalHitCount());
++		Assert.assertEquals("totals survive transitions", 1, guard.getTotalMissCount());
++	}
++
++	@Test
++	public void operationCountersAndSizes() {
++		RangerOzoneCacheGuard guard = newGuard(TTL);
++
++		guard.extendValidity(10_000);
++		guard.extendValidity(10_000);
++		guard.invalidate();
++		guard.recordEntryInvalidation(); // per-policy/per-role invalidation
++
++		Assert.assertEquals(2, guard.getExtendTTLTotalCount());
++		Assert.assertEquals(2, guard.getInvalidateTotalCount());
++
++		policySize.set(42);
++		roleSize.set(7);
++
++		Assert.assertEquals(42, guard.getCurrentPolicySize());
++		Assert.assertEquals(7, guard.getCurrentRoleSize());
++	}
++
++	@Test
++	public void statusJsonReflectsStateAndMetrics() {
++		RangerOzoneCacheGuard guard = newGuard(TTL);
++
++		guard.allowAccess(); // hit while FRESH
++
++		now.addAndGet(TTL + 1);
++		guard.allowAccess(); // transition to EXPIRED + miss
++		guard.extendValidity(10_000); // EXPIRED -> EXTENDED transition
++		guard.allowAccess(); // hit in EXTENDED window
++
++		String json = guard.statusJson("ozone", 42L, 7L);
++
++		Assert.assertTrue(json.contains("\"state\":\"EXTENDED\""));
++		Assert.assertTrue(json.contains("\"policiesVersion\":42"));
++		Assert.assertTrue(json.contains("\"rolesVersion\":7"));
++		Assert.assertTrue(json.contains("\"ttlMs\":" + TTL));
++		Assert.assertTrue(json.contains("\"hitCount\":1"));
++		Assert.assertTrue(json.contains("\"missCount\":0"));
++		Assert.assertTrue(json.contains("\"totalHitCount\":2"));
++		Assert.assertTrue(json.contains("\"totalMissCount\":1"));
++		Assert.assertTrue(json.contains("\"currentPolicySize\":5"));
++		Assert.assertTrue(json.contains("\"currentRoleSize\":2"));
++		Assert.assertTrue(json.contains("\"extendTTLTotalCount\":1"));
++		Assert.assertTrue(json.contains("\"invalidateTotalCount\":0"));
++	}
++}
+diff --git a/plugin-ozone/src/test/java/org/apache/ranger/authorization/ozone/authorizer/TestRangerOzoneCacheGuardMetricsSource.java b/plugin-ozone/src/test/java/org/apache/ranger/authorization/ozone/authorizer/TestRangerOzoneCacheGuardMetricsSource.java
+new file mode 100644
+index 000000000..19fde3cd2
+--- /dev/null
++++ b/plugin-ozone/src/test/java/org/apache/ranger/authorization/ozone/authorizer/TestRangerOzoneCacheGuardMetricsSource.java
+@@ -0,0 +1,75 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ */
++
++package org.apache.ranger.authorization.ozone.authorizer;
++
++import java.util.concurrent.atomic.AtomicInteger;
++import java.util.concurrent.atomic.AtomicLong;
++
++import org.apache.hadoop.metrics2.AbstractMetric;
++import org.apache.hadoop.metrics2.MetricsRecord;
++import org.apache.hadoop.metrics2.impl.MetricsCollectorImpl;
++import org.junit.Assert;
++import org.junit.Test;
++
++public class TestRangerOzoneCacheGuardMetricsSource {
++
++	@Test
++	public void exportsAllCacheMetrics() {
++		AtomicLong    now         = new AtomicLong(1_000_000L);
++		AtomicLong    lastContact = new AtomicLong(1_000_000L);
++		AtomicInteger policySize  = new AtomicInteger(11);
++		AtomicInteger roleSize    = new AtomicInteger(3);
++
++		RangerOzoneCacheGuard guard = new RangerOzoneCacheGuard(60_000L,
++				TestRangerOzoneCacheGuard.longSupplier(lastContact),
++				TestRangerOzoneCacheGuard.intSupplier(policySize),
++				TestRangerOzoneCacheGuard.intSupplier(roleSize),
++				TestRangerOzoneCacheGuard.longSupplier(now));
++
++		guard.allowAccess();            // hit
++		guard.extendValidity(10_000);   // extend op
++		guard.recordEntryInvalidation();
++
++		RangerOzoneCacheGuardMetricsSource source = new RangerOzoneCacheGuardMetricsSource(guard);
++		MetricsCollectorImpl collector = new MetricsCollectorImpl();
++
++		source.getMetrics(collector, true);
++
++		MetricsRecord record = collector.getRecords().get(0);
++		Assert.assertEquals(RangerOzoneCacheGuardMetricsSource.RECORD_NAME, record.name());
++		Assert.assertEquals(RangerOzoneCacheGuardMetricsSource.CONTEXT_NAME, record.context());
++
++		long found = 0;
++		for (AbstractMetric metric : record.metrics()) {
++			switch (metric.name()) {
++			case "HitCount":             Assert.assertEquals(1L,  metric.value().longValue()); found++; break;
++			case "MissCount":            Assert.assertEquals(0L,  metric.value().longValue()); found++; break;
++			case "TotalHitCount":        Assert.assertEquals(1L,  metric.value().longValue()); found++; break;
++			case "TotalMissCount":       Assert.assertEquals(0L,  metric.value().longValue()); found++; break;
++			case "CurrentPolicySize":    Assert.assertEquals(11L, metric.value().longValue()); found++; break;
++			case "CurrentRoleSize":      Assert.assertEquals(3L,  metric.value().longValue()); found++; break;
++			case "ExtendTTLTotalCount":  Assert.assertEquals(1L,  metric.value().longValue()); found++; break;
++			case "InvalidateTotalCount": Assert.assertEquals(1L,  metric.value().longValue()); found++; break;
++			default: break;
++			}
++		}
++		Assert.assertEquals("all 8 cache metrics must be exported", 8, found);
++	}
++}
+diff --git a/pom.xml b/pom.xml
+index 659414d9e..b42992cc9 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -126,7 +126,7 @@
+         <gson.version>2.9.0</gson.version>
+         <guice.version>4.0</guice.version>
+         <hadoop.version>3.3.0</hadoop.version>
+-        <ozone.version>1.0.0</ozone.version>
++        <ozone.version>1.4.0</ozone.version>
+         <hamcrest.version>2.2</hamcrest.version>
+         <hbase.version>2.4.12</hbase.version>
+         <hive.version>3.1.2${sdp.version.suffix}</hive.version>
+diff --git a/ranger-ozone-plugin-shim/pom.xml b/ranger-ozone-plugin-shim/pom.xml
+index 6bcc347d3..a41248107 100644
+--- a/ranger-ozone-plugin-shim/pom.xml
++++ b/ranger-ozone-plugin-shim/pom.xml
+@@ -78,13 +78,13 @@
+             <version>${httpcomponents.httpcore.version}</version>
+         </dependency>
+         <dependency>
+-            <groupId>org.apache.hadoop</groupId>
+-            <artifactId>hadoop-ozone-common</artifactId>
++            <groupId>org.apache.ozone</groupId>
++            <artifactId>ozone-common</artifactId>
+ 	    <version>${ozone.version}</version>
+         </dependency>
+         <dependency>
+-            <groupId>org.apache.hadoop</groupId>
+-            <artifactId>hadoop-hdds-common</artifactId>
++            <groupId>org.apache.ozone</groupId>
++            <artifactId>hdds-common</artifactId>
+ 	    <version>${ozone.version}</version>
+             <exclusions>
+                 <exclusion>
+diff --git a/ranger-ozone-plugin-shim/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneAuthorizer.java b/ranger-ozone-plugin-shim/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneAuthorizer.java
+index 59851e0ec..7fb032cbb 100644
+--- a/ranger-ozone-plugin-shim/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneAuthorizer.java
++++ b/ranger-ozone-plugin-shim/src/main/java/org/apache/ranger/authorization/ozone/authorizer/RangerOzoneAuthorizer.java
+@@ -19,7 +19,10 @@
+ 
+ package org.apache.ranger.authorization.ozone.authorizer;
+ 
++import java.io.IOException;
++
+ import org.apache.hadoop.ozone.om.exceptions.OMException;
++import org.apache.hadoop.ozone.security.acl.AuthorizerCacheControl;
+ import org.apache.hadoop.ozone.security.acl.IAccessAuthorizer;
+ import org.apache.hadoop.ozone.security.acl.IOzoneObj;
+ import org.apache.hadoop.ozone.security.acl.RequestContext;
+@@ -27,7 +30,7 @@
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+-public class RangerOzoneAuthorizer implements IAccessAuthorizer {
++public class RangerOzoneAuthorizer implements IAccessAuthorizer, AuthorizerCacheControl {
+ 
+     private static final Logger LOG  = LoggerFactory.getLogger(RangerOzoneAuthorizer.class);
+ 
+@@ -36,6 +39,7 @@ public class RangerOzoneAuthorizer implements IAccessAuthorizer {
+ 
+     private RangerPluginClassLoader rangerPluginClassLoader        = null;
+     private IAccessAuthorizer       ozoneAuthorizationProviderImpl = null;
++    private AuthorizerCacheControl  cacheControlImpl               = null;
+ 
+     public RangerOzoneAuthorizer() {
+         if(LOG.isDebugEnabled()) {
+@@ -64,6 +68,15 @@ private void init(){
+             activatePluginClassLoader();
+ 
+             ozoneAuthorizationProviderImpl = cls.newInstance();
++
++            // AuthorizerCacheControl is loaded from the parent (OM)
++            // classloader on both sides, so instanceof works across the
++            // plugin classloader boundary
++            if (ozoneAuthorizationProviderImpl instanceof AuthorizerCacheControl) {
++                cacheControlImpl = (AuthorizerCacheControl) ozoneAuthorizationProviderImpl;
++            } else {
++                LOG.info("Ranger ozone plugin impl does not support cache control");
++            }
+         } catch (Exception e) {
+             // check what need to be done
+             LOG.error("Error Enabling RangerOzonePlugin", e);
+@@ -100,6 +113,69 @@ public boolean checkAccess(IOzoneObj ozoneObject, RequestContext context) throws
+         return ret;
+     }
+ 
++    @Override
++    public void invalidateCache() throws IOException {
++        try {
++            activatePluginClassLoader();
++
++            requireCacheControl().invalidateCache();
++        } finally {
++            deactivatePluginClassLoader();
++        }
++    }
++
++    @Override
++    public boolean invalidateCachedPolicy(String policyName) throws IOException {
++        try {
++            activatePluginClassLoader();
++
++            return requireCacheControl().invalidateCachedPolicy(policyName);
++        } finally {
++            deactivatePluginClassLoader();
++        }
++    }
++
++    @Override
++    public boolean invalidateCachedRole(String roleName) throws IOException {
++        try {
++            activatePluginClassLoader();
++
++            return requireCacheControl().invalidateCachedRole(roleName);
++        } finally {
++            deactivatePluginClassLoader();
++        }
++    }
++
++    @Override
++    public void extendCacheValidity(long extensionMillis) throws IOException {
++        try {
++            activatePluginClassLoader();
++
++            requireCacheControl().extendCacheValidity(extensionMillis);
++        } finally {
++            deactivatePluginClassLoader();
++        }
++    }
++
++    @Override
++    public String getCacheStatus() throws IOException {
++        try {
++            activatePluginClassLoader();
++
++            return requireCacheControl().getCacheStatus();
++        } finally {
++            deactivatePluginClassLoader();
++        }
++    }
++
++    private AuthorizerCacheControl requireCacheControl() throws IOException {
++        if (cacheControlImpl == null) {
++            throw new IOException("Ranger ozone plugin impl does not support cache control");
++        }
++
++        return cacheControlImpl;
++    }
++
+     private void activatePluginClassLoader() {
+         if(rangerPluginClassLoader != null) {
+             rangerPluginClassLoader.activate();
