@@ -47,6 +47,9 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.De
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.OMConfigurationRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.OMConfigurationResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.OMNodeInfo;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.RangerCacheControlRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.RangerCacheControlResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.RangerCacheOpType;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.TriggerSnapshotDefragRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.TriggerSnapshotDefragResponse;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -256,6 +259,25 @@ public final class OMAdminProtocolClientSideImpl implements OMAdminProtocol {
           ". This likely indicates a server error.");
       // Unreachable, required for compilation
       return false;
+    }
+  }
+
+  @Override
+  public RangerCacheControlResponse rangerCacheControl(RangerCacheOpType op,
+      String name, long ttlMillis) throws IOException {
+    RangerCacheControlRequest.Builder request =
+        RangerCacheControlRequest.newBuilder().setOp(op);
+    if (name != null) {
+      request.setName(name);
+    }
+    if (ttlMillis > 0) {
+      request.setTtlMillis(ttlMillis);
+    }
+
+    try {
+      return rpcProxy.rangerCacheControl(NULL_RPC_CONTROLLER, request.build());
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
     }
   }
 

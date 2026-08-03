@@ -21,6 +21,8 @@ import java.io.Closeable;
 import java.io.IOException;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.helpers.OMNodeDetails;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.RangerCacheControlResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.RangerCacheOpType;
 import org.apache.hadoop.security.KerberosInfo;
 
 /**
@@ -53,4 +55,18 @@ public interface OMAdminProtocol extends Closeable {
    *         or if the task was triggered successfully (when noWait is true)
    */
   boolean triggerSnapshotDefrag(boolean noWait) throws IOException;
+
+  /**
+   * SDP (SDPOZN-2665).
+   * Control the Ranger policy-cache state on the contacted OM node.
+   * The state is node-local; use a single-OM proxy to target a node.
+   *
+   * @param op operation to perform
+   * @param name policy or role name (INVALIDATE_POLICY / INVALIDATE_ROLE)
+   * @param ttlMillis validity extension in milliseconds (EXTEND)
+   * @return the raw response; success/errorMsg/statusJson/entryFound are
+   *         interpreted by the caller
+   */
+  RangerCacheControlResponse rangerCacheControl(RangerCacheOpType op,
+      String name, long ttlMillis) throws IOException;
 }
