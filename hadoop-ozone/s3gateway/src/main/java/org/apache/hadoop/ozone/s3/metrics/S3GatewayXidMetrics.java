@@ -261,6 +261,36 @@ public final class S3GatewayXidMetrics implements MetricsSource {
     lastCleanupTime.set(timeMs);
   }
 
+  @VisibleForTesting
+  ConcurrentMap<BytesMetricKey, AtomicLong> getBytesTotal() {
+    return bytesTotal;
+  }
+
+  @VisibleForTesting
+  ConcurrentMap<RequestMetricKey, AtomicLong> getErrorsTotal() {
+    return errorsTotal;
+  }
+
+  @VisibleForTesting
+  ConcurrentMap<String, BytesMetricKey> getBytesMetricKeyPool() {
+    return bytesMetricKeyPool;
+  }
+
+  @VisibleForTesting
+  int getMaxLatencySamplesPerXid() {
+    return MAX_LATENCY_SAMPLES_PER_XID;
+  }
+
+  @VisibleForTesting
+  int getMaxKeysPerMap() {
+    return MAX_KEYS_PER_MAP;
+  }
+
+  @VisibleForTesting
+  int getMaxXidMonitoringThreshold() {
+    return XID_MONITORING_THRESHOLD;
+  }
+
   /**
    * Evicts the first entry from the given map if its size exceeds {@link #MAX_KEYS_PER_MAP}.
    * ConcurrentHashMap does not maintain insertion order, so eviction is FIFO-ish
