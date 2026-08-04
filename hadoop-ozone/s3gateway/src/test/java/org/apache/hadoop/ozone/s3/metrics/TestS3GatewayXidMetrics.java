@@ -385,7 +385,7 @@ class TestS3GatewayXidMetrics {
 
   @Test
   @DisplayName("clearMetrics also clears the percentile cache")
-  void testClearMetricsCachesPercentiles() {
+  void testClearMetricsCaches() {
     metrics.recordRequest("clear-xid", "put", 200, 100, 50);
     metrics.getMetrics(collector, true);
 

@@ -72,7 +72,7 @@
 | D1 | `testEvictionRemovesOldestKey` | При превышении `MAX_KEYS_PER_MAP` удаляется запись |
 | D2 | `testMetricsAreDeletedAfterCleanupInterval` | По истечении интервала метрики очищаются |
 | D3 | `testMetricsAreNotDeletedBeforeCleanupInterval` | До интервала метрики сохраняются |
-| D4 | `testClearMetricsCachesPercentiles` | `clearMetrics` очищает карты и кэш перцентил |
+| D4 | `testClearMetricsCaches` | `clearMetrics` очищает карты и кэш перцентил |
 
 ### 4.5 XID-мониторинг
 
