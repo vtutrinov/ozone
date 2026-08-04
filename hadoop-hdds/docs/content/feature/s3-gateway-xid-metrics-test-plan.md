@@ -1,6 +1,6 @@
 # Тест-план S3 Gateway XID Metrics
 
-- **Версия документа:** v1.0
+- **Версия документа:** v1.1
 - **Дата:** 2026-08-04
 - **Продукт:** `S3GatewayXidMetrics` (Apache Ozone, модуль `hadoop-ozone/s3gateway`)
 - **Объект тестирования:** класс `S3GatewayXidMetrics` + конфигурация мониторинга
@@ -70,9 +70,9 @@
 | ID | Тест | Ожидаемый результат |
 |---|---|---|
 | D1 | `testEvictionRemovesOldestKey` | При превышении `MAX_KEYS_PER_MAP` удаляется запись |
-| D2 | `testMetricsAreDeletedAfterCleanupInterval` | По истечении интервала метрики очищаются |
-| D3 | `testMetricsAreNotDeletedBeforeCleanupInterval` | До интервала метрики сохраняются |
-| D4 | `testClearMetricsCaches` | `clearMetrics` очищает карты и кэш перцентил |
+| D2 | `testMetricsAreDeletedAfterCleanupInterval` | По истечении интервала метрики очищаются (явная проверка, что внутренние карты `bytesTotal`/`errorsTotal`/`bytesMetricKeyPool` пусты, + коллектор не эмитит рекордов) |
+| D3 | `testMetricsAreNotDeletedBeforeCleanupInterval` | До интервала метрики сохраняются (явный guard, что карты НЕ очищены до наступления интервала) |
+| D4 | `testClearMetricsCachesPercentiles` | `clearMetrics` очищает карты и кэш перцентил |
 
 ### 4.5 XID-мониторинг
 
@@ -84,12 +84,16 @@
 
 ### 4.6 Ключи (`equals`/`hashCode`)
 
+> Вложенные ключи `BytesMetricKey`/`RequestMetricKey` переведены в package-private `static final` —
+> тесты обращаются к ним напрямую (без рефлексии). Проверяются рефлексивность, симметрия, транзитивность,
+> консистентность, null-safe случаи (`bothDiff`), согласованный `hashCode` и spread по всем полям.
+
 | ID | Тест | Ожидаемый результат |
 |---|---|---|
-| F1 | `testBytesMetricKeyEquals` | Корректный `equals` для `BytesMetricKey` |
-| F2 | `testBytesMetricKeyHashCode` | Согласованный `hashCode` |
-| F3 | `testRequestMetricKeyEquals` | Корректный `equals` для `RequestMetricKey` |
-| F4 | `testRequestMetricKeyHashCode` | Согласованный `hashCode` |
+| F1 | `testBytesMetricKeyEquals` | Полный контракт `equals` для `BytesMetricKey` |
+| F2 | `testBytesMetricKeyHashCode` | Согласованный `hashCode` + spread по полям |
+| F3 | `testRequestMetricKeyEquals` | Полный контракт `equals` для `RequestMetricKey` |
+| F4 | `testRequestMetricKeyHashCode` | Согласованный `hashCode` + spread по полям |
 
 ### 4.7 Singleton и жизненный цикл
 
@@ -128,7 +132,9 @@
 ## 6. Критерии приёмки
 
 - **42/42 green** модульного класса `TestS3GatewayXidMetrics` (BUILD SUCCESS).
-- Никаких `assertTrue(true, ...)`, рефлексии вне equals/hashCode-тестов.
+- Никаких `assertTrue(true, ...)`.
+- **Отсутствие рефлексии** в тестах ключей: вложенные `BytesMetricKey`/`RequestMetricKey` package-private,
+  вызовы прямые (в т.ч. без `setAccessible(true)`).
 - Алерты/дашборд валидны (см. п. 7.2).
 - Нет гонок в concurrency-тестах при многократном прогоне (`-Dtest=...`×N).
 
