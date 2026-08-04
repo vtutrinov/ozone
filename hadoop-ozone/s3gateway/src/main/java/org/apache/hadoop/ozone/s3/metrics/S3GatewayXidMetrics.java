@@ -391,11 +391,13 @@ public final class S3GatewayXidMetrics implements MetricsSource {
     return bytesMetricKeyPool.computeIfAbsent(key, k -> new BytesMetricKey(xid, requestType));
   }
 
-  private static final class RequestMetricKey {
+  // Keys are package-private (not private) so tests in the same package can
+  // exercise equals/hashCode directly, without reflection.
+  static final class RequestMetricKey {
     private final String xid;
     private final int errorCode;
 
-    private RequestMetricKey(String xid, int errorCode) {
+    RequestMetricKey(String xid, int errorCode) {
       this.xid = xid;
       this.errorCode = errorCode;
     }
@@ -421,11 +423,11 @@ public final class S3GatewayXidMetrics implements MetricsSource {
     }
   }
 
-  private static final class BytesMetricKey {
+  static final class BytesMetricKey {
     private final String xid;
     private final String requestType;
 
-    private BytesMetricKey(String xid, String requestType) {
+    BytesMetricKey(String xid, String requestType) {
       this.xid = xid;
       this.requestType = requestType;
     }

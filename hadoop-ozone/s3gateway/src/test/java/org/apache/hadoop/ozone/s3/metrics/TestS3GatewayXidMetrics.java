@@ -3,6 +3,8 @@ package org.apache.hadoop.ozone.s3.metrics;
 import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsInfo;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
+import org.apache.hadoop.ozone.s3.metrics.S3GatewayXidMetrics.BytesMetricKey;
+import org.apache.hadoop.ozone.s3.metrics.S3GatewayXidMetrics.RequestMetricKey;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,8 +13,6 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -363,8 +363,14 @@ class TestS3GatewayXidMetrics {
     metrics.setLastCleanupTime(oldTime);
     metrics.cleanupIfNeeded();
 
-    metrics.getMetrics(collector, true);
+    // Data must actually be removed from the internal maps, not just hidden
+    // from the collector.
+    assertTrue(metrics.getBytesTotal().isEmpty(), "bytesTotal should be cleared");
+    assertTrue(metrics.getErrorsTotal().isEmpty(), "errorsTotal should be cleared");
+    assertTrue(metrics.getBytesMetricKeyPool().isEmpty(), "bytesMetricKeyPool should be cleared");
 
+    // And the collector must consequently emit no records.
+    metrics.getMetrics(collector, true);
     verify(collector, never()).addRecord(anyString());
   }
 
@@ -377,8 +383,12 @@ class TestS3GatewayXidMetrics {
     metrics.setLastCleanupTime(recentTime);
     metrics.cleanupIfNeeded();
 
-    metrics.getMetrics(collector, true);
+    // Data must still be present — the interval has not elapsed. Guard this in
+    // addition to the emitted record so the test fails on "cleared too early".
+    assertFalse(metrics.getBytesTotal().isEmpty(), "bytesTotal should NOT have been cleared yet");
+    assertFalse(metrics.getBytesMetricKeyPool().isEmpty(), "bytesMetricKeyPool should NOT have been cleared yet");
 
+    metrics.getMetrics(collector, true);
     verify(rb).addCounter(argThat(info -> info.name().equals("sum_bytes")), eq(100L));
     verify(rb).addGauge(argThat(info -> info.name().equals("average_latency")), eq(10.0));
   }
@@ -444,121 +454,167 @@ class TestS3GatewayXidMetrics {
 
   // === Equals/hashCode for nested metric keys ===
 
-  private static Class<?> metricKeyClass(String name) throws Exception {
-    return Class.forName("org.apache.hadoop.ozone.s3.metrics.S3GatewayXidMetrics$" + name);
-  }
-
   @Test
   @DisplayName("BytesMetricKey honors the equals contract")
-  void testBytesMetricKeyEquals() throws Exception {
-    Class<?> keyClass = metricKeyClass("BytesMetricKey");
-    Constructor<?> ctor = keyClass.getDeclaredConstructor(String.class, String.class);
-    ctor.setAccessible(true);
-    Method equals = keyClass.getDeclaredMethod("equals", Object.class);
-    equals.setAccessible(true);
+  void testBytesMetricKeyEquals() {
+    BytesMetricKey a = new BytesMetricKey("xid-1", "put");
+    BytesMetricKey aCopy = new BytesMetricKey("xid-1", "put");
+    BytesMetricKey sameAsA = new BytesMetricKey("xid-1", "put");
+    BytesMetricKey diffMethod = new BytesMetricKey("xid-1", "get");
+    BytesMetricKey diffXid = new BytesMetricKey("xid-2", "put");
+    // Differs in BOTH fields — the case that catches equals/&& mix-ups.
+    BytesMetricKey bothDiff = new BytesMetricKey("xid-2", "get");
+    BytesMetricKey nullXid1 = new BytesMetricKey(null, "put");
+    BytesMetricKey nullXid2 = new BytesMetricKey(null, "put");
+    BytesMetricKey nullXidDiff = new BytesMetricKey(null, "get");
+    BytesMetricKey nullMethod1 = new BytesMetricKey("xid-1", null);
+    BytesMetricKey nullMethod2 = new BytesMetricKey("xid-1", null);
+    BytesMetricKey nullMethodDiff = new BytesMetricKey("xid-2", null);
 
-    Object a = ctor.newInstance("xid-1", "put");
-    Object aCopy = ctor.newInstance("xid-1", "put");
-    Object diffMethod = ctor.newInstance("xid-1", "get");
-    Object diffXid = ctor.newInstance("xid-2", "put");
-    Object nullXid1 = ctor.newInstance(null, "put");
-    Object nullXid2 = ctor.newInstance(null, "put");
-    Object nullMethod1 = ctor.newInstance("xid-1", null);
-    Object nullMethod2 = ctor.newInstance("xid-1", null);
+    // Reflexivity.
+    assertEquals(a, a, "equals must be reflexive");
+    assertEquals(nullXid1, nullXid1, "equals must be reflexive for null-xid keys");
 
-    // Reflexivity and basic equality.
-    assertTrue((Boolean) equals.invoke(a, a));
-    assertTrue((Boolean) equals.invoke(a, aCopy));
-    assertTrue((Boolean) equals.invoke(aCopy, a));
+    // Symmetry.
+    assertEquals(a, aCopy, "equal keys must compare equal");
+    assertEquals(aCopy, a, "equals must be symmetric");
+    assertEquals(nullXid1, nullXid2, "null-xid equal keys must compare equal");
+    assertEquals(nullXid2, nullXid1, "null-xid equals must be symmetric");
+
+    // Transitivity: a == aCopy && aCopy == sameAsA  =>  a == sameAsA.
+    assertEquals(a, sameAsA, "equals must be transitive");
+
+    // Consistency: repeated comparison must give the same result.
+    assertEquals(a, aCopy, "equals must be consistent across repeated invocations");
 
     // Inequality cases.
-    assertFalse((Boolean) equals.invoke(a, diffMethod));
-    assertFalse((Boolean) equals.invoke(a, diffXid));
-    assertFalse((Boolean) equals.invoke(a, (Object) null));
-    assertFalse((Boolean) equals.invoke(a, "not a key"));
+    assertNotEquals(a, diffMethod, "different requestType must not be equal");
+    assertNotEquals(a, diffXid, "different xid must not be equal");
+    assertNotEquals(a, bothDiff, "different xid+requestType must not be equal");
+    assertNotEquals(a, null, "equals(null) must be false");
+    assertNotEquals(a, "not a key", "equals(foreign object) must be false");
+    assertNotEquals(a, new Object(), "equals(other class) must be false");
 
-    // Null-safe equality.
-    assertTrue((Boolean) equals.invoke(nullXid1, nullXid2));
-    assertTrue((Boolean) equals.invoke(nullMethod1, nullMethod2));
-    assertFalse((Boolean) equals.invoke(nullXid1, a));
-    assertFalse((Boolean) equals.invoke(nullMethod1, a));
+    // Null-safe equality: only the differing field makes them different.
+    assertEquals(nullXid1, nullXid2, "same null xid must be equal");
+    assertNotEquals(nullXid1, nullXidDiff, "null xid + diff method must not be equal");
+    assertEquals(nullMethod1, nullMethod2, "same null method must be equal");
+    assertNotEquals(nullMethod1, nullMethodDiff, "null method + diff xid must not be equal");
+    assertNotEquals(nullXid1, a, "null xid must not equal concrete xid");
+    assertNotEquals(nullMethod1, a, "null method must not equal concrete method");
+
+    // hashCode/equals contract: every equal pair must share a hash code.
+    assertEquals(a.hashCode(), aCopy.hashCode(), "hashCode must match for equal keys");
+    assertEquals(a.hashCode(), sameAsA.hashCode(), "hashCode must match for equal keys");
+    assertEquals(nullXid1.hashCode(), nullXid2.hashCode(), "hashCode must match for equal null-xid keys");
   }
 
   @Test
   @DisplayName("BytesMetricKey honors the hashCode contract")
-  void testBytesMetricKeyHashCode() throws Exception {
-    Class<?> keyClass = metricKeyClass("BytesMetricKey");
-    Constructor<?> ctor = keyClass.getDeclaredConstructor(String.class, String.class);
-    ctor.setAccessible(true);
-    Method hashCode = keyClass.getDeclaredMethod("hashCode");
-    hashCode.setAccessible(true);
-
-    Object a = ctor.newInstance("xid-1", "put");
-    Object aCopy = ctor.newInstance("xid-1", "put");
-    Object diffMethod = ctor.newInstance("xid-1", "get");
-    Object diffXid = ctor.newInstance("xid-2", "put");
+  void testBytesMetricKeyHashCode() {
+    BytesMetricKey a = new BytesMetricKey("xid-1", "put");
+    BytesMetricKey aCopy = new BytesMetricKey("xid-1", "put");
+    BytesMetricKey diffMethod = new BytesMetricKey("xid-1", "get");
+    BytesMetricKey diffXid = new BytesMetricKey("xid-2", "put");
+    BytesMetricKey bothDiff = new BytesMetricKey("xid-2", "get");
 
     // Equal objects must have equal hash codes.
-    assertEquals(hashCode.invoke(a), hashCode.invoke(aCopy));
+    assertEquals(aCopy.hashCode(), a.hashCode(), "equal keys must share a hash code");
+
+    // Consistency: repeated hashCode must be stable.
+    assertEquals(a.hashCode(), a.hashCode(), "hashCode must be consistent");
 
     // Hash code must be null-safe for both fields.
-    Object nullXid = ctor.newInstance(null, "put");
-    Object nullMethod = ctor.newInstance("xid-1", null);
-    assertNotNull(hashCode.invoke(nullXid));
-    assertNotNull(hashCode.invoke(nullMethod));
+    BytesMetricKey nullXid = new BytesMetricKey(null, "put");
+    BytesMetricKey nullMethod = new BytesMetricKey("xid-1", null);
+    assertNotNull(nullXid.hashCode(), "null xid hashCode must not throw");
+    assertNotNull(nullMethod.hashCode(), "null method hashCode must not throw");
 
-    // Different objects typically produce different hash codes (not strictly
-    // required, but a useful sanity check given the small sample).
-    assertNotEquals(hashCode.invoke(a), hashCode.invoke(diffMethod));
-    assertNotEquals(hashCode.invoke(a), hashCode.invoke(diffXid));
+    // Real spread across buckets: different fields yield different flows.
+    // hashCode collisions are allowed by contract, but our hash must spread well.
+    assertNotEquals(a.hashCode(), diffMethod.hashCode(),
+        "hashCode should differ when requestType differs (basic spread)");
+    assertNotEquals(a.hashCode(), diffXid.hashCode(),
+        "hashCode should differ when xid differs (basic spread)");
+    assertNotEquals(a.hashCode(), bothDiff.hashCode(),
+        "hashCode should differ when both fields differ (basic spread)");
   }
 
   @Test
   @DisplayName("RequestMetricKey honors the equals contract")
-  void testRequestMetricKeyEquals() throws Exception {
-    Class<?> keyClass = metricKeyClass("RequestMetricKey");
-    Constructor<?> ctor = keyClass.getDeclaredConstructor(String.class, int.class);
-    ctor.setAccessible(true);
-    Method equals = keyClass.getDeclaredMethod("equals", Object.class);
-    equals.setAccessible(true);
+  void testRequestMetricKeyEquals() {
+    RequestMetricKey a = new RequestMetricKey("xid-1", 404);
+    RequestMetricKey aCopy = new RequestMetricKey("xid-1", 404);
+    RequestMetricKey sameAsA = new RequestMetricKey("xid-1", 404);
+    RequestMetricKey diffCode = new RequestMetricKey("xid-1", 500);
+    RequestMetricKey diffXid = new RequestMetricKey("xid-2", 404);
+    // Differs in BOTH fields — catches equals/&& mix-ups for error codes.
+    RequestMetricKey bothDiff = new RequestMetricKey("xid-2", 500);
+    RequestMetricKey nullXid1 = new RequestMetricKey(null, 404);
+    RequestMetricKey nullXid2 = new RequestMetricKey(null, 404);
+    RequestMetricKey nullXidDiff = new RequestMetricKey(null, 500);
 
-    Object a = ctor.newInstance("xid-1", 404);
-    Object aCopy = ctor.newInstance("xid-1", 404);
-    Object diffCode = ctor.newInstance("xid-1", 500);
-    Object diffXid = ctor.newInstance("xid-2", 404);
-    Object nullXid1 = ctor.newInstance(null, 404);
-    Object nullXid2 = ctor.newInstance(null, 404);
+    // Reflexivity.
+    assertEquals(a, a, "equals must be reflexive");
+    assertEquals(nullXid1, nullXid1, "equals must be reflexive for null-xid keys");
 
-    assertTrue((Boolean) equals.invoke(a, a));
-    assertTrue((Boolean) equals.invoke(a, aCopy));
-    assertTrue((Boolean) equals.invoke(aCopy, a));
+    // Symmetry.
+    assertEquals(a, aCopy, "equal keys must compare equal");
+    assertEquals(aCopy, a, "equals must be symmetric");
+    assertEquals(nullXid1, nullXid2, "null-xid equal keys must compare equal");
+    assertEquals(nullXid2, nullXid1, "null-xid equals must be symmetric");
 
-    assertFalse((Boolean) equals.invoke(a, diffCode));
-    assertFalse((Boolean) equals.invoke(a, diffXid));
-    assertFalse((Boolean) equals.invoke(a, (Object) null));
-    assertFalse((Boolean) equals.invoke(a, Integer.valueOf(42)));
+    // Transitivity: a == aCopy && aCopy == sameAsA  =>  a == sameAsA.
+    assertEquals(a, sameAsA, "equals must be transitive");
 
-    assertTrue((Boolean) equals.invoke(nullXid1, nullXid2));
-    assertFalse((Boolean) equals.invoke(nullXid1, a));
+    // Consistency: repeated comparison must give the same result.
+    assertEquals(a, aCopy, "equals must be consistent across repeated invocations");
+
+    // Inequality cases.
+    assertNotEquals(a, diffCode, "different error code must not be equal");
+    assertNotEquals(a, diffXid, "different xid must not be equal");
+    assertNotEquals(a, bothDiff, "different xid+error code must not be equal");
+    assertNotEquals(a, null, "equals(null) must be false");
+    assertNotEquals(a, (Object) 42, "equals(foreign object) must be false");
+    assertNotEquals(a, new Object(), "equals(other class) must be false");
+
+    // Null-safe equality: only the differing field makes them different.
+    assertEquals(nullXid1, nullXid2, "same null xid must be equal");
+    assertNotEquals(nullXid1, nullXidDiff, "null xid + diff code must not be equal");
+    assertNotEquals(nullXid1, a, "null xid must not equal concrete xid");
+
+    // hashCode/equals contract: every equal pair must share a hash code.
+    assertEquals(a.hashCode(), aCopy.hashCode(), "hashCode must match for equal keys");
+    assertEquals(a.hashCode(), sameAsA.hashCode(), "hashCode must match for equal keys");
+    assertEquals(nullXid1.hashCode(), nullXid2.hashCode(), "hashCode must match for equal null-xid keys");
   }
 
   @Test
   @DisplayName("RequestMetricKey honors the hashCode contract")
-  void testRequestMetricKeyHashCode() throws Exception {
-    Class<?> keyClass = metricKeyClass("RequestMetricKey");
-    Constructor<?> ctor = keyClass.getDeclaredConstructor(String.class, int.class);
-    ctor.setAccessible(true);
-    Method hashCode = keyClass.getDeclaredMethod("hashCode");
-    hashCode.setAccessible(true);
+  void testRequestMetricKeyHashCode() {
+    RequestMetricKey a = new RequestMetricKey("xid-1", 404);
+    RequestMetricKey aCopy = new RequestMetricKey("xid-1", 404);
+    RequestMetricKey diffCode = new RequestMetricKey("xid-1", 500);
+    RequestMetricKey diffXid = new RequestMetricKey("xid-2", 404);
+    RequestMetricKey bothDiff = new RequestMetricKey("xid-2", 500);
 
-    Object a = ctor.newInstance("xid-1", 404);
-    Object aCopy = ctor.newInstance("xid-1", 404);
-    Object diffCode = ctor.newInstance("xid-1", 500);
-    Object diffXid = ctor.newInstance("xid-2", 404);
+    // Equal objects must have equal hash codes.
+    assertEquals(aCopy.hashCode(), a.hashCode(), "equal keys must share a hash code");
 
-    assertEquals(hashCode.invoke(a), hashCode.invoke(aCopy));
-    assertNotEquals(hashCode.invoke(a), hashCode.invoke(diffCode));
-    assertNotEquals(hashCode.invoke(a), hashCode.invoke(diffXid));
+    // Consistency: repeated hashCode must be stable.
+    assertEquals(a.hashCode(), a.hashCode(), "hashCode must be consistent");
+
+    // Hash code must be null-safe.
+    RequestMetricKey nullXid = new RequestMetricKey(null, 404);
+    assertNotNull(nullXid.hashCode(), "null xid hashCode must not throw");
+
+    // Real spread across buckets: different fields yield different flows.
+    assertNotEquals(a.hashCode(), diffCode.hashCode(),
+        "hashCode should differ when error code differs (basic spread)");
+    assertNotEquals(a.hashCode(), diffXid.hashCode(),
+        "hashCode should differ when xid differs (basic spread)");
+    assertNotEquals(a.hashCode(), bothDiff.hashCode(),
+        "hashCode should differ when both fields differ (basic spread)");
   }
 
   // === Singleton & lifecycle ===
