@@ -1253,7 +1253,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     volumeManager = new VolumeManagerImpl(metadataManager);
 
     bucketManager = new BucketManagerImpl(this, metadataManager);
-    omRaftGroupManager = new OmRaftGroupManager(this, configuration, isMultiRaftEnabled, getOMServiceId(), metadataManager);
+    omRaftGroupManager = new OmRaftGroupManager(this, configuration, isMultiRaftEnabled, getOMServiceId(),
+        metadataManager);
 
     Class<? extends S3SecretStoreProvider> storeProviderClass =
         configuration.getClass(
@@ -1373,7 +1374,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       return new S3SecretEncryptionImpl(secretKey);
     }
   }
-
 
   /**
    * Return scmClient.
@@ -3930,7 +3930,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
   }
 
-
   @VisibleForTesting
   public OMHAMetrics getOmhaMetrics() {
     return omhaMetrics;
@@ -4574,7 +4573,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       }
     }
 
-
     final OmVolumeArgs volumeInfo;
     if (skipChecks) {
       // for internal usages, skip acl checks and metrics.
@@ -4830,6 +4828,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return installCheckpoint(leaderId, checkpointLocation, checkpointTrxnInfo);
   }
 
+  @SuppressWarnings("checkstyle:methodlength")
   TermIndex installCheckpoint(String leaderId, Path checkpointLocation,
       TransactionInfo checkpointTrxnInfo) throws Exception {
     long startTime = Time.monotonicNow();
@@ -5734,7 +5733,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
           .setObjectID(objectID)
           .setUpdateID(transactionID)
           .addVolumeNames(s3VolumeName).build();
-
 
       // Commit to DB.
       try (BatchOperation batchOperation =
