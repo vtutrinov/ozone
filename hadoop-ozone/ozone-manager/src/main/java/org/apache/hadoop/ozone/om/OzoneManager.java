@@ -4367,6 +4367,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return installCheckpoint(raftGroupId, leaderId, checkpointLocation, checkpointTrxnInfo);
   }
 
+  @SuppressWarnings("checkstyle:methodlength")
   TermIndex installCheckpoint(RaftGroupId raftGroupId, String leaderId, Path checkpointLocation,
       TransactionInfo checkpointTrxnInfo) throws Exception {
     long startTime = Time.monotonicNow();
