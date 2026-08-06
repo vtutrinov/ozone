@@ -1953,6 +1953,93 @@
     </description>
   </property>
   <property>
+    <name>ozone.om.service.rpc-address</name>
+    <value/>
+    <tag>OM, SECURITY, KERBEROS</tag>
+    <description>Address (host:port) of the optional OM service RPC port — a
+      sibling of ozone.om.address dedicated to inter-service callers
+      (S3G→OM, Recon→OM). When set, OM binds a second RPC server carrying
+      the same protocols as the main client port but with the SASL profile
+      chosen by ozone.security.kerberos.interservice.enabled (SIMPLE in the
+      split-Kerberos deployment), so internal callers need no TGT while
+      ofs/o3fs clients keep using the Kerberos-served client port. When
+      unset, OM exposes only the single client port (legacy behaviour).
+      The recommended port is 9864. In HA deployments internal callers are
+      routed by rewriting the port of each per-node ozone.om.address entry
+      to the port of this key, so use the same service port on every node.
+    </description>
+  </property>
+  <property>
+    <name>ozone.om.service.rpc-bind-host</name>
+    <value/>
+    <tag>OM, SECURITY, KERBEROS</tag>
+    <description>The actual address the OM service RPC server binds to when
+      ozone.om.service.rpc-address is set. If this optional address is set,
+      it overrides only the hostname portion of ozone.om.service.rpc-address;
+      the port is taken from ozone.om.service.rpc-address. This is useful
+      for making the OM service port listen on all interfaces (0.0.0.0) in
+      multi-homed setups while advertising a resolvable hostname.
+    </description>
+  </property>
+  <property>
+    <name>ozone.scm.service.rpc-address</name>
+    <value/>
+    <tag>SCM, SECURITY, KERBEROS</tag>
+    <description>Address (host:port) of the optional SCM sibling RPC port
+      for StorageContainerLocationProtocol that answers SIMPLE auth in
+      split-Kerberos mode. The Kerberos-served ozone.scm.client.address
+      (port 9860) stays as-is for external admin tools; OM and other
+      internal callers dial this address instead so they don't need a TGT
+      for inter-service calls. When unset, no sibling server is built and
+      internal callers use the standard client port (legacy behaviour).
+      The recommended port is 9866.
+    </description>
+  </property>
+  <property>
+    <name>ozone.scm.service.rpc-bind-host</name>
+    <value/>
+    <tag>SCM, SECURITY, KERBEROS</tag>
+    <description>The actual address the SCM sibling
+      StorageContainerLocationProtocol server binds to when
+      ozone.scm.service.rpc-address is set. If this optional address is
+      set, it overrides only the hostname portion of
+      ozone.scm.service.rpc-address; the port is taken from
+      ozone.scm.service.rpc-address.
+    </description>
+  </property>
+  <property>
+    <name>ozone.scm.security.service.rpc-address</name>
+    <value/>
+    <tag>SCM, SECURITY, KERBEROS</tag>
+    <description>Address (host:port) of the optional SCM sibling RPC port
+      for SCMSecurityProtocol (certificate issuance and secret-key vending)
+      with SIMPLE auth baked in, for split-Kerberos mode. When set, the
+      primary security port (ozone.scm.security.service.port, default 9961)
+      keeps the legacy auth policy — Kerberos when external Kerberos is
+      enabled, SIMPLE otherwise — so external admin tools like "ozone admin
+      cert list" authenticate with a TGT against it, while internal callers
+      (OM/DN/Recon certificate issuance, SCM root-CA bootstrap, secret-key
+      fetch) route to this sibling and need no TGT. When unset, no sibling
+      server is built and the legacy single-port behaviour applies. The
+      recommended port is 9962. In HA deployments internal callers are
+      routed by rewriting the port of every per-node
+      ozone.scm.security.service.address.SERVICE_ID.NODE_ID entry (and the
+      non-HA ozone.scm.security.service.address fallback) to the port of
+      this key, so use the same sibling port on every SCM node.
+    </description>
+  </property>
+  <property>
+    <name>ozone.scm.security.service.rpc-bind-host</name>
+    <value/>
+    <tag>SCM, SECURITY, KERBEROS</tag>
+    <description>The actual address the SCM sibling SCMSecurityProtocol
+      server binds to when ozone.scm.security.service.rpc-address is set.
+      If this optional address is set, it overrides only the hostname
+      portion of ozone.scm.security.service.rpc-address; the port is taken
+      from ozone.scm.security.service.rpc-address.
+    </description>
+  </property>
+  <property>
     <name>ozone.security.kerberos.acceptor-only.enabled</name>
     <value>true</value>
     <tag>OZONE, SECURITY, KERBEROS</tag>
