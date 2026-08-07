@@ -619,9 +619,17 @@ public final class HddsServerUtil {
    */
   public static SecretKeyProtocolScm getSecretKeyClientForSCM(
       ConfigurationSource conf) throws IOException {
+    // Step Q follow-up 2: SecretKeyProtocol shares SCM's security RPC
+    // server, whose primary port (9961) is Kerberos-served when external
+    // Kerberos is enabled. Daemon callers are internal — route them
+    // through the SIMPLE sibling (9962) when it is configured, same as
+    // getSecretKeyClientForScm and the SCMSecurityProtocol clients. When
+    // the sibling key is unset this is a no-op.
+    ConfigurationSource effectiveConf =
+        withScmSecuritySiblingPortIfConfigured(OzoneConfiguration.of(conf));
     SecretKeyProtocolClientSideTranslatorPB scmSecretClient =
         new SecretKeyProtocolClientSideTranslatorPB(
-            new SecretKeyProtocolFailoverProxyProvider(conf,
+            new SecretKeyProtocolFailoverProxyProvider(effectiveConf,
                 UserGroupInformation.getCurrentUser(),
                 SecretKeyProtocolScmPB.class), SecretKeyProtocolScmPB.class);
 
@@ -636,8 +644,13 @@ public final class HddsServerUtil {
   public static SecretKeyProtocolClientSideTranslatorPB
       getSecretKeyClientForDatanode(ConfigurationSource conf)
       throws IOException {
+    // Step Q follow-up 2: route the DN's secret-key fetch through the
+    // SIMPLE sibling when configured — in split-Kerberos mode the DN has
+    // no TGT and cannot authenticate against the Kerberos-served 9961.
+    ConfigurationSource effectiveConf =
+        withScmSecuritySiblingPortIfConfigured(OzoneConfiguration.of(conf));
     return new SecretKeyProtocolClientSideTranslatorPB(
-        new SecretKeyProtocolFailoverProxyProvider(conf,
+        new SecretKeyProtocolFailoverProxyProvider(effectiveConf,
             UserGroupInformation.getCurrentUser(),
             SecretKeyProtocolDatanodePB.class),
         SecretKeyProtocolDatanodePB.class);
@@ -649,8 +662,11 @@ public final class HddsServerUtil {
    */
   public static SecretKeyProtocolClientSideTranslatorPB
       getSecretKeyClientForOm(ConfigurationSource conf) throws IOException {
+    // Step Q follow-up 2: same sibling routing as the DN variant.
+    ConfigurationSource effectiveConf =
+        withScmSecuritySiblingPortIfConfigured(OzoneConfiguration.of(conf));
     return new SecretKeyProtocolClientSideTranslatorPB(
-        new SecretKeyProtocolFailoverProxyProvider(conf,
+        new SecretKeyProtocolFailoverProxyProvider(effectiveConf,
             UserGroupInformation.getCurrentUser(),
             SecretKeyProtocolOmPB.class),
         SecretKeyProtocolOmPB.class);
@@ -659,8 +675,11 @@ public final class HddsServerUtil {
   public static SecretKeyProtocolClientSideTranslatorPB
       getSecretKeyClientForDatanode(ConfigurationSource conf,
       UserGroupInformation ugi) {
+    // Step Q follow-up 2: same sibling routing as the no-UGI variant.
+    ConfigurationSource effectiveConf =
+        withScmSecuritySiblingPortIfConfigured(OzoneConfiguration.of(conf));
     return new SecretKeyProtocolClientSideTranslatorPB(
-        new SecretKeyProtocolFailoverProxyProvider(conf, ugi,
+        new SecretKeyProtocolFailoverProxyProvider(effectiveConf, ugi,
             SecretKeyProtocolDatanodePB.class),
         SecretKeyProtocolDatanodePB.class);
   }
