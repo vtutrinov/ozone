@@ -79,7 +79,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
     <ratis.version>3.0.1</ratis.version>
 
     <!-- Apache Ratis thirdparty version -->
-    <ratis.thirdparty.version>1.0.5</ratis.thirdparty.version>
+    <ratis.thirdparty.version>1.0.11</ratis.thirdparty.version>
 
     <!-- Apache Ranger plugin version -->
     <ranger.version>2.3.0</ranger.version>
@@ -198,7 +198,12 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
     <!-- define the protobuf JAR version                               -->
     <proto2.hadooprpc.protobuf.version>2.5.0</proto2.hadooprpc.protobuf.version>
     <proto3.hadooprpc.protobuf.version>3.7.1</proto3.hadooprpc.protobuf.version>
-    <hadoop-thirdparty.version>1.1.1</hadoop-thirdparty.version>
+    <!-- 1.1.1 only ships hadoop-shaded-protobuf_3_7, which bundles protobuf-java 3.7.1
+         (CVE-2024-7254, CVE-2022-3509, CVE-2022-3510, CVE-2021-22569, CVE-2021-22570).
+         1.4.0 is the first release whose hadoop-shaded-protobuf_3_25 bundles protobuf-java
+         3.25.5, the version that fixes CVE-2024-7254.  Both artifacts relocate to
+         org.apache.hadoop.thirdparty.protobuf, so they are drop-in replacements. -->
+    <hadoop-thirdparty.version>1.4.0</hadoop-thirdparty.version>
 
     <findbugs.version>3.0.0</findbugs.version>
     <spotbugs.version>3.1.12</spotbugs.version>
@@ -231,7 +236,9 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
 
     <!-- Maven protoc compiler -->
     <protobuf-maven-plugin.version>0.5.1</protobuf-maven-plugin.version>
-    <grpc.protobuf-compile.version>3.19.6</grpc.protobuf-compile.version>
+    <!-- protoc + protobuf-java for the CSI (proto3) protocol.  3.19.6 is affected by
+         CVE-2024-7254; 3.25.5 is the fix on the 3.x line. -->
+    <grpc.protobuf-compile.version>3.25.5</grpc.protobuf-compile.version>
     <os-maven-plugin.version>1.5.0.Final</os-maven-plugin.version>
 
     <!-- Use netty version known to work with grpc-netty. See table: -->
@@ -1080,6 +1087,16 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
         <artifactId>ratis-common</artifactId>
         <version>${ratis.version}</version>
       </dependency>
+      <!-- Pinned above the version Ratis ${ratis.version} depends on: ratis-thirdparty-misc
+           bundles a relocated Netty, and 1.0.5 bundles 4.1.100.Final
+           (CVE-2025-55163 in netty-codec-http2, CVE-2025-24970 in netty-handler).
+           This copy is shaded into ozone-filesystem-hadoop2/hadoop3-client, so bumping
+           ${netty.version} alone does not clear it. -->
+      <dependency>
+        <groupId>org.apache.ratis</groupId>
+        <artifactId>ratis-thirdparty-misc</artifactId>
+        <version>${ratis.thirdparty.version}</version>
+      </dependency>
 
       <dependency>
         <groupId>io.netty</groupId>
@@ -1339,7 +1356,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop.thirdparty</groupId>
-        <artifactId>hadoop-shaded-protobuf_3_7</artifactId>
+        <artifactId>hadoop-shaded-protobuf_3_25</artifactId>
         <version>${hadoop-thirdparty.version}</version>
       </dependency>
       <dependency>

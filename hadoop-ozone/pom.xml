@@ -26,7 +26,13 @@
 
   <properties>
     <docker.image>apache/ozone:${project.version}</docker.image>
-    <spring.version>5.3.27</spring.version>
+    <!-- 5.3.39 is the last OSS release of the 5.3.x line (5.3.40+ are commercial-only).
+         It clears CVE-2024-22243, CVE-2024-22259, CVE-2024-22262 and CVE-2024-38808,
+         which all affect 5.3.27.  CVE-2025-41249 has no OSS fix on the 5.3.x line (it is
+         fixed only in 6.2.11, which requires Java 17), but that flaw is reachable only via
+         Spring Security's @EnableMethodSecurity, and spring-security is not on the Ozone
+         classpath (Recon uses spring-jdbc for jOOQ only). -->
+    <spring.version>5.3.39</spring.version>
     <jooq.version>3.11.10</jooq.version>
   </properties>
   <modules>

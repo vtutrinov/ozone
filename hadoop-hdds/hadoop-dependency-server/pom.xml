@@ -51,6 +51,13 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
           <groupId>org.apache.hadoop.thirdparty</groupId>
           <artifactId>hadoop-shaded-guava</artifactId>
         </exclusion>
+        <!-- hadoop-common/hdfs pull hadoop-shaded-protobuf_3_7, which bundles
+             protobuf-java 3.7.1 (CVE-2024-7254 et al.).  Replaced below by
+             hadoop-shaded-protobuf_3_25; both relocate to the same package. -->
+        <exclusion>
+          <groupId>org.apache.hadoop.thirdparty</groupId>
+          <artifactId>hadoop-shaded-protobuf_3_7</artifactId>
+        </exclusion>
         <exclusion>
           <groupId>org.apache.curator</groupId>
           <artifactId>*</artifactId>
@@ -114,6 +121,10 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
       <artifactId>hadoop-shaded-guava</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.apache.hadoop.thirdparty</groupId>
+      <artifactId>hadoop-shaded-protobuf_3_25</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.nimbusds</groupId>
       <artifactId>nimbus-jose-jwt</artifactId>
     </dependency>
@@ -131,6 +142,13 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
         <exclusion>
           <groupId>org.apache.hadoop.thirdparty</groupId>
           <artifactId>hadoop-shaded-guava</artifactId>
+        </exclusion>
+        <!-- hadoop-common/hdfs pull hadoop-shaded-protobuf_3_7, which bundles
+             protobuf-java 3.7.1 (CVE-2024-7254 et al.).  Replaced below by
+             hadoop-shaded-protobuf_3_25; both relocate to the same package. -->
+        <exclusion>
+          <groupId>org.apache.hadoop.thirdparty</groupId>
+          <artifactId>hadoop-shaded-protobuf_3_7</artifactId>
         </exclusion>
         <exclusion>
           <groupId>io.netty</groupId>
