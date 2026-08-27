@@ -196,7 +196,13 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
 
     <!-- ProtocolBuffer version, used to verify the protoc version and -->
     <!-- define the protobuf JAR version                               -->
-    <proto2.hadooprpc.protobuf.version>2.5.0</proto2.hadooprpc.protobuf.version>
+    <!-- protobuf-java 2.5.0 is unmaintained and affected by CVE-2021-22569,
+         CVE-2021-22570 and CVE-2024-7254, with no fix anywhere on the 2.x line.
+         protoc 3.25.5 still compiles proto2 syntax and the wire format is
+         unchanged, and hadoop-common 3.3.6's legacy ProtobufRpcEngine resolves
+         against the 3.25.5 runtime (com.google.protobuf.GeneratedMessage and the
+         2.5.0-era Descriptors entry points are still present). -->
+    <proto2.hadooprpc.protobuf.version>3.25.5</proto2.hadooprpc.protobuf.version>
     <proto3.hadooprpc.protobuf.version>3.7.1</proto3.hadooprpc.protobuf.version>
     <!-- 1.1.1 only ships hadoop-shaded-protobuf_3_7, which bundles protobuf-java 3.7.1
          (CVE-2024-7254, CVE-2022-3509, CVE-2022-3510, CVE-2021-22569, CVE-2021-22570).
