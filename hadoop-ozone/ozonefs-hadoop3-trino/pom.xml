@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License. See accompanying LICENSE file.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.ozone</groupId>
+    <artifactId>ozone</artifactId>
+    <version>1.4.0</version>
+  </parent>
+<!--
+  This is called "ozone-filesystem-hadoop3-trino" because it corresponds with
+  the Hadoop jar that Trino embeds: "io.trino.hadoop:hadoop-apache".  That jar
+  keeps "org.apache.hadoop.*" unrelocated but moves both protobuf runtimes into
+  "io.trino.hadoop.$internal.*", so neither "ozone-filesystem-hadoop3" (which
+  expects plain "com.google.protobuf") nor "ozone-filesystem-hadoop3-client"
+  (which expects "org.apache.hadoop.shaded.com.google.protobuf", a package that
+  only exists in hadoop-client-runtime 3.3.x) links against it.
+
+  Drop this jar into the Trino plugin directory instead.  It shares no class
+  names with hadoop-apache, so the two coexist in one plugin classloader.
+-->
+  <artifactId>ozone-filesystem-hadoop3-trino</artifactId>
+  <name>Apache Ozone FS Trino shaded Hadoop 3.x compatibility</name>
+  <packaging>jar</packaging>
+  <version>1.4.0</version>
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.ozone</groupId>
+      <artifactId>ozone-filesystem-hadoop3</artifactId>
+      <optional>true</optional>
+    </dependency>
+  </dependencies>
+  <properties>
+    <maven.test.skip>true</maven.test.skip> <!-- no tests in this module so far -->
+    <!--
+      Trino's shade prefix, "io.trino.hadoop.$internal", with the "$" escaped.
+      maven-shade-plugin passes <shadedPattern> to String.replaceFirst as the
+      *replacement* argument, so a bare "$" is read as a capture-group
+      reference and fails the build with "Illegal group reference" (still the
+      case in shade 3.6.0).  The backslash is consumed by the regex engine and
+      does not appear in the relocated package name.
+
+      Kept as a property so it can be overridden if a future Trino release
+      renames the prefix; the package is Trino-internal and carries no
+      compatibility guarantee.
+    -->
+    <trino.shaded.prefix>io.trino.hadoop.\$internal</trino.shaded.prefix>
+  </properties>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>include-dependencies</id>
+            <phase>prepare-package</phase>
+            <goals>
+              <goal>unpack</goal>
+            </goals>
+            <configuration>
+              <skip>${maven.shade.skip}</skip>
+              <excludes>META-INF/versions/**/*.*</excludes>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>org.apache.ozone</groupId>
+                  <artifactId>ozone-filesystem-shaded</artifactId>
+                  <version>${project.version}</version>
+                </artifactItem>
+              </artifactItems>
+              <outputDirectory>target/classes</outputDirectory>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <skip>${maven.shade.skip}</skip>
+              <transformers>
+                <transformer
+                        implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
+                  <resources>
+                    <resource>META-INF/BC1024KE.DSA</resource>
+                    <resource>META-INF/BC2048KE.DSA</resource>
+                    <resource>META-INF/BC1024KE.SF</resource>
+                    <resource>META-INF/BC2048KE.SF</resource>
+                  </resources>
+                </transformer>
+                <transformer
+                        implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                <transformer
+                        implementation="org.apache.maven.plugins.shade.resource.XmlAppendingTransformer">
+                  <resource>ozone-default-generated.xml</resource>
+                </transformer>
+              </transformers>
+              <relocations>
+                <!--
+                  protobuf 2.5, used by ProtobufRpcEngine and by the generated
+                  OM/HDDS protocol classes.  "com.google.protobuf.nano" is
+                  deliberately left alone: hadoop-apache does not ship it and
+                  nothing on the client path calls it.
+                -->
+                <relocation>
+                  <pattern>com.google.protobuf</pattern>
+                  <shadedPattern>
+                    ${trino.shaded.prefix}.com.google.protobuf
+                  </shadedPattern>
+                  <includes>
+                    <include>com.google.protobuf.*</include>
+                  </includes>
+                </relocation>
+                <!--
+                  hadoop-thirdparty: protobuf 3 (ProtobufRpcEngine2,
+                  org.apache.hadoop.security.proto.SecurityProtos, the Ozone
+                  "*.proto3" protocol classes) and shaded guava
+                  (AsyncCallHandler).  hadoop-client-runtime ships these
+                  unrelocated, which is why ozone-filesystem-hadoop3-client
+                  does not rewrite them, but hadoop-apache relocates them along
+                  with everything else.  Nothing under org.apache.hadoop.thirdparty
+                  is bundled here, so this only rewrites references.
+                -->
+                <relocation>
+                  <pattern>org.apache.hadoop.thirdparty</pattern>
+                  <shadedPattern>
+                    ${trino.shaded.prefix}.org.apache.hadoop.thirdparty
+                  </shadedPattern>
+                </relocation>
+              </relocations>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <configuration>
+          <onlyAnalyze>org.apache.hadoop.fs.ozone.*</onlyAnalyze>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
