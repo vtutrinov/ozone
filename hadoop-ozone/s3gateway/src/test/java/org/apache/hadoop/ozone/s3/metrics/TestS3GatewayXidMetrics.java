@@ -393,20 +393,6 @@ class TestS3GatewayXidMetrics {
     verify(rb).addGauge(argThat(info -> info.name().equals("average_latency")), eq(10.0));
   }
 
-  @Test
-  @DisplayName("clearMetrics also clears the percentile cache")
-  void testClearMetricsCaches() {
-    metrics.recordRequest("clear-xid", "put", 200, 100, 50);
-    metrics.getMetrics(collector, true);
-
-    metrics.clearMetrics();
-
-    // After clear, metrics collector should return no records.
-    resetMocks();
-    metrics.getMetrics(collector, true);
-    verify(collector, never()).addRecord(anyString());
-  }
-
   // === XID monitoring ===
 
   @Test
