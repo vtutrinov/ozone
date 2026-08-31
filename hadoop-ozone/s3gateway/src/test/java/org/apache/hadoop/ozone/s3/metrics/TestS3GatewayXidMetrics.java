@@ -368,6 +368,12 @@ class TestS3GatewayXidMetrics {
     assertTrue(metrics.getBytesTotal().isEmpty(), "bytesTotal should be cleared");
     assertTrue(metrics.getErrorsTotal().isEmpty(), "errorsTotal should be cleared");
     assertTrue(metrics.getBytesMetricKeyPool().isEmpty(), "bytesMetricKeyPool should be cleared");
+    assertTrue(metrics.getLatencyMsTotal().isEmpty(), "latencyMsTotal should be cleared");
+    assertTrue(metrics.getLatencyCount().isEmpty(), "latencyCount should be cleared");
+    assertTrue(metrics.getRequestCount().isEmpty(), "requestCount should be cleared");
+    assertTrue(metrics.getLatencySamplesByXid().isEmpty(), "latencySamplesByXid should be cleared");
+    assertTrue(metrics.getSamplesVersion().isEmpty(), "samplesVersion should be cleared");
+    assertTrue(metrics.getCachedPercentiles().isEmpty(), "cachedPercentiles should be cleared");
 
     // And the collector must consequently emit no records.
     metrics.getMetrics(collector, true);

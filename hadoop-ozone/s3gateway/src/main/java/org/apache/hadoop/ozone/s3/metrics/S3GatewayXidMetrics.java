@@ -277,6 +277,36 @@ public final class S3GatewayXidMetrics implements MetricsSource {
   }
 
   @VisibleForTesting
+  ConcurrentMap<String, AtomicLong> getLatencyMsTotal() {
+    return latencyMsTotal;
+  }
+
+  @VisibleForTesting
+  ConcurrentMap<String, AtomicLong> getLatencyCount() {
+    return latencyCount;
+  }
+
+  @VisibleForTesting
+  ConcurrentMap<String, AtomicLong> getRequestCount() {
+    return requestCount;
+  }
+
+  @VisibleForTesting
+  ConcurrentMap<String, Deque<Long>> getLatencySamplesByXid() {
+    return latencySamplesByXid;
+  }
+
+  @VisibleForTesting
+  ConcurrentMap<String, AtomicLong> getSamplesVersion() {
+    return samplesVersion;
+  }
+
+  @VisibleForTesting
+  ConcurrentMap<String, double[]> getCachedPercentiles() {
+    return cachedPercentiles;
+  }
+
+  @VisibleForTesting
   int getMaxLatencySamplesPerXid() {
     return MAX_LATENCY_SAMPLES_PER_XID;
   }
