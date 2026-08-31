@@ -67,50 +67,89 @@ class TestS3GatewayXidMetrics {
   @Test
   @DisplayName("Bytes are grouped by XID and request type")
   void testBytesGroupedByXidAndRequestType() {
-    metrics.recordRequest("xid-1", "put", 200, 100, 10);
-    metrics.recordRequest("xid-1", "put", 200, 50, 20);
-    metrics.recordRequest("xid-1", "get", 200, 30, 5);
+    String xid = "xid-1";
+    long putRequest1Bytes = 100;
+    long putRequest2Bytes = 50;
+    long getRequestBytes = 30;
+    // latency is not asserted here, only bytes — keep it small but explicit.
+    long irrelevantLatencyMs = 10;
+
+    metrics.recordRequest(xid, "put", 200, putRequest1Bytes, irrelevantLatencyMs);
+    metrics.recordRequest(xid, "put", 200, putRequest2Bytes, irrelevantLatencyMs);
+    metrics.recordRequest(xid, "get", 200, getRequestBytes, irrelevantLatencyMs);
 
     metrics.getMetrics(collector, true);
 
-    verify(rb).addCounter(argThat(info -> info.name().equals("sum_bytes")), eq(150L));
-    verify(rb).addCounter(argThat(info -> info.name().equals("sum_bytes")), eq(30L));
+    // sum_bytes is aggregated per (XID, requestType): two PUTs sum to 150,
+    // the single GET stays as its own 30-byte record.
+    long expectedPutBytes = putRequest1Bytes + putRequest2Bytes;
+    verify(rb).addCounter(argThat(info -> info.name().equals("sum_bytes")), eq(expectedPutBytes));
+    verify(rb).addCounter(argThat(info -> info.name().equals("sum_bytes")), eq(getRequestBytes));
   }
 
   @Test
   @DisplayName("Average latency is grouped by XID")
   void testAverageLatencyGroupedByXid() {
-    metrics.recordRequest("xid-1", "put", 200, 100, 10);
-    metrics.recordRequest("xid-1", "get", 200, 50, 30);
+    String xid = "xid-1";
+    long putBytes = 100;
+    long getBytes = 50;
+    long putLatencyMs = 10;
+    long getLatencyMs = 30;
+    // average_latency is aggregated per XID (across all request types).
+    long expectedAverageLatencyMs = (putLatencyMs + getLatencyMs) / 2; // (10 + 30) / 2 = 20
+
+    metrics.recordRequest(xid, "put", 200, putBytes, putLatencyMs);
+    metrics.recordRequest(xid, "get", 200, getBytes, getLatencyMs);
 
     metrics.getMetrics(collector, true);
 
-    verify(rb).addGauge(argThat(info -> info.name().equals("average_latency")), eq(20.0));
+    verify(rb).addGauge(argThat(info -> info.name().equals("average_latency")),
+        eq((double) expectedAverageLatencyMs));
   }
 
   @Test
   @DisplayName("Request count is grouped by XID")
   void testRequestCountGroupedByXid() {
-    metrics.recordRequest("xid-1", "put", 200, 100, 10);
-    metrics.recordRequest("xid-1", "get", 404, 0, 20);
-    metrics.recordRequest("xid-1", "get", 500, 0, 30);
+    String xid = "xid-1";
+    int successPut = 200;
+    int notFoundGet = 404;
+    int serverErrorGet = 500;
+    // bytes/latency are irrelevant to count_requests; pass placeholders.
+    long irrelevantBytes = 0;
+    long irrelevantLatencyMs = 0;
+    long expectedCount = 3;
+
+    metrics.recordRequest(xid, "put", successPut, irrelevantBytes, irrelevantLatencyMs);
+    metrics.recordRequest(xid, "get", notFoundGet, irrelevantBytes, irrelevantLatencyMs);
+    metrics.recordRequest(xid, "get", serverErrorGet, irrelevantBytes, irrelevantLatencyMs);
 
     metrics.getMetrics(collector, true);
 
-    verify(rb).addCounter(argThat(info -> info.name().equals("count_requests")), eq(3L));
+    // count_requests is aggregated per XID across all request types / error codes.
+    verify(rb).addCounter(argThat(info -> info.name().equals("count_requests")), eq(expectedCount));
   }
 
   @Test
   @DisplayName("Errors are grouped by XID and error code")
   void testErrorsGroupedByXidAndErrorCode() {
-    metrics.recordRequest("xid-1", "get", 404, 0, 10);
-    metrics.recordRequest("xid-1", "get", 404, 0, 15);
-    metrics.recordRequest("xid-1", "put", 500, 0, 20);
+    String xid = "xid-1";
+    int notFoundGet = 404;
+    int serverErrorPut = 500;
+    // bytes/latency are irrelevant to error_count; pass placeholders.
+    long irrelevantBytes = 0;
+    long irrelevantLatencyMs = 0;
+    long expectedNotFoundErrors = 2;
+    long expectedServerErrorCount = 1;
+
+    metrics.recordRequest(xid, "get", notFoundGet, irrelevantBytes, irrelevantLatencyMs);
+    metrics.recordRequest(xid, "get", notFoundGet, irrelevantBytes, irrelevantLatencyMs);
+    metrics.recordRequest(xid, "put", serverErrorPut, irrelevantBytes, irrelevantLatencyMs);
 
     metrics.getMetrics(collector, true);
 
-    verify(rb).addCounter(argThat(info -> info.name().equals("error_count")), eq(2L));
-    verify(rb).addCounter(argThat(info -> info.name().equals("error_count")), eq(1L));
+    // error_count is grouped per (XID, errorCode): two 404s, one 500.
+    verify(rb).addCounter(argThat(info -> info.name().equals("error_count")), eq(expectedNotFoundErrors));
+    verify(rb).addCounter(argThat(info -> info.name().equals("error_count")), eq(expectedServerErrorCount));
   }
 
   @ParameterizedTest
@@ -118,7 +157,10 @@ class TestS3GatewayXidMetrics {
   @DisplayName("Success status codes are not counted as errors")
   void testSuccessStatusCodesAreNotErrors(int successCode) {
     // HTTP success codes must NOT be counted as errors (only >= ERROR_CODE_THRESHOLD).
-    metrics.recordRequest("xid-1", "get", successCode, 100, 10);
+    long irrelevantBytes = 0;
+    long irrelevantLatencyMs = 0;
+
+    metrics.recordRequest("xid-1", "get", successCode, irrelevantBytes, irrelevantLatencyMs);
 
     metrics.getMetrics(collector, true);
 
@@ -129,8 +171,13 @@ class TestS3GatewayXidMetrics {
   @DisplayName("Error code below 400 is not an error")
   void testErrorCodeBelow400() {
     // errorCode < 400 (HTTP success range and 3xx) must NOT be counted as an error.
-    metrics.recordRequest("xid-1", "put", 399, 100, 10);
-    metrics.recordRequest("xid-1", "put", 200, 100, 10);
+    int threeXX = 399;
+    int success = 200;
+    long irrelevantBytes = 0;
+    long irrelevantLatencyMs = 0;
+
+    metrics.recordRequest("xid-1", "put", threeXX, irrelevantBytes, irrelevantLatencyMs);
+    metrics.recordRequest("xid-1", "put", success, irrelevantBytes, irrelevantLatencyMs);
 
     metrics.getMetrics(collector, true);
 
@@ -141,11 +188,16 @@ class TestS3GatewayXidMetrics {
   @DisplayName("Error code 400 is counted as an error")
   void testErrorCodeAt400() {
     // errorCode == 400 must be counted as an error.
-    metrics.recordRequest("xid-1", "put", 400, 100, 10);
+    int badRequest = 400;
+    long irrelevantBytes = 0;
+    long irrelevantLatencyMs = 0;
+    long expectedErrorCount = 1;
+
+    metrics.recordRequest("xid-1", "put", badRequest, irrelevantBytes, irrelevantLatencyMs);
 
     metrics.getMetrics(collector, true);
 
-    verify(rb).addCounter(argThat(info -> info.name().equals("error_count")), eq(1L));
+    verify(rb).addCounter(argThat(info -> info.name().equals("error_count")), eq(expectedErrorCount));
   }
 
   // === XID / requestType normalisation (boundary cases) ===
@@ -155,12 +207,17 @@ class TestS3GatewayXidMetrics {
   @DisplayName("Null/empty XID is normalised to the default value")
   void testXidNormalisedToDefault(String rawXid) {
     // null and empty XID values must both be normalised to "none".
-    metrics.recordRequest(rawXid, "put", 200, 100, 10);
+    String defaultXid = "none";
+    long irrelevantBytes = 0;
+    long irrelevantLatencyMs = 0;
+    long expectedCount = 1;
+
+    metrics.recordRequest(rawXid, "put", 200, irrelevantBytes, irrelevantLatencyMs);
 
     metrics.getMetrics(collector, true);
 
-    verify(rb, atLeastOnce()).tag(any(MetricsInfo.class), eq("none"));
-    verify(rb).addCounter(argThat(info -> info.name().equals("count_requests")), eq(1L));
+    verify(rb, atLeastOnce()).tag(any(MetricsInfo.class), eq(defaultXid));
+    verify(rb).addCounter(argThat(info -> info.name().equals("count_requests")), eq(expectedCount));
   }
 
   @Test
@@ -170,11 +227,17 @@ class TestS3GatewayXidMetrics {
     // during getMetrics. NOTE: requestType is intentionally NOT normalised
     // (unlike XID) — it flows into the BytesMetricKey and the "method" tag
     // as-is, so this test only guards against NPE and the request count.
-    metrics.recordRequest("xid", null, 200, 100, 10);
+    String xid = "xid";
+    String nullRequestType = null;
+    long irrelevantBytes = 0;
+    long irrelevantLatencyMs = 0;
+    long expectedCount = 1;
+
+    metrics.recordRequest(xid, nullRequestType, 200, irrelevantBytes, irrelevantLatencyMs);
 
     metrics.getMetrics(collector, true);
 
-    verify(rb).addCounter(argThat(info -> info.name().equals("count_requests")), eq(1L));
+    verify(rb).addCounter(argThat(info -> info.name().equals("count_requests")), eq(expectedCount));
   }
 
   // === Percentile correctness ===
@@ -183,13 +246,17 @@ class TestS3GatewayXidMetrics {
   @DisplayName("Single sample equals all percentiles")
   void testPercentileSingleSample() {
     // For a single sample, p50/p95/p99 must all equal that sample.
-    metrics.recordRequest("single-xid", "put", 200, 100, 5);
+    long latencyMs = 5;
+    long irrelevantBytes = 0;
+
+    metrics.recordRequest("single-xid", "put", 200, irrelevantBytes, latencyMs);
 
     metrics.getMetrics(collector, true);
 
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p50")), eq(5.0));
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p95")), eq(5.0));
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p99")), eq(5.0));
+    double expectedPercentile = (double) latencyMs;
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p50")), eq(expectedPercentile));
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p95")), eq(expectedPercentile));
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p99")), eq(expectedPercentile));
   }
 
   @Test
@@ -209,46 +276,61 @@ class TestS3GatewayXidMetrics {
     //   p50 position = 0.5*4 + 1 = 3.0   -> sortedSamples[2]      = 3.0
     //   p95 position = 0.95*4 + 1 = 4.8  -> 4 + (5-4)*0.8        = 4.8
     //   p99 position = 0.99*4 + 1 = 4.96 -> 4 + (5-4)*0.96       = 4.96
-    long[] latencies = {1, 2, 3, 4, 5};
-    for (long l : latencies) {
-      metrics.recordRequest("interp-xid", "put", 200, 10, l);
+    long[] latenciesMs = {1, 2, 3, 4, 5};
+    long irrelevantBytes = 0;
+
+    for (long latencyMs : latenciesMs) {
+      metrics.recordRequest("interp-xid", "put", 200, irrelevantBytes, latencyMs);
     }
 
     metrics.getMetrics(collector, true);
 
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p50")), eq(3.0));
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p95")), eq(4.8));
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p99")), eq(4.96));
+    double expectedP50 = 3.0;
+    double expectedP95 = 4.8;
+    double expectedP99 = 4.96;
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p50")), eq(expectedP50));
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p95")), eq(expectedP95));
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p99")), eq(expectedP99));
   }
 
   @Test
   @DisplayName("Percentile boundary cases")
   void testPercentileBoundaries() {
+    long firstLatencyMs = 10;
+    long secondLatencyMs = 20;
+    long irrelevantBytes = 0;
     // Two-sample midpoint interpolation: [10, 20]
     //   p50 = 10 + (20-10)*0.5  = 15.0
     //   p95 = 10 + (20-10)*0.95 = 19.5
     //   p99 = 10 + (20-10)*0.99 = 19.9
-    metrics.recordRequest("two-xid", "put", 200, 100, 10);
-    metrics.recordRequest("two-xid", "put", 200, 100, 20);
+    double expectedP50 = 15.0;
+    double expectedP95 = 19.5;
+    double expectedP99 = 19.9;
+
+    metrics.recordRequest("two-xid", "put", 200, irrelevantBytes, firstLatencyMs);
+    metrics.recordRequest("two-xid", "put", 200, irrelevantBytes, secondLatencyMs);
 
     metrics.getMetrics(collector, true);
 
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p50")), eq(15.0));
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p95")), eq(19.5));
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p99")), eq(19.9));
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p50")), eq(expectedP50));
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p95")), eq(expectedP95));
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p99")), eq(expectedP99));
 
     // Boundary: all-identical samples must collapse to that constant value
     // regardless of which percentile is requested.
+    long constantLatencyMs = 42;
+    int constantSampleCount = 100;
     resetMocks();
     metrics.clearMetrics();
-    for (int i = 0; i < 100; i++) {
-      metrics.recordRequest("same-xid", "put", 200, 100, 42);
+    for (int i = 0; i < constantSampleCount; i++) {
+      metrics.recordRequest("same-xid", "put", 200, irrelevantBytes, constantLatencyMs);
     }
     metrics.getMetrics(collector, true);
 
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p50")), eq(42.0));
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p95")), eq(42.0));
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p99")), eq(42.0));
+    double expectedConstantPercentile = (double) constantLatencyMs;
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p50")), eq(expectedConstantPercentile));
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p95")), eq(expectedConstantPercentile));
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p99")), eq(expectedConstantPercentile));
   }
 
   // === Percentile cache ===
@@ -257,9 +339,14 @@ class TestS3GatewayXidMetrics {
   @DisplayName("Percentiles are cached between reads")
   void testPercentileCaching() {
     // First call computes percentiles and caches them.
-    metrics.recordRequest("cached-xid", "put", 200, 100, 50);
-    metrics.recordRequest("cached-xid", "put", 200, 100, 100);
-    metrics.recordRequest("cached-xid", "put", 200, 100, 150);
+    long firstLatencyMs = 50;
+    long secondLatencyMs = 100;
+    long thirdLatencyMs = 150;
+    long irrelevantBytes = 0;
+
+    metrics.recordRequest("cached-xid", "put", 200, irrelevantBytes, firstLatencyMs);
+    metrics.recordRequest("cached-xid", "put", 200, irrelevantBytes, secondLatencyMs);
+    metrics.recordRequest("cached-xid", "put", 200, irrelevantBytes, thirdLatencyMs);
 
     metrics.getMetrics(collector, true);
     verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p50")), anyDouble());
@@ -275,10 +362,15 @@ class TestS3GatewayXidMetrics {
   @Test
   @DisplayName("Percentile cache is invalidated on sample overflow")
   void testPercentileCacheInvalidationOnOverflow() {
+    long lowLatencyMs = 1;
+    long highLatencyMs = 100;
+    int initialSampleCount = 10;
+    long irrelevantBytes = 0;
+
     // Phase 1: small number of samples with low latency. Cache is populated
     // by the first getMetrics() call.
-    for (int i = 0; i < 10; i++) {
-      metrics.recordRequest("overflow-xid", "put", 200, 10, 1);
+    for (int i = 0; i < initialSampleCount; i++) {
+      metrics.recordRequest("overflow-xid", "put", 200, irrelevantBytes, lowLatencyMs);
     }
     metrics.getMetrics(collector, true);
 
@@ -286,14 +378,14 @@ class TestS3GatewayXidMetrics {
     verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p99")),
         firstP99Captor.capture());
     double firstP99 = firstP99Captor.getValue();
-    assertEquals(1.0, firstP99, 0.001, "Initial p99 should be 1");
+    assertEquals((double) lowLatencyMs, firstP99, 0.001, "Initial p99 should be 1");
 
     // Phase 2: add many more samples up to the sample cap with a higher
     // latency. The cache must be invalidated because the sample size grew.
     resetMocks();
-    int additional = metrics.getMaxLatencySamplesPerXid() - 10;
+    int additional = metrics.getMaxLatencySamplesPerXid() - initialSampleCount;
     for (int i = 0; i < additional; i++) {
-      metrics.recordRequest("overflow-xid", "put", 200, 10, 100);
+      metrics.recordRequest("overflow-xid", "put", 200, irrelevantBytes, highLatencyMs);
     }
 
     metrics.getMetrics(collector, true);
@@ -304,14 +396,18 @@ class TestS3GatewayXidMetrics {
 
     assertNotEquals(firstP99, secondP99,
         "Cache must be invalidated after new samples are added");
-    assertEquals(100.0, secondP99, 0.001, "Recomputed p99 should be 100");
+    assertEquals((double) highLatencyMs, secondP99, 0.001, "Recomputed p99 should be 100");
   }
 
   @Test
   @DisplayName("Percentile cache is invalidated on clear")
   void testPercentileCacheInvalidationOnClear() {
+    long cachedLatencyMs = 50;
+    long newLatencyMs = 100;
+    long irrelevantBytes = 0;
+
     // Populate the cache with a single latency=50 sample.
-    metrics.recordRequest("phase-xid", "put", 200, 100, 50);
+    metrics.recordRequest("phase-xid", "put", 200, irrelevantBytes, cachedLatencyMs);
     metrics.getMetrics(collector, true);
 
     // clearMetrics() must also clear the percentile cache.
@@ -321,12 +417,13 @@ class TestS3GatewayXidMetrics {
     // A new sample with a different latency. If the cache had not been
     // cleared, the cached percentile would be reused and the assertion
     // below would fail.
-    metrics.recordRequest("phase-xid", "put", 200, 100, 100);
+    metrics.recordRequest("phase-xid", "put", 200, irrelevantBytes, newLatencyMs);
     metrics.getMetrics(collector, true);
 
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p50")), eq(100.0));
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p95")), eq(100.0));
-    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p99")), eq(100.0));
+    double expectedPercentile = (double) newLatencyMs;
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p50")), eq(expectedPercentile));
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p95")), eq(expectedPercentile));
+    verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p99")), eq(expectedPercentile));
   }
 
   // === Eviction ===
@@ -338,8 +435,11 @@ class TestS3GatewayXidMetrics {
     // map is trimmed back below the per-map limit. errorsTotal grows, then
     // is reduced by one entry per throttled eviction.
     int totalRecords = 65536;
+    int firstErrorCode = 400; // 400 + i ensures each record is a distinct error key
+    long irrelevantBytes = 10;
+    long irrelevantLatencyMs = 5;
     for (int i = 0; i < totalRecords; i++) {
-      metrics.recordRequest("evict-xid", "put", 400 + i, 10, 5);
+      metrics.recordRequest("evict-xid", "put", firstErrorCode + i, irrelevantBytes, irrelevantLatencyMs);
     }
 
     Map<?, ?> errorsTotalMap = metrics.getErrorsTotal();
@@ -356,10 +456,19 @@ class TestS3GatewayXidMetrics {
   @Test
   @DisplayName("Metrics are cleared after the cleanup interval")
   void testMetricsAreDeletedAfterCleanupInterval() {
-    metrics.recordRequest("xid-1", "put", 200, 100, 10);
-    metrics.recordRequest("xid-2", "get", 404, 50, 20);
+    String firstXid = "xid-1";
+    String secondXid = "xid-2";
+    long firstBytes = 100;
+    long secondBytes = 50;
+    long firstLatencyMs = 10;
+    long secondLatencyMs = 20;
+    int secondErrorCode = 404; // triggers an error entry
+    long cleanUpAgeMs = 3L * 24 * 60 * 60 * 1000; // 3 days, beyond the 1-day interval
 
-    long oldTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(3);
+    metrics.recordRequest(firstXid, "put", 200, firstBytes, firstLatencyMs);
+    metrics.recordRequest(secondXid, "get", secondErrorCode, secondBytes, secondLatencyMs);
+
+    long oldTime = System.currentTimeMillis() - cleanUpAgeMs;
     metrics.setLastCleanupTime(oldTime);
     metrics.cleanupIfNeeded();
 
@@ -383,9 +492,14 @@ class TestS3GatewayXidMetrics {
   @Test
   @DisplayName("Metrics are kept before the cleanup interval")
   void testMetricsAreNotDeletedBeforeCleanupInterval() {
-    metrics.recordRequest("xid-1", "put", 200, 100, 10);
+    String xid = "xid-1";
+    long bytes = 100;
+    long latencyMs = 10;
+    long recentAgeMs = 1L * 60 * 60 * 1000; // 1 hour, within the 1-day interval
 
-    long recentTime = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(1);
+    metrics.recordRequest(xid, "put", 200, bytes, latencyMs);
+
+    long recentTime = System.currentTimeMillis() - recentAgeMs;
     metrics.setLastCleanupTime(recentTime);
     metrics.cleanupIfNeeded();
 
@@ -395,8 +509,8 @@ class TestS3GatewayXidMetrics {
     assertFalse(metrics.getBytesMetricKeyPool().isEmpty(), "bytesMetricKeyPool should NOT have been cleared yet");
 
     metrics.getMetrics(collector, true);
-    verify(rb).addCounter(argThat(info -> info.name().equals("sum_bytes")), eq(100L));
-    verify(rb).addGauge(argThat(info -> info.name().equals("average_latency")), eq(10.0));
+    verify(rb).addCounter(argThat(info -> info.name().equals("sum_bytes")), eq(bytes));
+    verify(rb).addGauge(argThat(info -> info.name().equals("average_latency")), eq((double) latencyMs));
   }
 
   // === XID monitoring ===
@@ -404,7 +518,11 @@ class TestS3GatewayXidMetrics {
   @Test
   @DisplayName("Active XID count is emitted")
   void testXidMonitoringActiveCount() {
-    metrics.recordRequest("monitor-xid", "put", 200, 100, 10);
+    String xid = "monitor-xid";
+    long irrelevantBytes = 0;
+    long irrelevantLatencyMs = 0;
+
+    metrics.recordRequest(xid, "put", 200, irrelevantBytes, irrelevantLatencyMs);
     metrics.getMetrics(collector, true);
 
     verify(rb).addCounter(argThat(info -> info.name().equals("activeXidCount")), eq(1L));
@@ -413,7 +531,11 @@ class TestS3GatewayXidMetrics {
   @Test
   @DisplayName("Active XID count resets when metrics are cleared")
   void testXidMonitoringClearResetsCount() {
-    metrics.recordRequest("clear-monitor-xid", "put", 200, 100, 10);
+    String xid = "clear-monitor-xid";
+    long irrelevantBytes = 0;
+    long irrelevantLatencyMs = 0;
+
+    metrics.recordRequest(xid, "put", 200, irrelevantBytes, irrelevantLatencyMs);
     metrics.getMetrics(collector, true);
     verify(rb).addCounter(argThat(info -> info.name().equals("activeXidCount")), eq(1L));
 
@@ -430,9 +552,11 @@ class TestS3GatewayXidMetrics {
   @DisplayName("XID threshold triggers the memory ratio alert")
   void testXidMonitoringThresholdAlert() {
     // Add one more than the threshold to trigger the xidMemoryRatio alert.
+    long irrelevantBytes = 0;
+    long irrelevantLatencyMs = 0;
     int threshold = metrics.getMaxXidMonitoringThreshold();
     for (int i = 0; i <= threshold; i++) {
-      metrics.recordRequest("alert-xid-" + i, "put", 200, 10, 5);
+      metrics.recordRequest("alert-xid-" + i, "put", 200, irrelevantBytes, irrelevantLatencyMs);
     }
 
     resetMocks();
@@ -684,7 +808,10 @@ class TestS3GatewayXidMetrics {
   @Test
   @DisplayName("Concurrent getMetrics and clearMetrics do not throw")
   void testGetMetricsAndClearMetricsConcurrentAccess() throws InterruptedException {
-    metrics.recordRequest("race-xid", "put", 200, 100, 10);
+    String xid = "race-xid";
+    long irrelevantBytes = 100;
+    long irrelevantLatencyMs = 10;
+    metrics.recordRequest(xid, "put", 200, irrelevantBytes, irrelevantLatencyMs);
 
     ExecutorService executor = Executors.newFixedThreadPool(2);
     CountDownLatch startLatch = new CountDownLatch(1);
@@ -735,6 +862,8 @@ class TestS3GatewayXidMetrics {
     int threadCount = 10;
     int recordsPerThread = 100;
     String xid = "concurrent-same-xid";
+    long bytesPerRequest = 10;
+    long latencyPerRequestMs = 5;
 
     ExecutorService executor = Executors.newFixedThreadPool(threadCount);
     CountDownLatch startLatch = new CountDownLatch(1);
@@ -747,7 +876,7 @@ class TestS3GatewayXidMetrics {
           startLatch.await();
           for (int i = 0; i < recordsPerThread; i++) {
             try {
-              metrics.recordRequest(xid, "put", 200, 10, 5);
+              metrics.recordRequest(xid, "put", 200, bytesPerRequest, latencyPerRequestMs);
             } catch (Exception e) {
               exceptions.incrementAndGet();
             }
@@ -767,7 +896,7 @@ class TestS3GatewayXidMetrics {
     assertEquals(0, exceptions.get(),
         "No exceptions during concurrent recordRequest with same XID");
 
-    long expectedBytes = (long) threadCount * recordsPerThread * 10L;
+    long expectedBytes = (long) threadCount * recordsPerThread * bytesPerRequest;
     metrics.getMetrics(collector, true);
     verify(rb).addCounter(argThat(info -> info.name().equals("sum_bytes")), eq(expectedBytes));
     verify(rb).addCounter(argThat(info -> info.name().equals("count_requests")),
@@ -781,6 +910,8 @@ class TestS3GatewayXidMetrics {
     // insertion and the eviction sweep without throwing.
     int threadCount = 10;
     int recordsPerThread = 100;
+    long bytesPerRequest = 10;
+    long latencyPerRequestMs = 5;
 
     ExecutorService executor = Executors.newFixedThreadPool(threadCount);
     CountDownLatch startLatch = new CountDownLatch(1);
@@ -794,7 +925,8 @@ class TestS3GatewayXidMetrics {
           startLatch.await();
           for (int i = 0; i < recordsPerThread; i++) {
             try {
-              metrics.recordRequest("xid-" + threadId + "-" + i, "put", 200, 10, 5);
+              metrics.recordRequest("xid-" + threadId + "-" + i, "put", 200,
+                  bytesPerRequest, latencyPerRequestMs);
             } catch (Exception e) {
               exceptions.incrementAndGet();
             }
@@ -824,6 +956,10 @@ class TestS3GatewayXidMetrics {
     // One thread writes, another reads the same xid concurrently. The reader
     // may see partially-updated state but must never see NPE or other runtime
     // exceptions from the metric computation paths.
+    String xid = "rw-xid";
+    int writeIterations = 500;
+    long bytesPerRequest = 10;
+    long latencyPerRequestMs = 5;
     ExecutorService executor = Executors.newFixedThreadPool(2);
     CountDownLatch startLatch = new CountDownLatch(1);
     CountDownLatch doneLatch = new CountDownLatch(2);
@@ -832,9 +968,9 @@ class TestS3GatewayXidMetrics {
     executor.submit(() -> {
       try {
         startLatch.await();
-        for (int i = 0; i < 500; i++) {
+        for (int i = 0; i < writeIterations; i++) {
           try {
-            metrics.recordRequest("rw-xid", "put", 200, 10, 5);
+            metrics.recordRequest(xid, "put", 200, bytesPerRequest, latencyPerRequestMs);
           } catch (Exception e) {
             exceptions.incrementAndGet();
           }
@@ -849,7 +985,7 @@ class TestS3GatewayXidMetrics {
     executor.submit(() -> {
       try {
         startLatch.await();
-        for (int i = 0; i < 500; i++) {
+        for (int i = 0; i < writeIterations; i++) {
           try {
             metrics.getMetrics(collector, true);
           } catch (Exception e) {
@@ -876,6 +1012,9 @@ class TestS3GatewayXidMetrics {
   void testConcurrentGetMetricsWhileRecording() throws Exception {
     int threadCount = 4;
     int totalRecords = 10_000;
+    long bytesPerRequest = 10;
+    long latencyPerRequestMs = 5;
+    int recordsPerThread = totalRecords / threadCount;
 
     metrics.clearMetrics();
 
@@ -886,8 +1025,8 @@ class TestS3GatewayXidMetrics {
     for (int t = 0; t < threadCount; t++) {
       exec.submit(() -> {
         try {
-          for (int i = 0; i < totalRecords / threadCount; i++) {
-            metrics.recordRequest("concurrent-" + i, "put", 200, 10, 5);
+          for (int i = 0; i < recordsPerThread; i++) {
+            metrics.recordRequest("concurrent-" + i, "put", 200, bytesPerRequest, latencyPerRequestMs);
           }
         } catch (Exception e) {
           throw new RuntimeException(e);
@@ -927,6 +1066,8 @@ class TestS3GatewayXidMetrics {
   void testConcurrentRecordRequestNoDataLoss() throws Exception {
     int threadCount = 4;
     int recordsPerThread = 1000;
+    long bytesPerRequest = 10;
+    long latencyPerRequestMs = 1;
 
     metrics.clearMetrics();
 
@@ -938,7 +1079,8 @@ class TestS3GatewayXidMetrics {
       exec.submit(() -> {
         try {
           for (int i = 0; i < recordsPerThread; i++) {
-            metrics.recordRequest("xid-" + threadId + "-" + i, "put", 200, 10, 1);
+            metrics.recordRequest("xid-" + threadId + "-" + i, "put", 200,
+                bytesPerRequest, latencyPerRequestMs);
           }
         } finally {
           latch.countDown();
