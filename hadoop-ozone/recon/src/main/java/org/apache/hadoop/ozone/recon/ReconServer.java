@@ -183,7 +183,8 @@ public class ReconServer extends GenericCli {
       throws IOException {
     LOG.info("Initializing secure Recon.");
     SCMSecurityProtocolClientSideTranslatorPB scmSecurityClient =
-        getScmSecurityClientWithMaxRetry(configuration, getCurrentUser());
+        getScmSecurityClientWithMaxRetry(configuration, getCurrentUser(),
+            true);
     SecurityConfig secConf = new SecurityConfig(configuration);
     certClient = new ReconCertificateClient(secConf, scmSecurityClient,
         reconStorage, this::saveNewCertId, this::terminateRecon);
@@ -300,7 +301,11 @@ public class ReconServer extends GenericCli {
   private static void loginReconUserIfSecurityEnabled(
       OzoneConfiguration  conf) {
     try {
-      if (OzoneSecurityUtil.isSecurityEnabled(conf)) {
+      OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+      // Recon talks to OM/SCM only; both endpoints are SIMPLE in split-Kerberos
+      // mode. Skip the keytab login when interservice Kerberos is off so
+      // operators can run Recon without a daemon principal.
+      if (OzoneSecurityUtil.requiresInterServiceKerberosLogin(conf)) {
         loginReconUser(conf);
       }
     } catch (Exception ex) {

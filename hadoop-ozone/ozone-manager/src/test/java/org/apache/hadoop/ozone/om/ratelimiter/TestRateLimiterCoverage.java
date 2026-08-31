@@ -34,7 +34,10 @@ public class TestRateLimiterCoverage {
   @Test
   public void testOmRequestTypeCountGuard() {
     final int currentSupportedCount = RATE_LIMITED_READ_CMDS.size() + RATE_LIMITED_WRITE_CMDS.size();
-    final int notSupportedCount = 57;
+    // 57 -> 60: BucketRaftGroupAssign, AcquireBucketRaftGroupAssignmentWriteLock and
+    // ReleaseBucketRaftGroupAssignmentWriteLock (SDPOZN-1979) are internal multi-raft
+    // operations, not client bucket requests, so they are exempt from rate limiting.
+    final int notSupportedCount = 60;
     final int expectedTypeCount = OzoneManagerProtocolProtos.Type.values().length - notSupportedCount;
 
     assertEquals(expectedTypeCount,

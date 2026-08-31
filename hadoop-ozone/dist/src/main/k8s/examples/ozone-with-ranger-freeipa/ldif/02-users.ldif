@@ -1,0 +1,13 @@
+dn: uid=testuser,ou=users,ou=accounts,dc=example,dc=test
+objectClass: inetOrgPerson
+uid: testuser
+cn: testuser
+sn: testuser
+userPassword: TestUser1!
+
+dn: uid=testuser2,ou=users,ou=accounts,dc=example,dc=test
+objectClass: inetOrgPerson
+uid: testuser2
+cn: testuser2
+sn: testuser2
+userPassword: TestUser1!

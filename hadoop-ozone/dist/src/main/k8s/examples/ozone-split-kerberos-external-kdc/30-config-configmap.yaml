@@ -1,0 +1,141 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Ozone daemon config for the external-KDC variant of split-Kerberos —
+# HA edition with 3 OMs and 3 SCMs. Step N's HA-aware OM port rewrite is
+# only meaningful when there is more than one OM pod; this example
+# exercises that case so the same configmap shape that DropApp uses
+# (3 OMs in HA, 3 SCMs in HA, stable-name principals, port-only Step M/N
+# service.rpc-address values) is verifiable end-to-end on minikube.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config
+  namespace: ozone-extkdc-cluster
+data:
+  # ── OM HA ──────────────────────────────────────────────────────────
+  # The HA service ID + per-node addresses are read by
+  # SCMNodeInfo/OmUtils to build the failover proxy provider. Pod
+  # FQDNs come from the headless `om` Service in this namespace; each
+  # om-N pod resolves om-N.om.<ns>.svc.cluster.local to its own IP.
+  OZONE-SITE.XML_ozone.om.service.ids: omservice
+  OZONE-SITE.XML_ozone.om.nodes.omservice: om0,om1,om2
+  OZONE-SITE.XML_ozone.om.address.omservice.om0: om-0.om.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.om.address.omservice.om1: om-1.om.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.om.address.omservice.om2: om-2.om.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.om.ratis.enable: "true"
+
+  # ── SCM HA ─────────────────────────────────────────────────────────
+  OZONE-SITE.XML_ozone.scm.service.ids: scmservice
+  OZONE-SITE.XML_ozone.scm.nodes.scmservice: scm0,scm1,scm2
+  OZONE-SITE.XML_ozone.scm.address.scmservice.scm0: scm-0.scm.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.scm.address.scmservice.scm1: scm-1.scm.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.scm.address.scmservice.scm2: scm-2.scm.ozone-extkdc-cluster.svc.cluster.local
+  OZONE-SITE.XML_ozone.scm.ratis.enable: "true"
+  OZONE-SITE.XML_ozone.scm.primordial.node.id: scm0
+
+  # ── Storage ────────────────────────────────────────────────────────
+  OZONE-SITE.XML_hdds.datanode.dir: /data/storage
+  OZONE-SITE.XML_ozone.scm.datanode.id.dir: /data
+  OZONE-SITE.XML_ozone.metadata.dirs: /data/metadata
+  OZONE-SITE.XML_hdds.scm.safemode.min.datanode: "1"
+  OZONE-SITE.XML_ozone.datanode.pipeline.limit: "1"
+  OZONE-SITE.XML_dfs.datanode.use.datanode.hostname: "true"
+
+  # ── Recon ──────────────────────────────────────────────────────────
+  # DNs heartbeat to Recon on this address (in addition to SCM:9861).
+  # Recon's own RPC to OM/SCM is built from the standard service-id
+  # keys above; no Recon-specific override needed for that path.
+  OZONE-SITE.XML_ozone.recon.address: recon-0.recon.ozone-extkdc-cluster.svc.cluster.local:9891
+  OZONE-SITE.XML_ozone.recon.datanode.address: recon-0.recon.ozone-extkdc-cluster.svc.cluster.local:9891
+
+  # ── Split-Kerberos flags ──────────────────────────────────────────
+  OZONE-SITE.XML_ozone.security.enabled: "true"
+  OZONE-SITE.XML_ozone.security.kerberos.external.enabled: "true"
+  OZONE-SITE.XML_ozone.security.kerberos.interservice.enabled: "false"
+
+  # ── Step P: acceptor-only override ────────────────────────────────
+  # Default is "true" → flips Krb5LoginModule isInitiator=false (Step L).
+  # That works for daemons that only need to accept SPNEGO/RPC tickets
+  # — but the OM here has an outbound Kerberos consumer (Ranger plugin
+  # SPNEGO REST poll, see 64-ranger-ozone-security-configmap.yaml +
+  # 61-ranger-admin.yaml). Without a TGT the plugin can't sign its
+  # outbound calls and the policy poll silently 401s, freezing the ACL
+  # table. Set false to make every daemon do a normal AS-REQ at startup
+  # + run Hadoop's auto-renewer. SCM/DN/S3G/Recon pay one AS-REQ each at
+  # startup — a small cost in exchange for one config to keep across the
+  # whole cluster.
+  OZONE-SITE.XML_ozone.security.kerberos.acceptor-only.enabled: "false"
+
+  # ── Step C-1 / Step N: SIMPLE sibling on OM ─────────────────────────
+  # Port-only declaration (host portion is cosmetic — every OM pod binds
+  # 0.0.0.0:9864 on its pod IP). Step N's OzoneClientCache rewrite reads
+  # this value, extracts the port, and replaces the port on every
+  # ozone.om.address.<service>.<nodeId> on the cloned conf S3G hands to
+  # the failover proxy provider. Result: S3G dials each of
+  # om-{0,1,2}.om.<ns>.svc.cluster.local:9864 over SIMPLE.
+  OZONE-SITE.XML_ozone.om.service.rpc-address: 0.0.0.0:9864
+  # ── Step M: SIMPLE sibling on SCM ───────────────────────────────────
+  # Same shape — port-only, every SCM pod binds 0.0.0.0:9866. OM's
+  # HAUtils.getScmContainerClient(internalCaller=true) rewrites
+  # ozone.scm.client.port to 9866 so refreshPipeline rides the SIMPLE
+  # port across all three SCM pods.
+  OZONE-SITE.XML_ozone.scm.service.rpc-address: 0.0.0.0:9866
+  # ── Step Q: SIMPLE sibling on SCM SCMSecurityProtocol ───────────────
+  # Same shape as Step M, but for the cert + secret-key protocol family.
+  # When this key is set, SCM binds a second SCMSecurityProtocol server
+  # at 0.0.0.0:9962 with SIMPLE auth, and the legacy 9961 reverts to
+  # Kerberos when external Kerberos is enabled — so external admin
+  # commands `ozone admin cert list/info/...` authenticate genuinely
+  # against scm/scm@. OM/DN/Recon's cert clients route to 9962 via
+  # HddsServerUtil.getScmSecurityClientWithMaxRetry(..., true).
+  OZONE-SITE.XML_ozone.scm.security.service.rpc-address: 0.0.0.0:9962
+
+  # ── Tokens stay HMAC-verified ──────────────────────────────────────
+  OZONE-SITE.XML_hdds.block.token.enabled: "true"
+  OZONE-SITE.XML_hdds.container.token.enabled: "true"
+  OZONE-SITE.XML_hdds.grpc.tls.enabled: "false"
+
+  # ── ACLs ───────────────────────────────────────────────────────────
+  # RangerOzoneAuthorizer activates only on the OM that actually has the
+  # Ranger plugin JARs on classpath (the spnego-ranger-om:dev image built
+  # by Dockerfile.spnego-ranger-om). Other daemons see the class name in
+  # config but never instantiate it — only OM authorises requests.
+  OZONE-SITE.XML_ozone.acl.enabled: "true"
+  OZONE-SITE.XML_ozone.acl.authorizer.class: org.apache.ranger.authorization.ozone.authorizer.RangerOzoneAuthorizer
+  OZONE-SITE.XML_ozone.administrators: "testuser,om,scm,dn,s3g,hadoop,root"
+  OZONE-SITE.XML_ozone.s3.administrators: "testuser,s3g,hadoop,root"
+
+  # ── Principals (stable, FQDN-free; KDC needs only these) ──────────
+  OZONE-SITE.XML_ozone.om.kerberos.principal: om/om@EXAMPLE.COM
+  OZONE-SITE.XML_ozone.om.kerberos.keytab.file: /etc/security/keytabs/om.keytab
+  OZONE-SITE.XML_hdds.scm.kerberos.principal: scm/scm@EXAMPLE.COM
+  OZONE-SITE.XML_hdds.scm.kerberos.keytab.file: /etc/security/keytabs/scm.keytab
+  HDFS-SITE.XML_dfs.datanode.kerberos.principal: dn/dn@EXAMPLE.COM
+  HDFS-SITE.XML_dfs.datanode.kerberos.keytab.file: /etc/security/keytabs/dn.keytab
+  OZONE-SITE.XML_ozone.s3g.kerberos.principal: s3g/s3g@EXAMPLE.COM
+  OZONE-SITE.XML_ozone.s3g.kerberos.keytab.file: /etc/security/keytabs/s3g.keytab
+
+  OZONE-SITE.XML_ozone.security.http.kerberos.enabled: "false"
+  OZONE-SITE.XML_ozone.om.http.auth.type: simple
+  OZONE-SITE.XML_hdds.scm.http.auth.type: simple
+  OZONE-SITE.XML_ozone.s3g.http.auth.type: simple
+  OZONE-SITE.XML_ozone.s3g.secret.http.auth.type: simple
+
+  CORE-SITE.XML_hadoop.security.authentication: kerberos
+  CORE-SITE.XML_hadoop.security.authorization: "false"
+  CORE-SITE.XML_hadoop.security.auth_to_local: "DEFAULT"
+  CORE-SITE.XML_ipc.client.fallback-to-simple-auth-allowed: "true"
+
+  LOG4J.PROPERTIES_log4j.rootLogger: INFO, stdout
+  LOG4J.PROPERTIES_log4j.appender.stdout: org.apache.log4j.ConsoleAppender
+  LOG4J.PROPERTIES_log4j.appender.stdout.layout: org.apache.log4j.PatternLayout
+  LOG4J.PROPERTIES_log4j.appender.stdout.layout.ConversionPattern: '%d{yyyy-MM-dd HH:mm:ss} %-5p %c{1}:%L - %m%n'

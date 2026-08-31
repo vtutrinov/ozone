@@ -45,6 +45,9 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.De
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.OMConfigurationRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.OMConfigurationResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.OMNodeInfo;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.RangerCacheControlRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.RangerCacheControlResponse;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.RangerCacheOpType;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -209,6 +212,25 @@ public final class OMAdminProtocolClientSideImpl implements OMAdminProtocol {
       throwException("Request to decommission" + removeOMNode.getOMPrintInfo() +
           ", sent to " + omPrintInfo + " failed with error: " +
           response.getErrorMsg());
+    }
+  }
+
+  @Override
+  public RangerCacheControlResponse rangerCacheControl(RangerCacheOpType op,
+      String name, long ttlMillis) throws IOException {
+    RangerCacheControlRequest.Builder request =
+        RangerCacheControlRequest.newBuilder().setOp(op);
+    if (name != null) {
+      request.setName(name);
+    }
+    if (ttlMillis > 0) {
+      request.setTtlMillis(ttlMillis);
+    }
+
+    try {
+      return rpcProxy.rangerCacheControl(NULL_RPC_CONTROLLER, request.build());
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
     }
   }
 

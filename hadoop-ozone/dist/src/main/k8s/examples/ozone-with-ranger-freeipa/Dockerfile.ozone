@@ -1,0 +1,34 @@
+# Ozone test image with the Ranger Ozone plugin (+ ranger-ipa-userstore) baked
+# in. Build context is this directory; it pulls the Ozone dist tarball from
+# the parent repo's hadoop-ozone/dist/target/ and the plugin tarball from
+# component-ranger-plugins/target/.
+FROM apache/ozone-runner:20230615-1
+
+USER root
+
+# Ozone dist (built by `mvn -pl :ozone -am package -DskipTests` upstream).
+# Build context is the component-ozone root.
+COPY hadoop-ozone/dist/target/ozone-*.tar.gz /tmp/ozone.tar.gz
+RUN tar -xzf /tmp/ozone.tar.gz -C /opt && rm /tmp/ozone.tar.gz && \
+    rm -rf /opt/ozone && \
+    mv /opt/ozone-* /opt/ozone
+
+# Ranger plugin tarball — drop every JAR (plugin + ranger-ipa-userstore) into
+# /opt/ozone/share/ozone/lib/ so the default classpath has them. Whether they
+# get LOADED is controlled by core-site.xml: OM's points hadoop.security.group.mapping
+# at IpaGroupMapping; SCM/DN/S3G's doesn't, so they ignore the JAR.
+COPY ranger-2.4.0-ozone-plugin.tar.gz /tmp/rngr.tar.gz
+RUN mkdir -p /ranger-plugin && \
+    tar -xzf /tmp/rngr.tar.gz -C /ranger-plugin --strip-components=1 && \
+    cp -v /ranger-plugin/lib/libext/*.jar                          /opt/ozone/share/ozone/lib/ 2>/dev/null || true && \
+    cp -v /ranger-plugin/lib/libext/ranger-ozone-plugin-impl/*.jar /opt/ozone/share/ozone/lib/ 2>/dev/null || true && \
+    rm /tmp/rngr.tar.gz && \
+    # Ozone's per-daemon .classpath files are a single line "classpath=A:B:C".
+    # Append the SDPOZN-2434 plugin + the ranger-ozone-plugin shim/impl JARs to
+    # OM's classpath only — SCM/DN/S3G keep their stock classpaths and never
+    # see the class.
+    sed -i 's|$|:$HDDS_LIB_JARS_DIR/ranger-ipa-userstore-2.4.0.jar:$HDDS_LIB_JARS_DIR/ranger-ozone-plugin-2.4.0.jar:$HDDS_LIB_JARS_DIR/ranger-ozone-plugin-shim-2.4.0.jar|' /opt/ozone/share/ozone/classpath/ozone-manager.classpath
+
+ENV PATH=/opt/ozone/bin:$PATH
+
+USER hadoop

@@ -1,0 +1,185 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Two Services for OM HA:
+#   om         — headless, gives each pod a stable FQDN
+#                (om-N.om.<ns>.svc.cluster.local) so the failover proxy
+#                provider can dial each replica directly.
+#   om-public  — regular ClusterIP, for external client URIs that don't
+#                speak the omservice failover protocol (e.g. ofs URLs
+#                pointing at a single endpoint). Round-robins to the
+#                three pods.
+apiVersion: v1
+kind: Service
+metadata:
+  name: om
+  namespace: ozone-extkdc-cluster
+spec:
+  clusterIP: None
+  ports:
+  - port: 9862
+    name: client-rpc
+  - port: 9864
+    name: service-rpc
+  - port: 9874
+    name: ui
+  selector:
+    app: ozone-extkdc
+    component: om
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: om-public
+  namespace: ozone-extkdc-cluster
+spec:
+  ports:
+  - port: 9862
+    name: client-rpc
+  selector:
+    app: ozone-extkdc
+    component: om
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: om
+  namespace: ozone-extkdc-cluster
+spec:
+  selector:
+    matchLabels:
+      app: ozone-extkdc
+      component: om
+  serviceName: om
+  podManagementPolicy: Parallel
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: ozone-extkdc
+        component: om
+    spec:
+      # Default StatefulSet hostnames are om-0, om-1, om-2 (one per pod
+      # ordinal). They resolve to om-N.om.<ns>.svc.cluster.local via the
+      # headless Service above — that's the FQDN scheme baked into the
+      # ozone.om.address.omservice.omN keys in the configmap.
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+      # OM HA bootstrap: pod-ordinal-0 runs `ozone om --init`, others
+      # run `ozone om --bootstrap` to join the existing Ratis ring.
+      # Detection by hostname instead of an env var per pod.
+      - name: om-init
+        # OM-only variant with the Ranger Ozone plugin baked in (see
+        # Dockerfile.spnego-ranger-om). Other daemons keep the stock
+        # ozone-split-kerberos:dev image.
+        image: spnego-ranger-om:dev
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+            set -e
+            /opt/hadoop/libexec/envtoconf.py --destination /opt/hadoop/etc/hadoop >/dev/null
+            HOSTNAME=$(hostname)
+            echo "OM init for $HOSTNAME"
+            if [[ ! -f /data/metadata/om/current/VERSION ]] ; then
+              if [[ "$HOSTNAME" = "om-0" ]] ; then
+                echo "→ first OM, running --init"
+                ozone om --init
+              else
+                echo "→ joining existing HA ring via --bootstrap"
+                ozone om --bootstrap
+              fi
+            else
+              echo "OM already initialised — skipping."
+            fi
+        envFrom:
+        - configMapRef:
+            name: config
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: keytabs
+          mountPath: /etc/security/keytabs
+          readOnly: true
+        - name: krb5
+          mountPath: /etc/krb5.conf
+          subPath: krb5.conf
+          readOnly: true
+        - name: ranger-ozone-security
+          mountPath: /opt/ozone/etc/hadoop/ranger-ozone-security.xml
+          subPath: ranger-ozone-security.xml
+          readOnly: true
+        - name: ranger-ozone-security
+          mountPath: /opt/ozone/etc/hadoop/ranger-ozone-audit.xml
+          subPath: ranger-ozone-audit.xml
+          readOnly: true
+      containers:
+      - name: om
+        # OM-only variant with the Ranger Ozone plugin baked in (see
+        # Dockerfile.spnego-ranger-om). Other daemons keep the stock
+        # ozone-split-kerberos:dev image.
+        image: spnego-ranger-om:dev
+        imagePullPolicy: IfNotPresent
+        args: [ozone, om]
+        env:
+        - name: WAITFOR
+          value: scm-0.scm.ozone-extkdc-cluster.svc.cluster.local:9876
+        ports:
+        - containerPort: 9862
+          name: client-rpc
+        - containerPort: 9864
+          name: service-rpc
+        - containerPort: 9874
+          name: ui
+        livenessProbe:
+          tcpSocket:
+            port: 9862
+          initialDelaySeconds: 60
+        envFrom:
+        - configMapRef:
+            name: config
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: keytabs
+          mountPath: /etc/security/keytabs
+          readOnly: true
+        - name: krb5
+          mountPath: /etc/krb5.conf
+          subPath: krb5.conf
+          readOnly: true
+        - name: ranger-ozone-security
+          mountPath: /opt/ozone/etc/hadoop/ranger-ozone-security.xml
+          subPath: ranger-ozone-security.xml
+          readOnly: true
+        - name: ranger-ozone-security
+          mountPath: /opt/ozone/etc/hadoop/ranger-ozone-audit.xml
+          subPath: ranger-ozone-audit.xml
+          readOnly: true
+      volumes:
+      - name: keytabs
+        secret:
+          secretName: keytabs
+      - name: krb5
+        configMap:
+          name: krb5
+      - name: ranger-ozone-security
+        configMap:
+          name: ranger-ozone-security
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi

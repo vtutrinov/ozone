@@ -39,6 +39,7 @@ import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.exceptions.OMLeaderNotReadyException;
 import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
+import org.apache.hadoop.ozone.om.exceptions.OMRaftLogInconsistencyException;
 import org.apache.hadoop.ozone.om.helpers.OMNodeDetails;
 import org.apache.hadoop.ozone.om.helpers.OMRatisHelper;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
@@ -764,7 +765,68 @@ public final class OzoneManagerRatisServer {
   public void start() throws IOException {
     LOG.info("Starting {} {} at port {}", getClass().getSimpleName(),
         server.getId(), port);
-    server.start();
+    try {
+      server.start();
+    } catch (RuntimeException re) {
+      OMRaftLogInconsistencyException wrapped = maybeWrapGapException(re);
+      if (wrapped != null) {
+        throw wrapped;
+      }
+      throw re;
+    } catch (IOException ioe) {
+      OMRaftLogInconsistencyException wrapped = maybeWrapGapException(ioe);
+      if (wrapped != null) {
+        throw wrapped;
+      }
+      throw ioe;
+    }
+  }
+
+  /**
+   * Walk the cause chain looking for an {@link IllegalStateException} whose
+   * message starts with "gap between entr" and that originates from the Ratis
+   * segmented raft log. When found, return a {@link OMRaftLogInconsistencyException}
+   * naming the gap indices and pointing the operator at the repair tool.
+   * Otherwise return null.
+   *
+   * Catches the symptom of HDDS-15068 / HDDS-15103: an install-snapshot race
+   * leaves a corrupt segment file that Ratis only discovers on next startup.
+   */
+  private OMRaftLogInconsistencyException maybeWrapGapException(Throwable top) {
+    for (Throwable t = top; t != null; t = t.getCause()) {
+      if (!(t instanceof IllegalStateException)) {
+        continue;
+      }
+      String msg = t.getMessage();
+      if (msg == null || !msg.startsWith("gap between entr")) {
+        continue;
+      }
+      if (!hasSegmentedRaftLogFrame(t)) {
+        continue;
+      }
+      String details = msg.replaceAll("\\s+", " ").trim();
+      String hint = "OM Ratis raft log has a gap; run 'ozone repair om raft-log"
+          + " inspect --raft-log-dir <ratis-log-dir>' to locate the gap and"
+          + " 'ozone repair om raft-log truncate --raft-log-dir <ratis-log-dir>"
+          + " --index <last-good-index>' to recover, then restart this OM."
+          + " Underlying Ratis report: " + details;
+      return new OMRaftLogInconsistencyException(hint, top);
+    }
+    return null;
+  }
+
+  private boolean hasSegmentedRaftLogFrame(Throwable t) {
+    StackTraceElement[] frames = t.getStackTrace();
+    if (frames == null) {
+      return false;
+    }
+    for (StackTraceElement frame : frames) {
+      String cls = frame.getClassName();
+      if (cls != null && cls.startsWith("org.apache.ratis.server.raftlog.segmented")) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public void stop() {

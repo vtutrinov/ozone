@@ -37,6 +37,10 @@ import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.ozone.OzoneSecurityUtil;
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+
+import java.util.Locale;
 import org.apache.hadoop.hdds.annotation.InterfaceAudience;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.protocol.SecretKeyProtocolScm;
@@ -110,6 +114,11 @@ public class SCMSecurityProtocolServer implements SCMSecurityProtocol,
   private CertificateServer rootCertificateServer;
   private final CertificateServer scmCertificateServer;
   private final RPC.Server rpcServer; // HADOOP RPC SERVER
+  // Step Q — SIMPLE sibling RPC server (cert + secret-key for OM/DN/Recon).
+  // Null when ozone.scm.security.service.rpc-address is unset (legacy
+  // single-port behaviour).
+  private final RPC.Server siblingRpcServer;
+  private final InetSocketAddress siblingRpcAddress;
   private final SCMUpdateServiceGrpcServer grpcUpdateServer; // gRPC SERVER
   private final InetSocketAddress rpcAddress;
   private final ProtocolMessageMetrics metrics;
@@ -162,27 +171,104 @@ public class SCMSecurityProtocolServer implements SCMSecurityProtocol,
                 new SecretKeyProtocolServerSideTranslatorPB(
                     this, scm, secretKeyMetrics)
         );
+    // Step Q — primary port (9961) reverts to the legacy auth policy:
+    // Kerberos when external Kerberos is enabled (so `ozone admin cert ...`
+    // works for kinit'd admins), SIMPLE otherwise. Inter-service callers
+    // (OM/DN/Recon cert + secret-key) route to the sibling instead — see
+    // OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY below.
+    OzoneConfiguration rpcConf = conf;
+    if (!OzoneSecurityUtil.isExternalKerberosEnabled(conf)
+        && !OzoneSecurityUtil.isInterServiceKerberosEnabled(conf)) {
+      rpcConf = new OzoneConfiguration(conf);
+      rpcConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
+          AuthenticationMethod.SIMPLE.name().toLowerCase(Locale.ROOT));
+    }
+
     this.rpcServer =
         StorageContainerManager.startRpcServer(
-            conf,
+            rpcConf,
             rpcAddress,
             SCMSecurityProtocolPB.class,
             secureProtoPbService,
             handlerCount);
-    HddsServerUtil.addPBProtocol(conf, SecretKeyProtocolDatanodePB.class,
+    HddsServerUtil.addPBProtocol(rpcConf, SecretKeyProtocolDatanodePB.class,
         secretKeyService, rpcServer);
-    HddsServerUtil.addPBProtocol(conf, SecretKeyProtocolOmPB.class,
+    HddsServerUtil.addPBProtocol(rpcConf, SecretKeyProtocolOmPB.class,
         secretKeyService, rpcServer);
-    HddsServerUtil.addPBProtocol(conf, SecretKeyProtocolScmPB.class,
+    HddsServerUtil.addPBProtocol(rpcConf, SecretKeyProtocolScmPB.class,
         secretKeyService, rpcServer);
-    if (conf.getBoolean(
+    if (rpcConf.getBoolean(
         CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHORIZATION, false)) {
-      rpcServer.refreshServiceAcl(conf, SCMPolicyProvider.getInstance());
+      rpcServer.refreshServiceAcl(rpcConf, SCMPolicyProvider.getInstance());
+    }
+
+    // Step Q — build the SIMPLE sibling on a SECOND port when configured.
+    // Mirrors Step M for StorageContainerLocationProtocol. The sibling
+    // serves the same protocol implementation as `rpcServer` but with a
+    // cloned conf carrying hadoop.security.authentication=simple.
+    String siblingAddr = conf.get(
+        ScmConfigKeys.OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY);
+    if (siblingAddr != null && !siblingAddr.isEmpty()) {
+      OzoneConfiguration siblingConf = new OzoneConfiguration(conf);
+      siblingConf.set(
+          CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
+          AuthenticationMethod.SIMPLE.name().toLowerCase(Locale.ROOT));
+      int siblingPort = parsePort(siblingAddr,
+          ScmConfigKeys.OZONE_SCM_SECURITY_SERVICE_RPC_PORT_DEFAULT);
+      String bindHost = conf.get(
+          ScmConfigKeys.OZONE_SCM_SECURITY_SERVICE_RPC_BIND_HOST_KEY,
+          ScmConfigKeys.OZONE_SCM_SECURITY_SERVICE_BIND_HOST_DEFAULT);
+      this.siblingRpcAddress = new InetSocketAddress(bindHost, siblingPort);
+      BlockingService siblingProtoPbService =
+          SCMSecurityProtocolProtos.SCMSecurityProtocolService
+              .newReflectiveBlockingService(
+                  new SCMSecurityProtocolServerSideTranslatorPB(this,
+                      scm, metrics));
+      BlockingService siblingSecretKeyService =
+          SCMSecretKeyProtocolProtos.SCMSecretKeyProtocolService
+              .newReflectiveBlockingService(
+                  new SecretKeyProtocolServerSideTranslatorPB(
+                      this, scm, secretKeyMetrics));
+      this.siblingRpcServer =
+          StorageContainerManager.startRpcServer(
+              siblingConf,
+              siblingRpcAddress,
+              SCMSecurityProtocolPB.class,
+              siblingProtoPbService,
+              handlerCount);
+      HddsServerUtil.addPBProtocol(siblingConf,
+          SecretKeyProtocolDatanodePB.class, siblingSecretKeyService,
+          siblingRpcServer);
+      HddsServerUtil.addPBProtocol(siblingConf,
+          SecretKeyProtocolOmPB.class, siblingSecretKeyService,
+          siblingRpcServer);
+      HddsServerUtil.addPBProtocol(siblingConf,
+          SecretKeyProtocolScmPB.class, siblingSecretKeyService,
+          siblingRpcServer);
+      LOGGER.info(
+          "Bound SCM security RPC server (SCMSecurityProtocol sibling for "
+              + "internal callers) to {} (auth=simple)",
+          siblingRpcServer.getListenerAddress());
+    } else {
+      this.siblingRpcServer = null;
+      this.siblingRpcAddress = null;
     }
 
     this.grpcUpdateServer = new SCMUpdateServiceGrpcServer(
         conf.getObject(UpdateServiceConfig.class),
         new SCMCRLStore(scmCertificateServer));
+  }
+
+  private static int parsePort(String hostPort, int def) {
+    int colon = hostPort.lastIndexOf(':');
+    if (colon <= 0 || colon >= hostPort.length() - 1) {
+      return def;
+    }
+    try {
+      return Integer.parseInt(hostPort.substring(colon + 1));
+    } catch (NumberFormatException ignored) {
+      return def;
+    }
   }
 
   /**
@@ -558,6 +644,12 @@ public class SCMSecurityProtocolServer implements SCMSecurityProtocol,
     LOGGER.info(startupMsg);
     metrics.register();
     getRpcServer().start();
+    if (siblingRpcServer != null) {
+      siblingRpcServer.start();
+      LOGGER.info(
+          "SCMSecurityProtocol sibling (SIMPLE auth) is listening at {}",
+          siblingRpcServer.getListenerAddress());
+    }
     getGrpcUpdateServer().start();
   }
 
@@ -566,6 +658,9 @@ public class SCMSecurityProtocolServer implements SCMSecurityProtocol,
       LOGGER.info("Stopping the SCMSecurityProtocolServer.");
       metrics.unregister();
       getRpcServer().stop();
+      if (siblingRpcServer != null) {
+        siblingRpcServer.stop();
+      }
       getGrpcUpdateServer().stop();
     } catch (Exception ex) {
       LOGGER.error("SCMSecurityProtocolServer stop failed.", ex);
@@ -575,6 +670,9 @@ public class SCMSecurityProtocolServer implements SCMSecurityProtocol,
   public void join() throws InterruptedException {
     LOGGER.info("Join RPC server for SCMSecurityProtocolServer.");
     getRpcServer().join();
+    if (siblingRpcServer != null) {
+      siblingRpcServer.join();
+    }
     LOGGER.info("Join gRPC server for SCMSecurityProtocolServer.");
     getGrpcUpdateServer().join();
   }

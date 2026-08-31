@@ -1,0 +1,150 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# SCM HA: three pods running Ratis between them. Headless Service gives
+# each pod a stable FQDN that the configmap's
+# ozone.scm.address.scmservice.scmN keys reference; client-side failover
+# uses those addresses. In split-Kerberos mode every SCM port answers
+# SIMPLE on the inter-service set (Step D) — Step K kept 9860 Kerberos
+# for external `ozone admin`, and Step M added the 9866 SIMPLE sibling
+# for internal callers (OM pipeline refresh).
+apiVersion: v1
+kind: Service
+metadata:
+  name: scm
+  namespace: ozone-extkdc-cluster
+spec:
+  clusterIP: None
+  ports:
+  - port: 9876
+    name: client-rpc
+  - port: 9860
+    name: cont-client
+  - port: 9863
+    name: block-client
+  - port: 9861
+    name: datanode
+  - port: 9866
+    name: svc-rpc
+  selector:
+    app: ozone-extkdc
+    component: scm
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: scm
+  namespace: ozone-extkdc-cluster
+spec:
+  selector:
+    matchLabels:
+      app: ozone-extkdc
+      component: scm
+  serviceName: scm
+  podManagementPolicy: Parallel
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: ozone-extkdc
+        component: scm
+    spec:
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+      # SCM HA bootstrap:
+      #   scm-0 (the primordial node, set via ozone.scm.primordial.node.id
+      #          in the configmap) runs `ozone scm --init` to format
+      #          the cluster.
+      #   scm-1 and scm-2 wait for scm-0's RPC to come up, then run
+      #          `ozone scm --bootstrap` to join the existing Ratis ring.
+      - name: scm-init
+        image: ozone-split-kerberos:dev
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+            set -e
+            /opt/hadoop/libexec/envtoconf.py --destination /opt/hadoop/etc/hadoop >/dev/null
+            HOSTNAME=$(hostname)
+            echo "SCM init for $HOSTNAME"
+            if [[ ! -f /data/metadata/scm/current/VERSION ]] ; then
+              if [[ "$HOSTNAME" = "scm-0" ]] ; then
+                echo "→ primordial SCM, running --init"
+                ozone scm --init
+              else
+                echo "→ waiting for scm-0:9876 before --bootstrap"
+                until nc -z scm-0.scm.ozone-extkdc-cluster.svc.cluster.local 9876 ; do
+                  sleep 2
+                done
+                echo "→ scm-0 is up, running --bootstrap"
+                ozone scm --bootstrap
+              fi
+            else
+              echo "SCM already initialised — skipping."
+            fi
+        envFrom:
+        - configMapRef:
+            name: config
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: keytabs
+          mountPath: /etc/security/keytabs
+          readOnly: true
+        - name: krb5
+          mountPath: /etc/krb5.conf
+          subPath: krb5.conf
+          readOnly: true
+      containers:
+      - name: scm
+        image: ozone-split-kerberos:dev
+        imagePullPolicy: IfNotPresent
+        args: [ozone, scm]
+        ports:
+        - containerPort: 9876
+          name: client-rpc
+        - containerPort: 9860
+          name: cont-client
+        - containerPort: 9863
+          name: block-client
+        - containerPort: 9861
+          name: datanode
+        - containerPort: 9866
+          name: svc-rpc
+        envFrom:
+        - configMapRef:
+            name: config
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: keytabs
+          mountPath: /etc/security/keytabs
+          readOnly: true
+        - name: krb5
+          mountPath: /etc/krb5.conf
+          subPath: krb5.conf
+          readOnly: true
+      volumes:
+      - name: keytabs
+        secret:
+          secretName: keytabs
+      - name: krb5
+        configMap:
+          name: krb5
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi

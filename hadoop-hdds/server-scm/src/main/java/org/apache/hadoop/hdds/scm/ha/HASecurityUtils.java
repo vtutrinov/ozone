@@ -22,6 +22,7 @@ import org.apache.hadoop.hdds.ratis.RatisHelper;
 import org.apache.hadoop.hdds.scm.proxy.SCMClientConfig;
 import org.apache.hadoop.hdds.scm.proxy.SCMSecurityProtocolFailoverProxyProvider;
 import org.apache.hadoop.hdds.scm.server.SCMStorageConfig;
+import org.apache.hadoop.hdds.utils.HddsServerUtil;
 import org.apache.hadoop.hdds.security.SecurityConfig;
 import org.apache.hadoop.hdds.security.ssl.KeyStoresFactory;
 import org.apache.hadoop.hdds.security.x509.certificate.authority.CAType;
@@ -217,8 +218,17 @@ public final class HASecurityUtils {
       conf.setFromObject(scmClientConfig);
     }
 
+    // Step Q regression fix — at SCM bootstrap the daemon has loaded its
+    // keytab in acceptor-only Krb5 mode (Step L: isInitiator=false), so it
+    // has no TGT and cannot initiate Kerberos against a peer SCM's
+    // SCMSecurityProtocol on port 9961. Route through the SIMPLE sibling
+    // (port 9962) configured via ozone.scm.security.service.rpc-address —
+    // same pattern Step Q already applies to the runtime cert client in
+    // HddsServerUtil.getScmSecurityClientWithMaxRetry(..., true).
+    OzoneConfiguration internalConf =
+        HddsServerUtil.withScmSecuritySiblingPortIfConfigured(conf);
     return new SCMSecurityProtocolClientSideTranslatorPB(
-        new SCMSecurityProtocolFailoverProxyProvider(conf,
+        new SCMSecurityProtocolFailoverProxyProvider(internalConf,
             UserGroupInformation.getCurrentUser()));
 
   }

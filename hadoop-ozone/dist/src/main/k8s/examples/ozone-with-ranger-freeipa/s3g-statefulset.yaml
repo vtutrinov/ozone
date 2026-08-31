@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: s3g
+spec:
+  serviceName: s3g
+  replicas: 1
+  selector:
+    matchLabels: { app: ozone, component: s3g }
+  template:
+    metadata:
+      labels: { app: ozone, component: s3g }
+    spec:
+      initContainers:
+      - name: merge-conf
+        image: apache/ozone-test:local
+        command: ["sh","-c","set -e; cp -v /opt/ozone/etc/hadoop/* /merged/; cp -fv /cluster-conf/* /merged/"]
+        volumeMounts:
+        - { name: cluster-conf, mountPath: /cluster-conf, readOnly: true }
+        - { name: merged-conf,  mountPath: /merged }
+      containers:
+      - name: s3g
+        image: apache/ozone-test:local
+        command: ["bash","-lc","ozone s3g"]
+        livenessProbe: { httpGet: { path: /, port: 9878 }, initialDelaySeconds: 60 }
+        volumeMounts:
+        - { name: merged-conf, mountPath: /etc/hadoop,                readOnly: true }
+        - { name: keytabs,     mountPath: /etc/security/keytabs,      readOnly: true }
+        - { name: krb5,        mountPath: /etc/krb5.conf, subPath: krb5.conf, readOnly: true }
+      volumes:
+      - { name: cluster-conf, configMap: { name: config-default } }
+      - { name: merged-conf,  emptyDir: {} }
+      - { name: keytabs,      secret:   { secretName: keytabs } }
+      - { name: krb5,         configMap: { name: krb5 } }

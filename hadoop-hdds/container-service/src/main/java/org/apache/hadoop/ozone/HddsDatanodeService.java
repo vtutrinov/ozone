@@ -256,11 +256,23 @@ public class HddsDatanodeService extends GenericCli implements ServicePlugin {
           "HddsDatanodeService." + datanodeDetails.getUuidString()
               .substring(0, 8), conf);
       LOG.info("HddsDatanodeService host:{} ip:{}", hostname, ip);
-      // Authenticate Hdds Datanode service if security is enabled
+      // Authenticate Hdds Datanode service if security is enabled. DN has
+      // no external Kerberos surface — its inbound traffic from SCM/OM is
+      // SIMPLE in split-Kerberos mode (Step D server-side clones; Step C-2
+      // client-side rewrites). So gate on the inter-service flag only:
+      // external-only deployments can run without a dn keytab at all.
+      OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+      // SecurityConfig is needed by the cert client even when no keytab login
+      // happens (external=true, interservice=false): the cert client still
+      // talks to SCM's cert service over SIMPLE to fetch/rotate the DN cert.
+      // Initialize it unconditionally when security is enabled at the master
+      // level, and only gate the actual Kerberos loginUserFromKeytab call
+      // on requiresInterServiceKerberosLogin.
       if (OzoneSecurityUtil.isSecurityEnabled(conf)) {
         component = "dn-" + datanodeDetails.getUuidString();
         secConf = new SecurityConfig(conf);
-
+      }
+      if (OzoneSecurityUtil.requiresInterServiceKerberosLogin(conf)) {
         if (SecurityUtil.getAuthenticationMethod(conf).equals(
             UserGroupInformation.AuthenticationMethod.KERBEROS)) {
           LOG.info("Ozone security is enabled. Attempting login for Hdds " +
@@ -432,7 +444,7 @@ public class HddsDatanodeService extends GenericCli implements ServicePlugin {
   @VisibleForTesting
   SCMSecurityProtocolClientSideTranslatorPB createScmSecurityClient()
       throws IOException {
-    return getScmSecurityClientWithMaxRetry(conf, getCurrentUser());
+    return getScmSecurityClientWithMaxRetry(conf, getCurrentUser(), true);
   }
 
   /**

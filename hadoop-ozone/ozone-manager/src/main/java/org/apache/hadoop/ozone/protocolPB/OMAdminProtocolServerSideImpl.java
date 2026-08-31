@@ -21,6 +21,7 @@ import com.google.protobuf.ServiceException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.helpers.OMNodeDetails;
 import org.apache.hadoop.ozone.om.protocolPB.OMAdminProtocolPB;
@@ -31,12 +32,22 @@ import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.De
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.OMConfigurationRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.OMConfigurationResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.OMNodeInfo;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.RangerCacheControlRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerAdminProtocolProtos.RangerCacheControlResponse;
+import org.apache.hadoop.ozone.security.acl.AuthorizerCacheControl;
+import org.apache.hadoop.ozone.security.acl.IAccessAuthorizer;
+import org.apache.hadoop.security.UserGroupInformation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This class is the server-side translator that forwards requests received on
  * {@link OMAdminProtocolPB} to the OMAdminProtocolServer implementation.
  */
 public class OMAdminProtocolServerSideImpl implements OMAdminProtocolPB {
+
+  private static final Logger LOG =
+      LoggerFactory.getLogger(OMAdminProtocolServerSideImpl.class);
 
   private final OzoneManager ozoneManager;
 
@@ -106,5 +117,82 @@ public class OMAdminProtocolServerSideImpl implements OMAdminProtocolPB {
     return DecommissionOMResponse.newBuilder()
         .setSuccess(true)
         .build();
+  }
+
+  @Override
+  public RangerCacheControlResponse rangerCacheControl(
+      RpcController controller, RangerCacheControlRequest request)
+      throws ServiceException {
+    RangerCacheControlResponse.Builder response =
+        RangerCacheControlResponse.newBuilder();
+
+    UserGroupInformation ugi = Server.getRemoteUser();
+    if (ugi == null || !ozoneManager.isAdmin(ugi)) {
+      return response.setSuccess(false)
+          .setErrorMsg("PERMISSION_DENIED: only Ozone admins may control " +
+              "the Ranger policy cache. User: " +
+              (ugi == null ? "unknown" : ugi.getUserName()))
+          .build();
+    }
+
+    IAccessAuthorizer authorizer = ozoneManager.getAccessAuthorizer();
+    if (!(authorizer instanceof AuthorizerCacheControl)) {
+      return response.setSuccess(false)
+          .setErrorMsg("NOT_SUPPORTED: configured authorizer " +
+              (authorizer == null ? "null" : authorizer.getClass().getName()) +
+              " does not support cache control")
+          .build();
+    }
+
+    AuthorizerCacheControl cacheControl = (AuthorizerCacheControl) authorizer;
+    String name = request.hasName() ? request.getName() : null;
+    try {
+      switch (request.getOp()) {
+      case RANGER_CACHE_STATUS:
+        response.setStatusJson(cacheControl.getCacheStatus());
+        break;
+      case RANGER_CACHE_INVALIDATE:
+        LOG.warn("Ranger policy cache invalidation requested by admin {}",
+            ugi.getUserName());
+        cacheControl.invalidateCache();
+        break;
+      case RANGER_CACHE_INVALIDATE_POLICY:
+        requireName(name, "INVALIDATE_POLICY");
+        LOG.warn("Ranger cached policy '{}' invalidation requested by " +
+            "admin {}", name, ugi.getUserName());
+        response.setEntryFound(cacheControl.invalidateCachedPolicy(name));
+        break;
+      case RANGER_CACHE_INVALIDATE_ROLE:
+        requireName(name, "INVALIDATE_ROLE");
+        LOG.warn("Ranger cached role '{}' invalidation requested by " +
+            "admin {}", name, ugi.getUserName());
+        response.setEntryFound(cacheControl.invalidateCachedRole(name));
+        break;
+      case RANGER_CACHE_EXTEND:
+        if (!request.hasTtlMillis() || request.getTtlMillis() <= 0) {
+          throw new IOException("EXTEND requires a positive ttlMillis");
+        }
+        LOG.info("Ranger policy cache validity extension of {} ms " +
+            "requested by admin {}", request.getTtlMillis(),
+            ugi.getUserName());
+        cacheControl.extendCacheValidity(request.getTtlMillis());
+        break;
+      default:
+        throw new IOException("Unknown cache control op: " + request.getOp());
+      }
+      response.setSuccess(true);
+    } catch (Throwable t) {
+      LOG.error("Ranger cache control op {} failed", request.getOp(), t);
+      response.setSuccess(false)
+          .setErrorMsg(t.getMessage() == null
+              ? t.getClass().getName() : t.getMessage());
+    }
+    return response.build();
+  }
+
+  private static void requireName(String name, String op) throws IOException {
+    if (name == null || name.isEmpty()) {
+      throw new IOException(op + " requires a policy/role name");
+    }
   }
 }

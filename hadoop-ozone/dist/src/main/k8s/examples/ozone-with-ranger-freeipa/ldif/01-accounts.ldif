@@ -1,0 +1,11 @@
+dn: ou=accounts,dc=example,dc=test
+objectClass: organizationalUnit
+ou: accounts
+
+dn: ou=users,ou=accounts,dc=example,dc=test
+objectClass: organizationalUnit
+ou: users
+
+dn: ou=groups,ou=accounts,dc=example,dc=test
+objectClass: organizationalUnit
+ou: groups

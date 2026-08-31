@@ -91,6 +91,7 @@ import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.metrics2.util.MBeans;
+import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.ozone.ContentSummary;
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.OzoneAcl;
@@ -211,6 +212,7 @@ import org.apache.ratis.proto.RaftProtos;
 import org.apache.ratis.proto.RaftProtos.RaftPeerRole;
 import org.apache.ratis.protocol.RaftGroup;
 import org.apache.ratis.protocol.RaftGroupId;
+import org.apache.ratis.server.raftlog.RaftLog;
 import org.apache.ratis.protocol.RaftPeer;
 import org.apache.ratis.protocol.RaftPeerId;
 import org.apache.ratis.protocol.exceptions.AlreadyExistsException;
@@ -249,6 +251,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.Timer;
@@ -291,6 +294,8 @@ import static org.apache.hadoop.ozone.OzoneConsts.DEFAULT_OM_UPDATE_ID;
 import static org.apache.hadoop.ozone.OzoneConsts.LAYOUT_VERSION_KEY;
 import static org.apache.hadoop.ozone.OzoneConsts.OM_METRICS_FILE;
 import static org.apache.hadoop.ozone.OzoneConsts.OM_METRICS_TEMP_FILE;
+import static org.apache.hadoop.ozone.OzoneConsts.OM_RATE_LIMITER_METRICS_FILE;
+import static org.apache.hadoop.ozone.OzoneConsts.OM_RATE_LIMITER_METRICS_TEMP_FILE;
 import static org.apache.hadoop.ozone.OzoneConsts.OM_RATIS_SNAPSHOT_DIR;
 import static org.apache.hadoop.ozone.OzoneConsts.OM_SNAPSHOT_DIR;
 import static org.apache.hadoop.ozone.OzoneConsts.PREPARE_MARKER_KEY;
@@ -306,6 +311,9 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_ENABLE_FILESYSTEM
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_ENABLE_FILESYSTEM_PATHS_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_HANDLER_COUNT_KEY;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SERVICE_RPC_ADDRESS_KEY;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SERVICE_RPC_BIND_HOST_KEY;
+import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_SERVICE_RPC_PORT_DEFAULT;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_HTTP_AUTH_TYPE;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_KERBEROS_KEYTAB_FILE_KEY;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_KERBEROS_PRINCIPAL_KEY;
@@ -395,8 +403,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private final Text omRpcAddressTxt;
   private OzoneConfiguration configuration;
   private RPC.Server omRpcServer;
+  private RPC.Server omServiceRpcServer;
   private GrpcOzoneManagerServer omS3gGrpcServer;
   private final InetSocketAddress omRpcAddress;
+  private InetSocketAddress omServiceRpcAddress;
   private final String omId;
   private final String threadPrefix;
   private ServiceInfoProvider serviceInfo;
@@ -435,6 +445,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       new ObjectMapper().writerWithDefaultPrettyPrinter();
   private static final ObjectReader READER =
       new ObjectMapper().readerFor(OmMetricsInfo.class);
+  private static final ObjectReader RATE_LIMITER_METRICS_READER =
+      new ObjectMapper().readerFor(OmRateLimiterMetricsInfo.class);
   private static final int SHUTDOWN_HOOK_PRIORITY = 30;
   private final File omMetaDir;
   private boolean isAclEnabled;
@@ -444,6 +456,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private S3SecretManager s3SecretManager;
   private final boolean isOmGrpcServerEnabled;
   private volatile boolean isOmRpcServerRunning = false;
+  private volatile boolean isOmServiceRpcServerRunning = false;
   private volatile boolean isOmGrpcServerRunning = false;
   private String omComponent;
   private OzoneManagerProtocolServerSideTranslatorPB omServerProtocol;
@@ -712,7 +725,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
             "doesn't have SCM signed certificate.");
       }
       SCMSecurityProtocolClientSideTranslatorPB scmSecurityClient =
-          getScmSecurityClientWithMaxRetry(configuration, getCurrentUser());
+          getScmSecurityClientWithMaxRetry(configuration, getCurrentUser(),
+              true);
       certClient = new OMCertificateClient(secConfig, scmSecurityClient,
           omStorage, omInfo, "",
           scmInfo == null ? null : scmInfo.getScmId(),
@@ -780,8 +794,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     if (isOmGrpcServerEnabled) {
       omS3gGrpcServer = getOmS3gGrpcServer(configuration);
     }
-    ShutdownHookManager.get().addShutdownHook(this::saveOmMetrics,
-        SHUTDOWN_HOOK_PRIORITY);
+    ShutdownHookManager.get().addShutdownHook(() -> {
+      saveOmMetrics();
+      saveRateLimiterMetrics();
+    }, SHUTDOWN_HOOK_PRIORITY);
 
     if (isBootstrapping || isForcedBootstrapping) {
       omState = State.BOOTSTRAPPING;
@@ -1227,6 +1243,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     @Override
     public void run() {
       saveOmMetrics();
+      saveRateLimiterMetrics();
     }
   }
 
@@ -1256,6 +1273,31 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return tmpLeadersMap;
   }
 
+  private void saveRateLimiterMetrics() {
+    if (omRateLimiterMetrics == null) {
+      return;
+    }
+    try {
+      File parent = getTempRateLimiterMetricsStorageFile().getParentFile();
+      if (!parent.exists()) {
+        Files.createDirectories(parent.toPath());
+      }
+      try (BufferedWriter writer = new BufferedWriter(
+          new OutputStreamWriter(new FileOutputStream(
+              getTempRateLimiterMetricsStorageFile()), StandardCharsets.UTF_8))) {
+        OmRateLimiterMetricsInfo rateLimiterMetricsInfo = new OmRateLimiterMetricsInfo();
+        rateLimiterMetricsInfo.setRateLimiterMetrics(omRateLimiterMetrics.snapshotRequestCounts());
+        WRITER.writeValue(writer, rateLimiterMetricsInfo);
+      }
+
+      Files.move(getTempRateLimiterMetricsStorageFile().toPath(),
+          getRateLimiterMetricsStorageFile().toPath(), StandardCopyOption
+              .ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+    } catch (IOException ex) {
+      LOG.error("Unable to write the om rate limiter metrics file", ex);
+    }
+  }
+
   /**
    * Returns temporary metrics storage file.
    *
@@ -1272,6 +1314,24 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    */
   private File getMetricsStorageFile() {
     return new File(omMetaDir, OM_METRICS_FILE);
+  }
+
+  /**
+   * Returns temporary rate limiter metrics storage file.
+   *
+   * @return File
+   */
+  private File getTempRateLimiterMetricsStorageFile() {
+    return new File(omMetaDir, OM_RATE_LIMITER_METRICS_TEMP_FILE);
+  }
+
+  /**
+   * Returns rate limiter metrics storage file.
+   *
+   * @return File
+   */
+  private File getRateLimiterMetricsStorageFile() {
+    return new File(omMetaDir, OM_RATE_LIMITER_METRICS_FILE);
   }
 
   private OzoneDelegationTokenSecretManager createDelegationTokenSecretManager(
@@ -1456,7 +1516,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    */
   private static StorageContainerLocationProtocol getScmContainerClient(
       OzoneConfiguration conf) {
-    return HAUtils.getScmContainerClient(conf);
+    // OM is an internal caller: dial SCM's SIMPLE sibling RPC server
+    // (Step M, ozone.scm.service.rpc-address) when configured so OM never
+    // needs a TGT to refresh pipelines. Falls back to the Kerberos main
+    // port automatically when the operator hasn't enabled the split.
+    return HAUtils.getScmContainerClient(conf, null, true);
   }
 
   /**
@@ -1515,8 +1579,103 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     String rpcBindHost = conf.get(OZONE_OM_RPC_BIND_HOST_KEY, OZONE_OM_BIND_HOST_DEFAULT);
     InetSocketAddress bindAddr = new InetSocketAddress(rpcBindHost, omNodeRpcAddr.getPort());
 
-    return startRpcServer(configuration, bindAddr, omService,
-        omInterService, omAdminService, reconfigureService, handlerCount);
+    RPC.Server clientRpcServer = startRpcServer(configuration, bindAddr,
+        omService, omInterService, omAdminService, reconfigureService,
+        handlerCount);
+
+    // Optionally also build a sibling "service" RPC server for inter-service
+    // callers (S3G→OM, Recon→OM). When inter-service Kerberos is disabled
+    // (typically because the cluster runs in k8s with a service mesh handling
+    // mTLS), the service port carries SIMPLE auth while the main client port
+    // can still require Kerberos.
+    omServiceRpcServer = maybeBuildServiceRpcServer(conf, handlerCount,
+        omInterServerProtocol, omMetadataServerProtocol,
+        reconfigureServerProtocol);
+
+    return clientRpcServer;
+  }
+
+  /**
+   * Build the optional service-RPC server when
+   * {@link OMConfigKeys#OZONE_OM_SERVICE_RPC_ADDRESS_KEY} is configured.
+   * Returns {@code null} when the key is unset, preserving today's
+   * single-port behaviour.
+   */
+  private RPC.Server maybeBuildServiceRpcServer(OzoneConfiguration conf,
+      int handlerCount,
+      OMInterServiceProtocolServerSideImpl interServerProtocol,
+      OMAdminProtocolServerSideImpl adminServerProtocol,
+      ReconfigureProtocolServerSideTranslatorPB reconfigureServerProtocol)
+      throws IOException {
+    String serviceRpcAddrStr = conf.get(OZONE_OM_SERVICE_RPC_ADDRESS_KEY);
+    if (serviceRpcAddrStr == null || serviceRpcAddrStr.isEmpty()) {
+      return null;
+    }
+
+    InetSocketAddress serviceRpcAddr = NetUtils.createSocketAddr(
+        serviceRpcAddrStr, OZONE_OM_SERVICE_RPC_PORT_DEFAULT,
+        OZONE_OM_SERVICE_RPC_ADDRESS_KEY);
+    String serviceBindHost = conf.get(OZONE_OM_SERVICE_RPC_BIND_HOST_KEY,
+        OZONE_OM_BIND_HOST_DEFAULT);
+    InetSocketAddress serviceBindAddr = new InetSocketAddress(
+        serviceBindHost, serviceRpcAddr.getPort());
+
+    // Clone configuration so we can override the SASL profile for this
+    // port alone. Hadoop IPC reads hadoop.security.authentication from the
+    // Configuration handed to RPC.Builder; setting "simple" here yields a
+    // SIMPLE+TOKEN server (delegation tokens still validate via the secret
+    // manager set below). The shared, process-global UGI is left untouched.
+    OzoneConfiguration serviceConf = new OzoneConfiguration(conf);
+    if (!secConfig.isInterServiceKerberosEnabled()) {
+      serviceConf.set(
+          CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
+          AuthenticationMethod.SIMPLE.name().toLowerCase(Locale.ROOT));
+    }
+
+    BlockingService omServicePort =
+        OzoneManagerService.newReflectiveBlockingService(omServerProtocol);
+    BlockingService omInterServicePort =
+        OzoneManagerInterService.newReflectiveBlockingService(
+            interServerProtocol);
+    BlockingService omAdminServicePort =
+        OzoneManagerAdminService.newReflectiveBlockingService(
+            adminServerProtocol);
+    BlockingService reconfigureServicePort =
+        ReconfigureProtocolService.newReflectiveBlockingService(
+            reconfigureServerProtocol);
+
+    RPC.Server serviceRpcServer = startRpcServer(serviceConf, serviceBindAddr,
+        omServicePort, omInterServicePort, omAdminServicePort,
+        reconfigureServicePort, handlerCount);
+    omServiceRpcAddress = updateRPCListenAddress(configuration,
+        OZONE_OM_SERVICE_RPC_ADDRESS_KEY, serviceRpcAddr, serviceRpcServer);
+    LOG.info("Bound OM service RPC server to {} (auth={})",
+        omServiceRpcAddress,
+        secConfig.isInterServiceKerberosEnabled() ? "kerberos" : "simple");
+    return serviceRpcServer;
+  }
+
+  private void startServiceRpcServerIfPresent() {
+    if (omServiceRpcServer != null && !isOmServiceRpcServerRunning) {
+      omServiceRpcServer.start();
+      isOmServiceRpcServerRunning = true;
+    }
+  }
+
+  private void stopServiceRpcServerIfRunning() {
+    if (omServiceRpcServer != null && isOmServiceRpcServerRunning) {
+      omServiceRpcServer.stop();
+      isOmServiceRpcServerRunning = false;
+    }
+  }
+
+  /**
+   * Returns the bound address of the optional service RPC server, or
+   * {@code null} when {@link OMConfigKeys#OZONE_OM_SERVICE_RPC_ADDRESS_KEY}
+   * is not configured (single-port legacy mode).
+   */
+  public InetSocketAddress getOmServiceRpcServerAddr() {
+    return omServiceRpcAddress;
   }
 
   /**
@@ -1596,8 +1755,19 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    */
   private static void loginOMUserIfSecurityEnabled(OzoneConfiguration conf)
       throws IOException, AuthenticationException {
+    OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+    // In split-Kerberos mode OM never initiates outbound Kerberos calls
+    // (all inter-service traffic is SIMPLE via Step C-2 / IPC fallback).
+    // Flip Krb5LoginModule to acceptor-only so the keytab login doesn't
+    // emit an AS-REQ; zero KDC packets for this pod's lifetime.
+    OzoneSecurityUtil.useKerberosAcceptorOnlyMode(conf, LOG);
     securityEnabled = OzoneSecurityUtil.isSecurityEnabled(conf);
-    if (securityEnabled && testUgi == null) {
+    // The keytab login is needed whenever either RPC surface (external client
+    // or inter-service) is configured with Kerberos. In the split-Kerberos
+    // mode (external=true, interservice=false) the keytab still backs the
+    // external client port even though the inter-service port is SIMPLE.
+    if (OzoneSecurityUtil.requiresDaemonKerberosLogin(conf)
+        && testUgi == null) {
       // Checking certificate duration validity by using
       // validateCertificateValidityConfig() in SecurityConfig constructor.
       new SecurityConfig(conf);
@@ -1674,7 +1844,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         getOmDetailsProto(conf, omStore.getOmId());
 
     SCMSecurityProtocolClientSideTranslatorPB scmSecurityClient =
-        getScmSecurityClientWithMaxRetry(conf, getCurrentUser());
+        getScmSecurityClientWithMaxRetry(conf, getCurrentUser(), true);
 
     OMCertificateClient certClient =
         new OMCertificateClient(
@@ -1954,6 +2124,13 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     metrics.setNumFiles(metadataManager
         .countEstimatedRowsInTable(metadataManager.getFileTable()));
 
+    // Restore rate limiter counters saved before the previous shutdown.
+    if (getRateLimiterMetricsStorageFile().exists()) {
+      OmRateLimiterMetricsInfo rateLimiterMetricsInfo =
+          RATE_LIMITER_METRICS_READER.readValue(getRateLimiterMetricsStorageFile());
+      omRateLimiterMetrics.restoreRequestCounts(rateLimiterMetricsInfo.getRateLimiterMetrics());
+    }
+
     // Schedule save metrics
     long period = configuration.getTimeDuration(OZONE_OM_METRICS_SAVE_INTERVAL,
         OZONE_OM_METRICS_SAVE_INTERVAL_DEFAULT, TimeUnit.MILLISECONDS);
@@ -1980,6 +2157,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
     omRpcServer.start();
     isOmRpcServerRunning = true;
+    startServiceRpcServerIfPresent();
 
     startTrashEmptier(configuration);
     if (isOmGrpcServerEnabled) {
@@ -2060,6 +2238,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     metrics.setNumFiles(metadataManager
         .countEstimatedRowsInTable(metadataManager.getFileTable()));
 
+    // Re-register the rate limiter metrics source unregistered by stop().
+    // The live instance keeps its counters, so no restore from file here —
+    // the in-memory values are at least as fresh as the persisted snapshot.
+    OmRateLimiterMetrics.register(omRateLimiterMetrics);
+
     // Schedule save metrics
     long period = configuration.getTimeDuration(OZONE_OM_METRICS_SAVE_INTERVAL,
         OZONE_OM_METRICS_SAVE_INTERVAL_DEFAULT, TimeUnit.MILLISECONDS);
@@ -2085,6 +2268,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
     omRpcServer.start();
     isOmRpcServerRunning = true;
+    startServiceRpcServerIfPresent();
 
     startTrashEmptier(configuration);
     registerMXBean();
@@ -2575,6 +2759,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         scheduleOMMetricsWriteTask = null;
       }
       omRpcServer.stop();
+      stopServiceRpcServerIfRunning();
       if (isOmGrpcServerEnabled) {
         omS3gGrpcServer.stop();
       }
@@ -2690,11 +2875,19 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   }
 
   /**
-   * @return true if delegation token operation is allowed
+   * @return true if delegation token operation is allowed.
+   *
+   * <p>Delegation tokens are only meaningful when external Kerberos is
+   * configured (they are bootstrapped from a Kerberos identity and validated
+   * via HMAC on subsequent RPCs). In the split-Kerberos mode the OM's
+   * service-RPC port runs SIMPLE auth even though external Kerberos is on;
+   * we therefore key the decision off the deployment-level external-Kerberos
+   * flag rather than the JVM-global {@link UserGroupInformation#isSecurityEnabled()},
+   * which only reflects the inter-service UGI configuration.
    */
   private boolean isAllowedDelegationTokenOp() throws IOException {
     AuthenticationMethod authMethod = getConnectionAuthenticationMethod();
-    return !UserGroupInformation.isSecurityEnabled()
+    return !secConfig.isExternalKerberosEnabled()
         || (authMethod == AuthenticationMethod.KERBEROS)
         || (authMethod == AuthenticationMethod.KERBEROS_SSL)
         || (authMethod == AuthenticationMethod.CERTIFICATE);
@@ -4174,9 +4367,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     return installCheckpoint(raftGroupId, leaderId, checkpointLocation, checkpointTrxnInfo);
   }
 
+  @SuppressWarnings("checkstyle:methodlength")
   TermIndex installCheckpoint(RaftGroupId raftGroupId, String leaderId, Path checkpointLocation,
       TransactionInfo checkpointTrxnInfo) throws Exception {
     long startTime = Time.monotonicNow();
+    final long prePauseEndIdx = readRaftLogEndIndexQuietly(raftGroupId); // HDDS-15068 race-guard input.
     File oldDBLocation = metadataManager.getStore().getDbLocation();
     try {
       // Stop Background services
@@ -4217,6 +4412,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     if (canProceed) {
       // Stop RPC server before stop metadataManager
       omRpcServer.stop();
+      stopServiceRpcServerIfRunning();
       isOmRpcServerRunning = false;
       omRpcServerStopped = true;
       LOG.info("RPC server is stopped. Spend " +
@@ -4243,6 +4439,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         LOG.info("Replaced DB with checkpoint from OM: {}, term: {}, " +
             "index: {}, time: {} ms", leaderId, term, lastAppliedIndex,
             Time.monotonicNow() - time);
+        purgeRaftLogPastSnapshotIfNeeded(raftGroupId, prePauseEndIdx, lastAppliedIndex, leaderId);
       } catch (Exception e) {
         LOG.error("Failed to install Snapshot from {} as OM failed to replace" +
             " DB with downloaded checkpoint. Reloading old OM state.",
@@ -4292,6 +4489,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         omRpcServer = getRpcServer(configuration);
         omRpcServer.start();
         isOmRpcServerRunning = true;
+        startServiceRpcServerIfPresent();
         LOG.info("RPC server is re-started. Spend " +
             (Time.monotonicNow() - time) + " ms.");
       } catch (Exception e) {
@@ -4323,6 +4521,56 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         "Spend {} ms.", newTermIndex.getTerm(), newTermIndex.getIndex(),
         (Time.monotonicNow() - startTime));
     return newTermIndex;
+  }
+
+  /**
+   * Read the raft-log end index without throwing — returns {@code -1L} on any
+   * failure. Used by {@link #installCheckpoint} to capture state before the
+   * state machine pauses so the install-snapshot race guard can compare.
+   * See HDDS-15068.
+   */
+  private long readRaftLogEndIndexQuietly(RaftGroupId raftGroupId) {
+    try {
+      RaftLog raftLog =
+          omRatisServer.getServerDivision(raftGroupId).getRaftLog();
+      return raftLog.getNextIndex() - 1;
+    } catch (Exception e) {
+      LOG.warn("Could not read raft log end index before install-snapshot; "
+          + "skipping post-install gap guard.", e);
+      return -1L;
+    }
+  }
+
+  /**
+   * HDDS-15068 / HDDS-15103 guard: when the just-installed snapshot index is
+   * past the raft-log end index captured before {@code pause()}, purge the
+   * raft log up to the snapshot index. This makes subsequent leader appends
+   * land in a fresh segment that starts at {@code snapshotIndex + 1} instead
+   * of being mis-stitched into a segment whose tail is at the pre-snapshot
+   * end index, which is what produces the intra-segment gap that crashes the
+   * next OM startup with {@code IllegalStateException("gap between entries")}.
+   */
+  private void purgeRaftLogPastSnapshotIfNeeded(RaftGroupId raftGroupId,
+      long prePauseEndIdx, long snapshotIndex, String leaderId) {
+    if (prePauseEndIdx < 0 || snapshotIndex <= prePauseEndIdx) {
+      return;
+    }
+    LOG.warn("Install-snapshot index {} from leader {} is past raft log end "
+        + "index {}; purging raft log to align and prevent intra-segment gap "
+        + "(HDDS-15068).", snapshotIndex, leaderId, prePauseEndIdx);
+    try {
+      RaftLog raftLog =
+          omRatisServer.getServerDivision(raftGroupId).getRaftLog();
+      raftLog.purge(snapshotIndex).get();
+    } catch (Exception e) {
+      LOG.error("Failed to purge raft log past snapshot index {} after "
+          + "install-snapshot from {}. OM will continue, but the next startup "
+          + "may detect the gap and refuse to start. In that case run "
+          + "'ozone repair om raft-log inspect --raft-log-dir <dir>' and "
+          + "'ozone repair om raft-log truncate --raft-log-dir <dir> "
+          + "--index {}'.", snapshotIndex, leaderId,
+          prePauseEndIdx, e);
+    }
   }
 
   private void stopTrashEmptier() {

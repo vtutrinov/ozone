@@ -422,7 +422,12 @@ public final class StorageContainerManager extends ServiceRuntimeInfoImpl
 
     // Authenticate SCM if security is enabled, this initialization can only
     // be done after the metadata store is initialized.
-    if (OzoneSecurityUtil.isSecurityEnabled(conf)) {
+    // The SCM security protocol server hosts CA-issuance APIs used by both
+    // external admin tooling and inter-service mTLS (OM/DN cert clients). It
+    // needs to come up whenever either Kerberos surface is enabled — in
+    // particular, the split-Kerberos mode (external=true, interservice=false)
+    // still relies on it to mint certs for the external HTTPS endpoints.
+    if (OzoneSecurityUtil.requiresDaemonKerberosLogin(conf)) {
       initializeCAnSecurityProtocol(conf, configurator);
     } else {
       // if no Security, we do not create a Certificate Server at all.
@@ -584,7 +589,8 @@ public final class StorageContainerManager extends ServiceRuntimeInfoImpl
     if (OzoneSecurityUtil.isSecurityEnabled(configuration) &&
         scmStorageConfig.checkPrimarySCMIdInitialized()) {
       SCMSecurityProtocolClientSideTranslatorPB scmSecurityClient =
-          getScmSecurityClientWithMaxRetry(configuration, getCurrentUser());
+          getScmSecurityClientWithMaxRetry(configuration, getCurrentUser(),
+              true);
       scmCertificateClient = new SCMCertificateClient(
           securityConfig, scmSecurityClient, scmStorageConfig.getScmId(),
           scmStorageConfig.getClusterID(),
@@ -1012,7 +1018,8 @@ public final class StorageContainerManager extends ServiceRuntimeInfoImpl
         throw ex;
       }
       SCMSecurityProtocolClientSideTranslatorPB scmSecurityClient =
-          getScmSecurityClientWithMaxRetry(configuration, getCurrentUser());
+          getScmSecurityClientWithMaxRetry(configuration, getCurrentUser(),
+              true);
       scmCertificateClient = new SCMCertificateClient(securityConfig,
           scmSecurityClient, certSerialNumber, getScmId(),
           SCM_ROOT_CA_COMPONENT_NAME);
@@ -1043,7 +1050,18 @@ public final class StorageContainerManager extends ServiceRuntimeInfoImpl
   private static void loginAsSCMUserIfSecurityEnabled(
       SCMHANodeDetails scmhaNodeDetails, ConfigurationSource conf)
       throws IOException, AuthenticationException {
-    if (OzoneSecurityUtil.isSecurityEnabled(conf)) {
+    OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+    // Same acceptor-only optimisation as OM (see Step L): SCM is a pure
+    // Kerberos acceptor on its external admin port (Step K) and never
+    // initiates outbound Kerberos calls in split mode. Skip the AS-REQ.
+    OzoneSecurityUtil.useKerberosAcceptorOnlyMode(conf, LOG);
+    // SCM has an external Kerberos surface in split mode after Step K:
+    // SCMClientProtocolServer (port 9860, behind `ozone admin scm/safemode/
+    // datanode`) stays Kerberos-served whenever external Kerberos is on, so
+    // SCM must run loginUserFromKeytab to back that handshake. Gate on the
+    // composite flag (external OR interservice) — operators wanting a keyless
+    // SCM must turn external Kerberos off too.
+    if (OzoneSecurityUtil.requiresDaemonKerberosLogin(conf)) {
       if (LOG.isDebugEnabled()) {
         ScmConfig scmConfig = conf.getObject(ScmConfig.class);
         LOG.debug("Ozone security is enabled. Attempting login for SCM user. "

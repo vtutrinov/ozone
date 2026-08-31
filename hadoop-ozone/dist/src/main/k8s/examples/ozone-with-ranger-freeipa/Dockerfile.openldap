@@ -1,0 +1,7 @@
+FROM osixia/openldap:1.5.0
+
+# Bake LDIFs in so osixia can chown them — configmap mounts are read-only
+# and break the osixia init sequence.
+COPY ldif/01-accounts.ldif ldif/02-users.ldif ldif/03-groups.ldif \
+    /container/service/slapd/assets/config/bootstrap/ldif/custom/
+RUN chown -R 911:911 /container/service/slapd/assets/config/bootstrap/ldif/custom/

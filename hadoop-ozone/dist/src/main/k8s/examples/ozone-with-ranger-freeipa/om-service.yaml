@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: om
+spec:
+  publishNotReadyAddresses: true
+  clusterIP: None
+  selector:
+    app: ozone
+    component: om
+  ports:
+  - { name: client-rpc,  port: 9862 }
+  - { name: service-rpc, port: 9864 }
+  - { name: ui,          port: 9874 }

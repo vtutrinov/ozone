@@ -1,0 +1,46 @@
+# Optional browser UI for the openldap tree (LDAP Account Manager — phpLDAPadmin
+# has an FPM permission bug). Reach it with:
+#   kubectl -n ozone-test port-forward svc/ldap-ui 8888:80
+# then open http://localhost:8888 and:
+#   1. Click "LAM configuration" → "Edit server profiles"
+#      Master password: lam
+#   2. On the "lam" profile: set Tree suffix = dc=example,dc=test,
+#      "Valid users" = cn=admin,dc=example,dc=test, save
+#   3. Back to login, Profile=lam, Password=AdminPass1!  (openldap admin)
+#
+# Not in kustomization.yaml by default — apply directly:
+#   kubectl apply -f phpldapadmin.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: ldap-ui
+  namespace: ozone-test
+spec:
+  selector: { component: ldap-ui }
+  ports:
+  - { name: http, port: 80, targetPort: 80 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ldap-ui
+  namespace: ozone-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { component: ldap-ui }
+  template:
+    metadata:
+      labels: { component: ldap-ui }
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: lam
+        image: ldapaccountmanager/lam:8.3
+        env:
+        - { name: LDAP_SERVER,  value: "ldap://ldap.ozone-test.svc.cluster.local:389" }
+        - { name: LDAP_DOMAIN,  value: "example.test" }
+        - { name: LDAP_BASE_DN, value: "dc=example,dc=test" }
+        - { name: LDAP_USER,   value: "cn=admin,dc=example,dc=test" }
+        ports:
+        - { containerPort: 80 }
