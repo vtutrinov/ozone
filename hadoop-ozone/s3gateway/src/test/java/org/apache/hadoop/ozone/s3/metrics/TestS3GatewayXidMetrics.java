@@ -266,7 +266,7 @@ class TestS3GatewayXidMetrics {
     verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p95")), anyDouble());
     verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p99")), anyDouble());
 
-    // Re-reading without new samples must not throw (cached values reused).
+    // Re-reading without new samples must not throw an exception (cached values reused).
     resetMocks();
     metrics.getMetrics(collector, true);
     verify(rb).addGauge(argThat(info -> info.name().equals("request_latency_ms_p50")), anyDouble());
