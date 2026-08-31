@@ -4,7 +4,7 @@
 - **Date:** 2026-08-04
 - **Product:** `S3GatewayXidMetrics` (Apache Ozone, module `hadoop-ozone/s3gateway`)
 - **Test target:** the `S3GatewayXidMetrics` class and the monitoring configuration
-- **Related documents:** `s3-gateway-xid-metrics-runbook.md`, `IMPROVEMENT_PLAN.md`, `gwmetrics.md`
+- **Related documents:** `s3-gateway-xid-metrics-runbook.md`
 
 ---
 
