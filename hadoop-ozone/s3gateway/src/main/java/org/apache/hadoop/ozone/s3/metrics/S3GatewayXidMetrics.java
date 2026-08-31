@@ -133,17 +133,20 @@ public final class S3GatewayXidMetrics implements MetricsSource {
     requestCount.computeIfAbsent(checkedXid, s -> new AtomicLong())
         .incrementAndGet();
     AtomicLong ver = samplesVersion.computeIfAbsent(checkedXid, s -> new AtomicLong());
-    latencySamplesByXid.computeIfAbsent(checkedXid, s -> new ArrayDeque<>(MAX_LATENCY_SAMPLES_PER_XID))
-            .add(latencyMs);
-    ver.incrementAndGet();
-
-    Deque<Long> latencySamples = latencySamplesByXid.get(checkedXid);
+    Deque<Long> latencySamples = latencySamplesByXid
+        .computeIfAbsent(checkedXid, s -> new ArrayDeque<>(MAX_LATENCY_SAMPLES_PER_XID));
+    // Mutate the deque strictly under its monitor so a concurrent reader in
+    // writeLatencyPercentileMetrics() (which iterates the same deque under the
+    // same monitor) never observes an inconsistent ArrayDeque. ArrayDeque is
+    // not thread-safe; an unsynchronized add()/removeFirst() would corrupt the
+    // iteration and can surface as an NPE or IndexOutOfBoundsException.
     synchronized (latencySamples) {
+      latencySamples.add(latencyMs);
       if (latencySamples.size() > MAX_LATENCY_SAMPLES_PER_XID) {
         latencySamples.removeFirst();
-        ver.incrementAndGet();
       }
     }
+    ver.incrementAndGet();
     if (errorCode >= ERROR_CODE_THRESHOLD) {
       RequestMetricKey requestMetricKey = new RequestMetricKey(checkedXid, errorCode);
       errorsTotal.computeIfAbsent(requestMetricKey, key -> new AtomicLong())
