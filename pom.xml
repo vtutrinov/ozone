@@ -79,7 +79,11 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
     <ratis.version>3.0.1</ratis.version>
 
     <!-- Apache Ratis thirdparty version -->
-    <ratis.thirdparty.version>1.0.11</ratis.thirdparty.version>
+    <!-- 1.0.11 bundles a relocated netty 4.1.130, which is what the scan actually sees inside
+         ozone-filesystem-hadoop3 - bumping ${netty.version} alone does not reach it (see the
+         note on ratis-thirdparty-misc in dependencyManagement). 1.1.0 bundles 4.1.136, which
+         is exactly the NVD fix boundary, and is the newest release available. -->
+    <ratis.thirdparty.version>1.1.0</ratis.thirdparty.version>
 
     <!-- Apache Ranger plugin version -->
     <ranger.version>2.3.0</ranger.version>
@@ -166,7 +170,9 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
     <!-- jackson versions -->
     <jackson1.version>1.9.13</jackson1.version>
     <jackson-jaxr.version>1.9.13</jackson-jaxr.version>
-    <jackson2-bom.version>2.15.0</jackson2-bom.version>
+    <!-- 2.15.0 is affected by CVE-2026-54513 and CVE-2026-54512; this BOM is shaded into
+         ozone-filesystem-hadoop2/hadoop3-client, so the copy inside those jars carries it too. -->
+    <jackson2-bom.version>2.18.10</jackson2-bom.version>
     <woodstox.version>5.4.0</woodstox.version>
 
     <!-- jaegertracing veresion -->
@@ -249,7 +255,9 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
 
     <!-- Use netty version known to work with grpc-netty. See table: -->
     <!-- https://github.com/grpc/grpc-java/blob/master/SECURITY.md#netty -->
-    <netty.version>4.1.128.Final</netty.version>
+    <!-- NVD fix boundary across the netty CVEs reported against the shaded filesystem client
+         is 4.1.136; 4.1.137 is the current 4.1.x. -->
+    <netty.version>4.1.137.Final</netty.version>
     <io.grpc.version>1.58.0</io.grpc.version>
 
     <rocksdb.version>7.7.3</rocksdb.version>
