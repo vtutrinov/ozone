@@ -96,7 +96,9 @@
     <httpcore.version>4.4.16</httpcore.version>
     <iceberg.version>1.10.1</iceberg.version>
     <io.grpc.version>1.77.1</io.grpc.version>
-    <jackson2-bom.version>2.21.3</jackson2-bom.version>
+    <!-- SDP (SDPOZN-2805): CVE-2026-54513/54512 affect [2.10.0,2.18.8) and [2.19.0,2.21.4); this BOM is
+         shaded into ozone-filesystem-hadoop2/hadoop3-client. -->
+    <jackson2-bom.version>2.21.6</jackson2-bom.version>
     <jacoco.version>0.8.14</jacoco.version>
     <jakarta.annotation.version>2.1.1</jakarta.annotation.version>
     <jakarta.inject.version>2.6.1</jakarta.inject.version>
@@ -159,7 +161,9 @@
     <metainf-services.version>1.11</metainf-services.version>
     <mockito.version>4.11.0</mockito.version>
     <native.lib.tmp.dir />
-    <netty.version>4.1.136.Final</netty.version>
+    <!-- SDP (SDPOZN-2805): NVD fix boundary of the netty CVEs reported against the shaded filesystem client
+         is 4.1.136. -->
+    <netty.version>4.1.137.Final</netty.version>
     <!-- Node.js version number (without the v prefix required by frontend-maven-plugin) -->
     <nodejs.version>20.18.2</nodejs.version>
     <okhttp3.version>4.12.0</okhttp3.version>
@@ -190,7 +194,9 @@
     <ratis-thirdparty.grpc.version>1.77.1</ratis-thirdparty.grpc.version>
     <ratis-thirdparty.netty.version>4.1.130.Final</ratis-thirdparty.netty.version>
     <ratis-thirdparty.protobuf.version>3.25.8</ratis-thirdparty.protobuf.version>
-    <ratis.thirdparty.version>1.0.11</ratis.thirdparty.version>
+    <!-- SDP (SDPOZN-2805): 1.0.11 bundles a relocated netty 4.1.130 (shaded into ozone-filesystem-hadoop3,
+         not reached by ${netty.version}); 1.1.0 bundles 4.1.136. -->
+    <ratis.thirdparty.version>1.1.0</ratis.thirdparty.version>
     <ratis.version>3.2.1</ratis.version>
     <re2j.version>1.7</re2j.version>
     <reflections.version>0.10.2</reflections.version>
