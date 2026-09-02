@@ -1043,8 +1043,8 @@ class TestS3GatewayXidMetrics {
         for (int i = 0; i < 100; i++) {
           S3GatewayXidMetrics m = S3GatewayXidMetrics.getInstance();
           MetricsCollector c = mock(MetricsCollector.class);
-          MetricsRecordBuilder rb = mock(MetricsRecordBuilder.class, RETURNS_SELF);
-          when(c.addRecord(anyString())).thenReturn(rb);
+          MetricsRecordBuilder readerRb = mock(MetricsRecordBuilder.class, RETURNS_SELF);
+          when(c.addRecord(anyString())).thenReturn(readerRb);
           m.getMetrics(c, true);
         }
       } catch (Exception e) {
