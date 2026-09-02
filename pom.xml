@@ -146,7 +146,15 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
     <assertj.version>3.12.2</assertj.version>
     <asm.version>5.0.4</asm.version>
     <bonecp.version>0.8.0.RELEASE</bonecp.version>
-    <bouncycastle.version>1.77</bouncycastle.version>
+    <!-- 1.77 is affected by CVE-2025-14813 (CRITICAL: GOST 28147 CTR mode reuses keystream
+         after 255 blocks), plus CVE-2024-34447, CVE-2024-29857, CVE-2024-30171, CVE-2024-30172,
+         CVE-2025-8885 and CVE-2025-8916 in bcpkix.  CVE-2025-14813 was fixed on three separate
+         branches (1.80.2, 1.81.1 and 1.84), so 1.82 and 1.83 fall in its third affected range
+         [1.82, 1.84) and are not valid targets.  1.84 is the mainline fix and additionally
+         clears CVE-2026-0636 (bcprov LDAP injection) and CVE-2026-5588 (bcpkix).  It stays
+         Java 8 at its base (class file 52); see the maven-shade-plugin note above for its
+         META-INF/versions/25 section. -->
+    <bouncycastle.version>1.84</bouncycastle.version>
     <cglib.version>3.2.0</cglib.version>
     <derby.version>10.14.2.0</derby.version>
     <codahale-metrics.version>3.0.2</codahale-metrics.version>
@@ -287,7 +295,14 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
     <maven-compiler-plugin.version>3.1</maven-compiler-plugin.version>
     <maven-install-plugin.version>3.1.1</maven-install-plugin.version>
     <maven-resources-plugin.version>3.1.0</maven-resources-plugin.version>
-    <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
+    <!-- 3.4.1 bundles ASM 9.4, which cannot read class file major 65. jackson-core moved its
+         multi-release section from META-INF/versions/19 to /21 between 2.15.0 and 2.18.x, so
+         with the jackson bump above, shading jackson-core into ozone-filesystem-shaded fails
+         with "Unsupported class file major version 65". 3.6.0 bundles ASM 9.7.
+         Raised again to 3.6.2 (ASM 9.9.1) for the bouncycastle bump below: bcprov 1.84 adds a
+         META-INF/versions/25 section carrying class file major 69, which ASM 9.7 cannot read
+         either, and bcprov is relocated into ozone-filesystem-shaded. -->
+    <maven-shade-plugin.version>3.6.2</maven-shade-plugin.version>
     <maven-jar-plugin.version>2.5</maven-jar-plugin.version>
     <maven-war-plugin.version>3.4.0</maven-war-plugin.version>
     <maven-source-plugin.version>3.3.0</maven-source-plugin.version>

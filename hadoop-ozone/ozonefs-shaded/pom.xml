@@ -92,16 +92,26 @@
             </goals>
             <configuration>
               <skip>${maven.shade.skip}</skip>
+              <!-- bouncycastle ships signed jars (a JCE provider requirement). Relocating their
+                   classes invalidates the signature, and a surviving META-INF/*.SF makes the JVM
+                   reject the shaded jar with "Invalid signature file digest for Manifest main
+                   attributes". This used to be handled by listing BC's signature files by name in
+                   a DontIncludeResourceTransformer, but the names are version specific: 1.77 ships
+                   BC2048KE.SF/.DSA while 1.84 ships BCRSA204.SF/.RSA, so the list silently stopped
+                   matching on the bouncycastle bump. Filter them by pattern instead, for every
+                   artifact, so the next BC release cannot break this again. -->
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                    <exclude>META-INF/*.EC</exclude>
+                  </excludes>
+                </filter>
+              </filters>
               <transformers>
-                <transformer
-                        implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
-                  <resources>
-                    <resource>META-INF/BC1024KE.DSA</resource>
-                    <resource>META-INF/BC2048KE.DSA</resource>
-                    <resource>META-INF/BC1024KE.SF</resource>
-                    <resource>META-INF/BC2048KE.SF</resource>
-                  </resources>
-                </transformer>
                 <transformer
                         implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                 <transformer
