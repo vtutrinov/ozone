@@ -101,6 +101,7 @@ public final class OmKeyInfo extends WithParentObjectId
    * keyName is "a/b/key1" then the fileName stores "key1".
    */
   private String fileName;
+  private String ownerName;
 
   /**
    * ACL Information.
@@ -115,7 +116,7 @@ public final class OmKeyInfo extends WithParentObjectId
       Map<String, String> metadata,
       FileEncryptionInfo encInfo, List<OzoneAcl> acls,
       long objectID, long updateID, FileChecksum fileChecksum,
-      String compressionType, long originalDataSize) {
+      String compressionType, long originalDataSize, String ownerName) {
     this.volumeName = volumeName;
     this.bucketName = bucketName;
     this.keyName = keyName;
@@ -132,6 +133,7 @@ public final class OmKeyInfo extends WithParentObjectId
     this.fileChecksum = fileChecksum;
     this.compressionType = compressionType;
     this.originalDataSize = originalDataSize;
+    this.ownerName = ownerName;
   }
 
   @SuppressWarnings("parameternumber")
@@ -142,10 +144,12 @@ public final class OmKeyInfo extends WithParentObjectId
             Map<String, String> metadata,
             FileEncryptionInfo encInfo, List<OzoneAcl> acls,
             long parentObjectID, long objectID, long updateID,
-            FileChecksum fileChecksum, boolean isFile, String compressionType, long originalDataSize) {
+            FileChecksum fileChecksum, boolean isFile, String compressionType, long originalDataSize,
+            String ownerName) {
     this(volumeName, bucketName, keyName, versions, dataSize,
             creationTime, modificationTime, replicationConfig, metadata,
-            encInfo, acls, objectID, updateID, fileChecksum, compressionType, originalDataSize);
+            encInfo, acls, objectID, updateID, fileChecksum, compressionType, originalDataSize,
+            ownerName);
     this.fileName = fileName;
     this.parentObjectID = parentObjectID;
     this.isFile = isFile;
@@ -209,6 +213,10 @@ public final class OmKeyInfo extends WithParentObjectId
 
   public void setCompressionType(String compressionType) {
     this.compressionType = compressionType;
+  }
+
+  public String getOwnerName() {
+    return ownerName;
   }
 
   public @Nullable synchronized OmKeyLocationInfoGroup getLatestVersionLocations() {
@@ -490,6 +498,7 @@ public final class OmKeyInfo extends WithParentObjectId
         ", fileName='" + fileName + '\'' +
         ", compressionType='" + compressionType + '\'' +
         ", acls=" + acls +
+        ", owner=" + ownerName +
         '}';
   }
 
@@ -501,6 +510,7 @@ public final class OmKeyInfo extends WithParentObjectId
     private String volumeName;
     private String bucketName;
     private String keyName;
+    private String ownerName;
     private long dataSize;
     private long originalDataSize;
     private List<OmKeyLocationInfoGroup> omKeyLocationInfoGroups =
@@ -539,6 +549,11 @@ public final class OmKeyInfo extends WithParentObjectId
 
     public Builder setKeyName(String key) {
       this.keyName = key;
+      return this;
+    }
+
+    public Builder setOwnerName(String owner) {
+      this.ownerName = owner;
       return this;
     }
 
@@ -653,7 +668,7 @@ public final class OmKeyInfo extends WithParentObjectId
               omKeyLocationInfoGroups, dataSize, creationTime,
               modificationTime, replicationConfig, metadata, encInfo, acls,
               parentObjectID, objectID, updateID, fileChecksum, isFile, compressionType,
-              originalDataSize);
+              originalDataSize, ownerName);
     }
   }
 
@@ -760,6 +775,9 @@ public final class OmKeyInfo extends WithParentObjectId
       kb.setOriginalSataSize(originalDataSize);
     }
     kb.setIsFile(isFile);
+    if (ownerName != null) {
+      kb.setOwnerName(ownerName);
+    }
     return kb.build();
   }
 
@@ -807,6 +825,9 @@ public final class OmKeyInfo extends WithParentObjectId
       builder.setFile(keyInfo.getIsFile());
     }
 
+    if (keyInfo.hasOwnerName()) {
+      builder.setOwnerName(keyInfo.getOwnerName());
+    }
     // not persisted to DB. FileName will be filtered out from keyName
     builder.setFileName(OzoneFSUtils.getFileName(keyInfo.getKeyName()));
     if (keyInfo.hasCompressionType()) {
@@ -824,6 +845,7 @@ public final class OmKeyInfo extends WithParentObjectId
         "volume='" + volumeName + '\'' +
         ", bucket='" + bucketName + '\'' +
         ", key='" + keyName + '\'' +
+        ", owner='" + ownerName + '\'' +
         ", dataSize='" + dataSize + '\'' +
         ", creationTime='" + creationTime + '\'' +
         ", objectID='" + objectID + '\'' +
@@ -838,7 +860,8 @@ public final class OmKeyInfo extends WithParentObjectId
   public boolean isKeyInfoSame(OmKeyInfo omKeyInfo, boolean checkPath,
                                boolean checkKeyLocationVersions,
                                boolean checkModificationTime,
-                               boolean checkUpdateID) {
+                               boolean checkUpdateID,
+                               boolean checkOwnerName) {
     boolean isEqual = dataSize == omKeyInfo.dataSize &&
         originalDataSize == omKeyInfo.originalDataSize &&
         creationTime == omKeyInfo.creationTime &&
@@ -868,6 +891,11 @@ public final class OmKeyInfo extends WithParentObjectId
           .equals(keyLocationVersions, omKeyInfo.keyLocationVersions);
     }
 
+    if (isEqual && checkOwnerName) {
+      isEqual = Objects
+          .equals(ownerName, omKeyInfo.ownerName);
+    }
+
     return isEqual;
   }
 
@@ -879,7 +907,7 @@ public final class OmKeyInfo extends WithParentObjectId
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-    return isKeyInfoSame((OmKeyInfo) o, true, true, true, true);
+    return isKeyInfoSame((OmKeyInfo) o, true, true, true, true, true);
   }
 
   @Override
@@ -896,6 +924,7 @@ public final class OmKeyInfo extends WithParentObjectId
         .setVolumeName(volumeName)
         .setBucketName(bucketName)
         .setKeyName(keyName)
+        .setOwnerName(ownerName)
         .setCreationTime(creationTime)
         .setModificationTime(modificationTime)
         .setDataSize(dataSize)

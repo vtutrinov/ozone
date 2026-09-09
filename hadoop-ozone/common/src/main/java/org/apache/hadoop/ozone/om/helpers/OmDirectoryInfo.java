@@ -49,6 +49,7 @@ public class OmDirectoryInfo extends WithParentObjectId
   }
 
   private final String name; // directory name
+  private String owner;
 
   private final long creationTime;
   private final long modificationTime;
@@ -57,6 +58,7 @@ public class OmDirectoryInfo extends WithParentObjectId
 
   public OmDirectoryInfo(Builder builder) {
     this.name = builder.name;
+    this.owner = builder.owner;
     this.acls = builder.acls;
     this.metadata = builder.metadata;
     this.objectID = builder.objectID;
@@ -85,6 +87,7 @@ public class OmDirectoryInfo extends WithParentObjectId
     private long updateID;
 
     private String name;
+    private String owner;
 
     private long creationTime;
     private long modificationTime;
@@ -115,6 +118,11 @@ public class OmDirectoryInfo extends WithParentObjectId
 
     public Builder setName(String dirName) {
       this.name = dirName;
+      return this;
+    }
+
+    public Builder setOwner(String ownerName) {
+      this.owner = ownerName;
       return this;
     }
 
@@ -176,6 +184,10 @@ public class OmDirectoryInfo extends WithParentObjectId
     return name;
   }
 
+  public String getOwner() {
+    return owner;
+  }
+
   public long getCreationTime() {
     return creationTime;
   }
@@ -200,6 +212,9 @@ public class OmDirectoryInfo extends WithParentObjectId
                     .setObjectID(objectID)
                     .setUpdateID(updateID)
                     .setParentID(parentObjectID);
+    if (owner != null) {
+      pib.setOwnerName(owner);
+    }
     if (acls != null) {
       pib.addAllAcls(OzoneAclUtil.toProtobuf(acls));
     }
@@ -230,6 +245,9 @@ public class OmDirectoryInfo extends WithParentObjectId
     if (dirInfo.hasUpdateID()) {
       opib.setUpdateID(dirInfo.getUpdateID());
     }
+    if (dirInfo.hasOwnerName()) {
+      opib.setOwner(dirInfo.getOwnerName());
+    }
     return opib.build();
   }
 
@@ -245,6 +263,7 @@ public class OmDirectoryInfo extends WithParentObjectId
     return creationTime == omDirInfo.creationTime &&
             modificationTime == omDirInfo.modificationTime &&
             name.equals(omDirInfo.name) &&
+            Objects.equals(owner, omDirInfo.owner) &&
             Objects.equals(metadata, omDirInfo.metadata) &&
             Objects.equals(acls, omDirInfo.acls) &&
             objectID == omDirInfo.objectID &&
@@ -264,6 +283,7 @@ public class OmDirectoryInfo extends WithParentObjectId
   public OmDirectoryInfo copyObject() {
     OmDirectoryInfo.Builder builder = new Builder()
             .setName(name)
+            .setOwner(owner)
             .setCreationTime(creationTime)
             .setModificationTime(modificationTime)
             .setParentObjectID(parentObjectID)

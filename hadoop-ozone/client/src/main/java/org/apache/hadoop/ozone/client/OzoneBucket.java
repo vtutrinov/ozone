@@ -1291,7 +1291,8 @@ public class OzoneBucket extends WithMetadata implements Bucket {
                 keyInfo.getBucketName(), keyName,
                 keyInfo.getDataSize(), keyInfo.getCreationTime(),
                 keyInfo.getModificationTime(),
-                keyInfo.getReplicationConfig(), keyInfo.isFile(), keyInfo.getUpdateId());
+                keyInfo.getReplicationConfig(), keyInfo.isFile(), keyInfo.getUpdateId(),
+                keyInfo.getOwnerName());
           })
           .filter(key -> StringUtils.startsWith(key.getName(), getKeyPrefix()))
           .collect(Collectors.toList());
@@ -1680,7 +1681,8 @@ public class OzoneBucket extends WithMetadata implements Bucket {
             keyInfo.getModificationTime(),
             keyInfo.getReplicationConfig(),
             keyInfo.isFile(),
-            keyInfo.getUpdateId());
+            keyInfo.getUpdateId(),
+            keyInfo.getOwnerName());
 
         keysResultList.add(ozoneKey);
 
@@ -1784,7 +1786,8 @@ public class OzoneBucket extends WithMetadata implements Bucket {
             keyInfo.getDataSize(), keyInfo.getCreationTime(),
             keyInfo.getModificationTime(),
             keyInfo.getReplicationConfig(),
-            keyInfo.isFile(), keyInfo.getUpdateID());
+            keyInfo.isFile(), keyInfo.getUpdateID(),
+            keyInfo.getOwnerName());
         keysResultList.add(ozoneKey);
       }
     }

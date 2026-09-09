@@ -1071,6 +1071,8 @@ message KeyArgs {
     optional int32 partNumber = 24;
 
     optional string compressionType = 25;
+
+    optional string ownerName = 26;
 }
 
 message KeyLocation {
@@ -1155,6 +1157,7 @@ message KeyInfo {
     optional bool isFile = 19;
     optional string compressionType = 20;
     optional uint64 originalSataSize = 21;
+    optional string ownerName = 22;
 }
 
 message BasicKeyInfo {
@@ -1166,6 +1169,7 @@ message BasicKeyInfo {
     optional hadoop.hdds.ReplicationFactor factor = 6;
     optional hadoop.hdds.ECReplicationConfig ecReplicationConfig = 7;
     optional uint64 updateID = 8;
+    optional string ownerName = 9;
 }
 
 message DirectoryInfo {
@@ -1177,6 +1181,7 @@ message DirectoryInfo {
     required uint64 objectID = 6;
     required uint64 updateID = 7;
     required uint64 parentID = 8;
+    optional string ownerName = 9;
 }
 
 message RepeatedKeyInfo {

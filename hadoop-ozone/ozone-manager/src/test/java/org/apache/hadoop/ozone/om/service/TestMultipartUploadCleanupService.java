@@ -39,6 +39,7 @@ import org.apache.hadoop.ozone.om.helpers.OpenKeySession;
 import org.apache.hadoop.ozone.om.protocol.OzoneManagerProtocol;
 import org.apache.hadoop.ozone.om.request.OMRequestTestUtils;
 import org.apache.ozone.test.GenericTestUtils;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.ratis.util.ExitUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -219,6 +220,7 @@ public class TestMultipartUploadCleanupService {
             .setAcls(Collections.emptyList())
             .setReplicationConfig(StandaloneReplicationConfig.getInstance(ONE))
             .setLocationInfoList(new ArrayList<>())
+            .setOwnerName(UserGroupInformation.getCurrentUser().getShortUserName())
             .build();
 
     OmMultipartInfo omMultipartInfo = writeClient.
@@ -237,6 +239,7 @@ public class TestMultipartUploadCleanupService {
               .setAcls(Collections.emptyList())
               .setReplicationConfig(
                   StandaloneReplicationConfig.getInstance(ONE))
+              .setOwnerName(UserGroupInformation.getCurrentUser().getShortUserName())
               .build();
 
       OpenKeySession openKey = writeClient.openKey(partKeyArgs);

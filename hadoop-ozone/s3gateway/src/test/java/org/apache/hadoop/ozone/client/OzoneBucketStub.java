@@ -54,6 +54,7 @@ import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes;
 import org.apache.hadoop.ozone.om.helpers.OmMultipartInfo;
 import org.apache.hadoop.ozone.om.helpers.OmMultipartUploadCompleteInfo;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Time;
 
 import static org.apache.hadoop.ozone.OzoneConsts.ETAG;
@@ -169,7 +170,8 @@ public class OzoneBucketStub extends OzoneBucket {
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
                 new ArrayList<>(), replicationConfig, metadata, null, null,
-                () -> readKey(key), true, 1, size
+                () -> readKey(key), true, 1, size,
+                UserGroupInformation.getCurrentUser().getShortUserName()
             ));
             super.close();
           }
@@ -201,7 +203,8 @@ public class OzoneBucketStub extends OzoneBucket {
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
                 new ArrayList<>(), finalReplicationCon, metadata, null, getCompressionType(),
-                () -> readKey(key), true, 1, size
+                () -> readKey(key), true, 1, size,
+                UserGroupInformation.getCurrentUser().getShortUserName()
             ));
             super.close();
           }
@@ -238,7 +241,8 @@ public class OzoneBucketStub extends OzoneBucket {
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
                 new ArrayList<>(), rConfig, objectMetadata, null, null,
-                null, false, 1, size
+                null, false, 1, size,
+                UserGroupInformation.getCurrentUser().getShortUserName()
             ));
           }
 
@@ -330,7 +334,8 @@ public class OzoneBucketStub extends OzoneBucket {
           ozoneKeyDetails.getModificationTime().toEpochMilli(),
           ozoneKeyDetails.getReplicationConfig(),
           ozoneKeyDetails.isFile(),
-          ozoneKeyDetails.getUpdateId());
+          ozoneKeyDetails.getUpdateId(),
+          ozoneKeyDetails.getOwner());
     } else {
       throw new OMException(ResultCodes.KEY_NOT_FOUND);
     }
@@ -385,7 +390,8 @@ public class OzoneBucketStub extends OzoneBucket {
               key.getDataSize(),
               key.getCreationTime().getEpochSecond() * 1000,
               key.getModificationTime().getEpochSecond() * 1000,
-              key.getReplicationConfig(), key.isFile(), key.getUpdateId());
+              key.getReplicationConfig(), key.isFile(), key.getUpdateId(),
+              key.getOwner());
         }).collect(Collectors.toList());
 
     if (prevKey != null) {
@@ -627,7 +633,8 @@ public class OzoneBucketStub extends OzoneBucket {
         System.currentTimeMillis(),
         System.currentTimeMillis(),
         new ArrayList<>(), replicationConfig, new HashMap<>(), null, null,
-        () -> readKey(keyName), false, 1, 0));
+        () -> readKey(keyName), false, 1, 0,
+        UserGroupInformation.getCurrentUser().getShortUserName()));
   }
 
   /**
