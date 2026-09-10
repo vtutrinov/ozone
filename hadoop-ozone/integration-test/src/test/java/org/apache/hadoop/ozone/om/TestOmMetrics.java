@@ -65,6 +65,7 @@ import org.apache.hadoop.ozone.om.protocol.OzoneManagerProtocol;
 import org.apache.hadoop.ozone.security.acl.IAccessAuthorizer;
 import org.apache.hadoop.ozone.security.acl.OzoneObj;
 import org.apache.hadoop.ozone.security.acl.OzoneObjInfo;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.ozone.snapshot.SnapshotDiffResponse;
 import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.AfterEach;
@@ -713,6 +714,7 @@ public class TestOmMetrics {
         .setKeyName(keyName)
         .setAcls(Lists.emptyList())
         .setReplicationConfig(repConfig)
+        .setOwnerName(UserGroupInformation.getCurrentUser().getShortUserName())
         .build();
   }
 

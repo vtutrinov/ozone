@@ -104,6 +104,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 import static javax.ws.rs.core.HttpHeaders.CONTENT_LENGTH;
 import static javax.ws.rs.core.HttpHeaders.ETAG;
@@ -232,6 +233,8 @@ public class ObjectEndpoint extends EndpointBase {
       @QueryParam("uploadId") @DefaultValue("") String uploadID,
       final InputStream body) throws IOException, OS3Exception {
     long startNanos = Time.monotonicNowNanos();
+    long totalBytes = 0;
+    int errorCode = HttpStatus.SC_OK;
     S3GAction s3GAction = S3GAction.CREATE_KEY;
     boolean auditSuccess = true;
     PerformanceStringBuilder perf = new PerformanceStringBuilder();
@@ -349,6 +352,7 @@ public class ObjectEndpoint extends EndpointBase {
         }
       }
       getMetrics().incPutKeySuccessLength(putLength);
+      totalBytes = putLength;
       perf.appendSizeBytes(putLength);
       getKeyCache().invalidate(Pair.of(bucketName, keyPath));
       if (sha256 != null) {
@@ -380,16 +384,22 @@ public class ObjectEndpoint extends EndpointBase {
             OZONE_OM_ENABLE_FILESYSTEM_PATHS + " is enabled Keys are" +
             " considered as Unix Paths. Path has Violated FS Semantics " +
             "which caused put operation to fail.");
+        errorCode = HttpStatus.SC_BAD_REQUEST;
         throw os3Exception;
       } else if (isAccessDenied(ex)) {
+        errorCode = HttpStatus.SC_FORBIDDEN;
         throw newError(S3ErrorTable.ACCESS_DENIED, keyPath, ex);
       } else if (ex.getResult() == ResultCodes.QUOTA_EXCEEDED) {
+        errorCode = HttpStatus.SC_INSUFFICIENT_STORAGE;
         throw newError(S3ErrorTable.QUOTA_EXCEEDED, keyPath, ex);
       } else if (ex.getResult() == ResultCodes.BUCKET_NOT_FOUND) {
+        errorCode = HttpStatus.SC_NOT_FOUND;
         throw newError(S3ErrorTable.NO_SUCH_BUCKET, bucketName, ex);
       } else if (ex.getResult() == ResultCodes.FILE_ALREADY_EXISTS) {
+        errorCode = HttpStatus.SC_CONFLICT;
         throw newError(S3ErrorTable.NO_OVERWRITE, keyPath, ex);
       }
+      errorCode = HttpStatus.SC_INTERNAL_SERVER_ERROR;
       throw ex;
     } catch (Exception ex) {
       auditSuccess = false;
@@ -411,6 +421,12 @@ public class ObjectEndpoint extends EndpointBase {
         perf.appendOpLatencyNanos(opLatencyNs);
         AUDIT.logWriteSuccess(buildAuditMessageForSuccess(s3GAction,
             getAuditParameters(), perf));
+      }
+      try {
+        long latencyMs = TimeUnit.NANOSECONDS.toMillis(Time.monotonicNowNanos() - startNanos);
+        getXidMetrics().recordRequest(getXid(), "PUT", errorCode, totalBytes, latencyMs);
+      } catch (Exception e) {
+        LOG.error("Failed to record xid metrics: ", e);
       }
     }
   }
@@ -437,6 +453,7 @@ public class ObjectEndpoint extends EndpointBase {
     long startNanos = Time.monotonicNowNanos();
     S3GAction s3GAction = S3GAction.GET_KEY;
     PerformanceStringBuilder perf = new PerformanceStringBuilder();
+    String xidRequest = getXid();
     try {
       if (uploadId != null) {
         // When we have uploadId, this is the request for list Parts.
@@ -509,8 +526,10 @@ public class ObjectEndpoint extends EndpointBase {
         StreamingOutput output = dest -> {
           try (OzoneInputStream key = keyDetails.getContent()) {
             long readLength = IOUtils.copyLarge(key, dest);
+            long latencyMs = TimeUnit.NANOSECONDS.toMillis(Time.monotonicNowNanos() - startNanos);
             getMetrics().incGetKeySuccessLength(readLength);
             perf.appendSizeBytes(readLength);
+            getXidMetrics().recordRequest(xidRequest, "GET", HttpStatus.SC_OK, readLength, latencyMs);
           }
           long opLatencyNs =  getMetrics().updateGetKeySuccessStats(startNanos);
           perf.appendOpLatencyNanos(opLatencyNs);
@@ -535,6 +554,8 @@ public class ObjectEndpoint extends EndpointBase {
                 copyLength, new byte[bufferSize]);
             getMetrics().incGetKeySuccessLength(readLength);
             perf.appendSizeBytes(readLength);
+            long latencyMs = TimeUnit.NANOSECONDS.toMillis(Time.monotonicNowNanos() - startNanos);
+            getXidMetrics().recordRequest(xidRequest, "GET", HttpStatus.SC_OK, readLength, latencyMs);
           }
           long opLatencyNs = getMetrics().updateGetKeySuccessStats(startNanos);
           perf.appendOpLatencyNanos(opLatencyNs);
@@ -598,21 +619,51 @@ public class ObjectEndpoint extends EndpointBase {
       } else {
         getMetrics().updateGetKeyFailureStats(startNanos);
       }
+
+      int errorCode = HttpStatus.SC_INTERNAL_SERVER_ERROR;
+      OS3Exception os3Exception = null;
       if (ex.getResult() == ResultCodes.KEY_NOT_FOUND) {
-        throw newError(S3ErrorTable.NO_SUCH_KEY, keyPath, ex);
+        errorCode = HttpStatus.SC_NOT_FOUND;
+        os3Exception = newError(S3ErrorTable.NO_SUCH_KEY, keyPath, ex);
       } else if (isAccessDenied(ex)) {
-        throw newError(S3ErrorTable.ACCESS_DENIED, keyPath, ex);
+        errorCode = HttpStatus.SC_FORBIDDEN;
+        os3Exception = newError(S3ErrorTable.ACCESS_DENIED, keyPath, ex);
       } else if (ex.getResult() == ResultCodes.BUCKET_NOT_FOUND) {
-        throw newError(S3ErrorTable.NO_SUCH_BUCKET, bucketName, ex);
-      } else {
-        throw ex;
+        errorCode = HttpStatus.SC_NOT_FOUND;
+        os3Exception = newError(S3ErrorTable.NO_SUCH_BUCKET, bucketName, ex);
       }
+
+      long latencyMs = TimeUnit.NANOSECONDS.toMillis(Time.monotonicNowNanos() - startNanos);
+      getXidMetrics().recordRequest(xidRequest, "GET", errorCode, 0, latencyMs);
+
+      if (os3Exception != null) {
+        throw os3Exception;
+      }
+
+      throw ex;
+
     } catch (Exception ex) {
+      long latencyNs = Time.monotonicNowNanos() - startNanos;
       AUDIT.logReadFailure(
           buildAuditMessageForFailure(s3GAction, getAuditParameters(), ex)
       );
+      getXidMetrics().recordRequest(xidRequest, "GET", HttpStatus.SC_INTERNAL_SERVER_ERROR, 0, latencyNs);
       throw ex;
     }
+  }
+
+  private String getXid() {
+    String xid = headers.getHeaderString("x-amz-meta-xid");
+    if (xid != null) {
+      LOG.info("x-amz-meta-xid={}", xid);
+      return xid;
+    }
+    xid = headers.getHeaderString("xid");
+    if (xid != null) {
+      LOG.info("xid={}", xid);
+      return xid;
+    }
+    return null;
   }
 
   static void addLastModifiedDate(
@@ -1063,6 +1114,7 @@ public class ObjectEndpoint extends EndpointBase {
           }
           getMetrics().incCopyObjectSuccessLength(copyLength);
           perf.appendSizeBytes(copyLength);
+          getXidMetrics().recordRequest(getXid(), "PUT", HttpStatus.SC_OK, copyLength, metadataLatencyNs);
         }
       } else {
         long putLength;
@@ -1081,6 +1133,7 @@ public class ObjectEndpoint extends EndpointBase {
         }
         getMetrics().incPutKeySuccessLength(putLength);
         perf.appendSizeBytes(putLength);
+        getXidMetrics().recordRequest(getXid(), "PUT", HttpStatus.SC_OK, putLength, metadataLatencyNs);
       }
       perf.appendMetaLatencyNanos(metadataLatencyNs);
 
@@ -1104,21 +1157,28 @@ public class ObjectEndpoint extends EndpointBase {
       }
 
     } catch (OMException ex) {
+      OS3Exception os3Exception = null;
       if (copyHeader != null) {
         getMetrics().updateCopyObjectFailureStats(startNanos);
       } else {
         getMetrics().updateCreateMultipartKeyFailureStats(startNanos);
       }
       if (ex.getResult() == ResultCodes.NO_SUCH_MULTIPART_UPLOAD_ERROR) {
-        throw newError(NO_SUCH_UPLOAD, uploadID, ex);
+        os3Exception = newError(NO_SUCH_UPLOAD, uploadID, ex);
       } else if (isAccessDenied(ex)) {
-        throw newError(S3ErrorTable.ACCESS_DENIED, bucket + "/" + key, ex);
+        os3Exception = newError(S3ErrorTable.ACCESS_DENIED, bucket + "/" + key, ex);
       } else if (ex.getResult() == ResultCodes.INVALID_PART) {
-        OS3Exception os3Exception = newError(
+        os3Exception = newError(
             S3ErrorTable.INVALID_ARGUMENT, String.valueOf(partNumber), ex);
         os3Exception.setErrorMessage(ex.getMessage());
+      }
+      long latencyNs = Time.monotonicNowNanos() - startNanos;
+      getXidMetrics().recordRequest(getXid(), "PUT", HttpStatus.SC_INTERNAL_SERVER_ERROR, 0, latencyNs);
+
+      if (os3Exception != null) {
         throw os3Exception;
       }
+
       throw ex;
     } finally {
       // Reset the thread-local message digest instance in case of exception

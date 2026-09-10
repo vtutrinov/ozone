@@ -62,9 +62,9 @@ public class OzoneKeyDetails extends OzoneKey {
       String compressionType,
       CheckedSupplier<OzoneInputStream, IOException> contentSupplier,
       boolean isFile,
-      long updateId, long originalDataSize) {
+      long updateId, long originalDataSize, String owner) {
     super(volumeName, bucketName, keyName, size, creationTime,
-        modificationTime, replicationConfig, metadata, isFile, updateId);
+        modificationTime, replicationConfig, metadata, isFile, updateId, owner);
     this.ozoneKeyLocations = ozoneKeyLocations;
     this.feInfo = feInfo;
     this.compressionType = compressionType;

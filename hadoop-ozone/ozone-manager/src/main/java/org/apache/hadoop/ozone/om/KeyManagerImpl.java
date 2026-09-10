@@ -1461,6 +1461,7 @@ public class KeyManagerImpl implements KeyManager {
         .setReplicationConfig(keyInfo.getReplicationConfig())
         .setFileEncryptionInfo(encInfo)
         .setAcls(keyInfo.getAcls())
+        .setOwnerName(keyInfo.getOwnerName())
         .build();
   }
   /**

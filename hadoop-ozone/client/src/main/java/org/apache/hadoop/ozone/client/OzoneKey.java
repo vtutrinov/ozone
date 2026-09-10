@@ -45,6 +45,10 @@ public class OzoneKey {
    */
   private final String name;
   /**
+   * Name of the Key owner.
+   */
+  private final String owner;
+  /**
    * Size of the data.
    */
   private final long dataSize;
@@ -76,7 +80,7 @@ public class OzoneKey {
   public OzoneKey(String volumeName, String bucketName,
       String keyName, long size, long creationTime,
       long modificationTime, ReplicationConfig replicationConfig,
-      boolean isFile, long updateId) {
+      boolean isFile, long updateId, String owner) {
     this.volumeName = volumeName;
     this.bucketName = bucketName;
     this.name = keyName;
@@ -86,15 +90,17 @@ public class OzoneKey {
     this.replicationConfig = replicationConfig;
     this.isFile = isFile;
     this.updateId = updateId;
+    this.owner = owner;
   }
 
   @SuppressWarnings("parameternumber")
   public OzoneKey(String volumeName, String bucketName,
                   String keyName, long size, long creationTime,
                   long modificationTime, ReplicationConfig replicationConfig,
-                  Map<String, String> metadata, boolean isFile, long updateId) {
+                  Map<String, String> metadata, boolean isFile, long updateId,
+                  String owner) {
     this(volumeName, bucketName, keyName, size, creationTime,
-        modificationTime, replicationConfig, isFile, updateId);
+        modificationTime, replicationConfig, isFile, updateId, owner);
     this.metadata.putAll(metadata);
   }
 
@@ -127,6 +133,15 @@ public class OzoneKey {
 
   public long getUpdateId() {
     return updateId;
+  }
+
+  /**
+   * Returns the Owner Name.
+   *
+   * @return keyName
+   */
+  public String getOwner() {
+    return owner;
   }
 
   /**
@@ -198,7 +213,8 @@ public class OzoneKey {
     return new OzoneKey(keyInfo.getVolumeName(), keyInfo.getBucketName(),
         keyInfo.getKeyName(), keyInfo.getDataSize(), keyInfo.getCreationTime(),
         keyInfo.getModificationTime(), keyInfo.getReplicationConfig(),
-        keyInfo.getMetadata(), keyInfo.isFile(), keyInfo.getUpdateID());
+        keyInfo.getMetadata(), keyInfo.isFile(), keyInfo.getUpdateID(),
+        keyInfo.getOwnerName());
   }
 
 }

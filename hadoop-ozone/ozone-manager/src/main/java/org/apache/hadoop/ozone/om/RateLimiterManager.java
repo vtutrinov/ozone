@@ -115,6 +115,7 @@ public class RateLimiterManager {
       return bl;
     });
 
+    periodStates.remove(new OmRateLimiterMetrics.LimiterKey(volume, bucket, type.name()));
     rateLimiterMetrics.removeRateLimiter(volume, bucket, type.name());
     LOG.debug("Removed rate limiter from memory: bucketKey={}, type={}",
             bucketKey, type);

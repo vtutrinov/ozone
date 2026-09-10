@@ -842,7 +842,7 @@ public class TestSnapshotDiffManager {
         Mockito.when(keyInfo.getKeyName()).thenReturn(i.getArgument(0));
         Mockito.when(keyInfo.isKeyInfoSame(Mockito.any(OmKeyInfo.class),
             Mockito.eq(false), Mockito.eq(false),
-            Mockito.eq(false), Mockito.eq(false)))
+            Mockito.eq(false), Mockito.eq(false), eq(true)))
             .thenAnswer(k -> {
               int keyVal = Integer.parseInt(((String)i.getArgument(0))
                   .substring(3));
