@@ -291,7 +291,9 @@ public final class OMRaftLogAligner {
           } else if (entry.getIndex() == expected) {
             max = Math.max(max, expected);
             expected++;
-          } else if (entry.getIndex() > expected && expected > range.getStartIndex()) {
+          } else if (entry.getIndex() > expected) {
+            // Also when the segment was still empty ("gap between start index
+            // ... and first entry to append ..."): the same failed append.
             afterGap = true;
             state.unacknowledgedEntries++;
           } else {

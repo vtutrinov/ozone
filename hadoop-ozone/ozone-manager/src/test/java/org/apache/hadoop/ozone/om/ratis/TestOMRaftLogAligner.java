@@ -250,6 +250,38 @@ class TestOMRaftLogAligner {
   }
 
   @Test
+  void strayFirstEntryInEmptyOpenSegmentIsIgnored() throws Exception {
+    // Same bug hitting an open segment that was still empty (Ratis reports
+    // "gap between start index 200 and first entry to append 1001").
+    writeOpenSegment(200, range(1001, 1001));
+
+    assertEquals(1, OMRaftLogAligner.alignStaleRaftLog(storage, ti(1000), MAX_OP_SIZE, GROUP));
+    assertTrue(segmentFileNames().isEmpty());
+  }
+
+  @Test
+  void strayFirstEntryAfterClosedSegmentsIsIgnored() throws Exception {
+    writeClosedSegment(100, 199);
+    writeOpenSegment(200, range(1001, 1001));
+
+    OMRaftLogAligner.preflight(storage, ti(1000), new RaftProperties(),
+        new OzoneConfiguration(), GROUP);
+    assertTrue(segmentFileNames().isEmpty());
+  }
+
+  @Test
+  void strayFirstEntryIsIgnoredWhenAnotherProblemIsFound() throws Exception {
+    // Missing middle file plus the stray first entry: the inter-segment rule
+    // decides, and the stray entry must not make the log look unreadable.
+    writeClosedSegment(0, 99);
+    writeClosedSegment(150, 199);
+    writeOpenSegment(200, range(1001, 1001));
+
+    assertEquals(3, OMRaftLogAligner.alignStaleRaftLog(storage, ti(1000), MAX_OP_SIZE, GROUP));
+    assertTrue(segmentFileNames().isEmpty());
+  }
+
+  @Test
   void corruptOpenSegmentWithUnappliedEntriesFailsFast() throws Exception {
     List<LogEntryProto> entries = range(100, 105);
     entries.addAll(range(300, 302));
