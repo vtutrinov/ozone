@@ -68,6 +68,14 @@ import org.slf4j.LoggerFactory;
  *       deleted for the same reason. This recovers a log that is already
  *       corrupt without operator involvement.</li>
  * </ul>
+ * Entries that follow a forward index gap <em>inside</em> a segment file do
+ * not count towards T. They are the signature of the bug above: Ratis wrote
+ * the entry to the file, then its in-memory append failed on the gap and the
+ * appendEntries call returned an error, so such an entry was never
+ * acknowledged to the leader and never applied. A node damaged by the bug
+ * (file holds ..E, gap, S+1; DB at S) is therefore repaired automatically.
+ * Segment files that follow a missing file are different: their entries were
+ * acknowledged, so they do count.
  * An inconsistent log that holds entries above the DB index (T &gt; S), or
  * whose content cannot be read to the end, is never touched: those entries
  * were acknowledged to the leader but are not applied, and dropping them is
@@ -175,11 +183,11 @@ public final class OMRaftLogAligner {
     }
     final int deleted = deleteAll(state.segments);
     LOG.warn("{}: OM Ratis raft log in {} is inconsistent ({}), but the OM DB index {} covers "
-            + "every entry on disk (highest index {}). All {} raft log segment file(s) only hold "
-            + "entries already applied to the DB and were deleted. Ratis will start with an "
-            + "empty log and continue from index {}.",
-        groupLabel, state.dir, state.problem, state.dbIndex, state.maxIndexOnDisk, deleted,
-        state.dbIndex + 1);
+            + "every entry on disk (highest index {}{}). All {} raft log segment file(s) only "
+            + "hold entries already applied to the DB and were deleted. Ratis will start with "
+            + "an empty log and continue from index {}.",
+        groupLabel, state.dir, state.problem, state.dbIndex, state.maxIndexOnDisk,
+        state.describeUnacknowledged(), deleted, state.dbIndex + 1);
     return deleted;
   }
 
@@ -252,20 +260,22 @@ public final class OMRaftLogAligner {
     }
 
     if (state.problem != null) {
-      state.maxIndexOnDisk = findMaxIndexOnDisk(state.segments, maxOpSize);
+      state.maxIndexOnDisk = findMaxIndexOnDisk(state, maxOpSize);
     }
     return state;
   }
 
   /**
-   * Highest entry index present in any segment file, gaps or not: closed
-   * segments by their file names, open segments by walking their entries
-   * without the contiguity assertion. {@link #UNKNOWN_INDEX} when an open
-   * segment cannot be read to its end.
+   * Highest entry index on disk that may have been acknowledged to the
+   * leader: closed segments by their file names, open segments by walking
+   * their entries up to the first forward index gap (what follows such a gap
+   * was never acknowledged, see the class comment). {@link #UNKNOWN_INDEX}
+   * when an open segment cannot be read to its end or is malformed in any
+   * other way.
    */
-  private static long findMaxIndexOnDisk(List<LogSegmentPath> segments, SizeInBytes maxOpSize) {
+  private static long findMaxIndexOnDisk(LogState state, SizeInBytes maxOpSize) {
     long max = RaftLog.INVALID_LOG_INDEX;
-    for (LogSegmentPath segment : segments) {
+    for (LogSegmentPath segment : state.segments) {
       final LogSegmentStartEnd range = segment.getStartEnd();
       if (!range.isOpen()) {
         max = Math.max(max, range.getEndIndex());
@@ -273,8 +283,22 @@ public final class OMRaftLogAligner {
       }
       try (RaftLogSegmentReader reader = RaftLogSegmentReader.open(segment.getPath().toFile(),
           range.getStartIndex(), range.getEndIndex(), true, maxOpSize)) {
+        long expected = range.getStartIndex();
+        boolean afterGap = false;
         for (LogEntryProto entry = reader.nextEntry(); entry != null; entry = reader.nextEntry()) {
-          max = Math.max(max, entry.getIndex());
+          if (afterGap) {
+            state.unacknowledgedEntries++;
+          } else if (entry.getIndex() == expected) {
+            max = Math.max(max, expected);
+            expected++;
+          } else if (entry.getIndex() > expected && expected > range.getStartIndex()) {
+            afterGap = true;
+            state.unacknowledgedEntries++;
+          } else {
+            LOG.warn("Raft log segment {} holds index {} where {} was expected; its content "
+                + "cannot be interpreted.", segment.getPath(), entry.getIndex(), expected);
+            return UNKNOWN_INDEX;
+          }
         }
       } catch (IOException | RuntimeException e) {
         LOG.warn("Failed to read raft log segment {} to its end; its content is unknown.",
@@ -300,8 +324,10 @@ public final class OMRaftLogAligner {
     private String problem;
     /** Last index before the inconsistency, when known from the file names. */
     private long lastGoodIndex = RaftLog.INVALID_LOG_INDEX;
-    /** Highest index on disk; computed only for an inconsistent log. */
+    /** Highest possibly acknowledged index on disk; computed only for an inconsistent log. */
     private long maxIndexOnDisk = RaftLog.INVALID_LOG_INDEX;
+    /** Entries found after an index gap inside a segment file. */
+    private int unacknowledgedEntries;
 
     private LogState(List<LogSegmentPath> segments, File dir, long dbIndex) {
       this.segments = segments;
@@ -309,13 +335,19 @@ public final class OMRaftLogAligner {
       this.dbIndex = dbIndex;
     }
 
+    private String describeUnacknowledged() {
+      return unacknowledgedEntries == 0 ? ""
+          : "; " + unacknowledgedEntries + " entr" + (unacknowledgedEntries == 1 ? "y" : "ies")
+              + " after the index gap inside the segment were never acknowledged and are ignored";
+    }
+
     private String describeUnrepaired() {
       final String coverage = maxIndexOnDisk == UNKNOWN_INDEX
           ? "its content cannot be read to the end, so it is unknown whether the OM DB (index "
               + dbIndex + ") covers it"
-          : "it holds entries up to index " + maxIndexOnDisk + " while the OM DB is at index "
-              + dbIndex + ", so entries " + (dbIndex + 1) + ".." + maxIndexOnDisk
-              + " are not applied and would be lost by discarding the log";
+          : "it holds entries up to index " + maxIndexOnDisk + describeUnacknowledged()
+              + " while the OM DB is at index " + dbIndex + ", so entries " + (dbIndex + 1)
+              + ".." + maxIndexOnDisk + " are not applied and would be lost by discarding the log";
       return "OM Ratis raft log in " + dir + " is inconsistent (" + problem + ") and was not "
           + "repaired automatically: " + coverage + ".";
     }

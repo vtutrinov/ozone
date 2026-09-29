@@ -2183,7 +2183,9 @@
       is behind the DB index, the state left behind when the OM died between
       installing a snapshot from the leader and purging its raft log
       (HDDS-15068), and an inconsistent log whose highest index is not above
-      the DB index. The leader's next append then starts a fresh segment.
+      the DB index. Entries that follow an index gap inside a segment file
+      were never acknowledged by Ratis and do not count. The leader's next
+      append then starts a fresh segment.
     </description>
   </property>
 

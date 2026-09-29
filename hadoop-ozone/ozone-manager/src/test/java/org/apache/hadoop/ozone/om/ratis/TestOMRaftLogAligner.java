@@ -238,19 +238,43 @@ class TestOMRaftLogAligner {
   }
 
   @Test
+  void entriesAfterIntraSegmentGapAreIgnored() throws Exception {
+    // The file the bug leaves behind: ..E, gap, S+1 with the DB at S. The
+    // entry after the gap was never acknowledged, so the DB covers the log.
+    List<LogEntryProto> entries = range(100, 105);
+    entries.addAll(range(301, 301));
+    writeOpenSegment(100, entries);
+
+    assertEquals(1, OMRaftLogAligner.alignStaleRaftLog(storage, ti(300), MAX_OP_SIZE, GROUP));
+    assertTrue(segmentFileNames().isEmpty());
+  }
+
+  @Test
   void corruptOpenSegmentWithUnappliedEntriesFailsFast() throws Exception {
     List<LogEntryProto> entries = range(100, 105);
     entries.addAll(range(300, 302));
     writeOpenSegment(100, entries);
 
-    // DB at 200: entries 300..302 are on disk but not applied.
-    assertEquals(0, OMRaftLogAligner.alignStaleRaftLog(storage, ti(200), MAX_OP_SIZE, GROUP));
+    // DB at 103: entries 104..105 precede the gap, were acknowledged, and
+    // are not applied.
+    assertEquals(0, OMRaftLogAligner.alignStaleRaftLog(storage, ti(103), MAX_OP_SIZE, GROUP));
     OMRaftLogInconsistencyException e = assertThrows(OMRaftLogInconsistencyException.class,
-        () -> OMRaftLogAligner.preflight(storage, ti(200), new RaftProperties(),
+        () -> OMRaftLogAligner.preflight(storage, ti(103), new RaftProperties(),
             new OzoneConfiguration(), GROUP));
     assertTrue(e.getMessage().contains("is corrupt"), e.getMessage());
-    assertTrue(e.getMessage().contains("entries 201..302"), e.getMessage());
+    assertTrue(e.getMessage().contains("entries 104..105"), e.getMessage());
+    assertTrue(e.getMessage().contains("3 entries after the index gap"), e.getMessage());
     assertEquals(1, segmentFileNames().size(), "nothing may be deleted when entries are unapplied");
+  }
+
+  @Test
+  void segmentsAfterMissingFileStillCount() throws Exception {
+    // Inter-segment gap: what follows the missing file was acknowledged.
+    writeClosedSegment(0, 99);
+    writeOpenSegment(150, range(150, 160));
+
+    assertEquals(0, OMRaftLogAligner.alignStaleRaftLog(storage, ti(155), MAX_OP_SIZE, GROUP));
+    assertEquals(2, segmentFileNames().size());
   }
 
   @Test

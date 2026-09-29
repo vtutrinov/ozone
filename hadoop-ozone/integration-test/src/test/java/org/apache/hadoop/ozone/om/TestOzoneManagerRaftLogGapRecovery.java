@@ -17,6 +17,8 @@
 package org.apache.hadoop.ozone.om;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -35,7 +37,11 @@ import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
 import org.apache.hadoop.ozone.om.ratis.OMRaftLogAligner;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.ozone.test.GenericTestUtils;
+import org.apache.ratis.proto.RaftProtos.LogEntryProto;
+import org.apache.ratis.proto.RaftProtos.StateMachineLogEntryProto;
 import org.apache.ratis.server.raftlog.RaftLog;
+import org.apache.ratis.server.raftlog.segmented.SegmentedRaftLogOutputStream;
+import org.apache.ratis.thirdparty.com.google.protobuf.ByteString;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -53,6 +59,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       purging its raft log) must align the raft log at startup instead of
  *       letting Ratis append into the stale open segment, which is what
  *       corrupts the segment file and kills every following start.</li>
+ *   <li>A follower OM already damaged by the bug (its open segment holds the
+ *       stray entry S+1 after a gap) must repair itself at startup.</li>
  *   <li>A follower OM whose raft log is inconsistent but entirely covered by
  *       its DB index must discard the log at startup and rejoin without any
  *       operator action.</li>
@@ -137,6 +145,64 @@ public class TestOzoneManagerRaftLogGapRecovery extends TestOzoneManagerHA {
     // written into the stale open segment right after its last entry and the
     // *next* start dies with "gap between entry ...". Restart once more to pin
     // that regression.
+    cluster.shutdownOzoneManager(follower);
+    cluster.restartOzoneManager(follower, true);
+    waitForCatchUp(follower, leader);
+  }
+
+  /**
+   * The production failure end to end: a follower is down while clients keep
+   * writing, it installs the leader's checkpoint, dies before its raft log is
+   * purged, and the old build then lets Ratis write the leader's next entry
+   * into the stale open segment. The resulting file (..E, gap, S+1 with the DB
+   * at S) used to kill every following start; the fixed build must repair it
+   * on its own and rejoin.
+   */
+  @Test
+  void nodeDamagedByTheBugIsRepairedOnStartup() throws Exception {
+    MiniOzoneHAClusterImpl cluster = getCluster();
+    OzoneManager leader = cluster.getOMLeader();
+    assertNotNull(leader);
+    OzoneManager follower = pickFollower(cluster, leader);
+    File followerDb = follower.getMetadataManager().getStore().getDbLocation();
+    File raftLogRoot = new File(follower.getOmRatisServer().getRatisStorageDir());
+
+    // The node goes down; the other two keep serving clients.
+    cluster.shutdownOzoneManager(follower);
+    createKeys(150);
+
+    // What the interrupted install-snapshot leaves behind: DB at S, log at E.
+    DBCheckpoint checkpoint = leader.getMetadataManager().getStore().getCheckpoint(true);
+    TransactionInfo checkpointTrxnInfo;
+    try {
+      checkpointTrxnInfo = OzoneManagerRatisUtils.getTrxnInfoFromCheckpoint(
+          getConf(), checkpoint.getCheckpointLocation());
+      FileUtils.deleteDirectory(followerDb);
+      FileUtils.copyDirectory(checkpoint.getCheckpointLocation().toFile(), followerDb);
+    } finally {
+      checkpoint.cleanupCheckpoint();
+    }
+
+    // What the old build then did on the next start: the leader's entry S+1
+    // written into the stale open segment right after E.
+    File openSegment = findOpenSegment(raftLogRoot);
+    assertNotNull(openSegment, "follower must have an in-progress raft log segment");
+    appendEntry(openSegment, checkpointTrxnInfo.getTerm(),
+        checkpointTrxnInfo.getTransactionIndex() + 1);
+    List<File> damagedSegments = listSegmentFiles(raftLogRoot);
+
+    GenericTestUtils.LogCapturer aligner = GenericTestUtils.LogCapturer.captureLogs(OMRaftLogAligner.LOG);
+    cluster.restartOzoneManager(follower, true);
+
+    assertTrue(aligner.getOutput().contains("covers every entry on disk"), aligner.getOutput());
+    assertTrue(aligner.getOutput().contains("1 entry after the index gap"), aligner.getOutput());
+    for (File segment : damagedSegments) {
+      assertTrue(!segment.exists(), "damaged log segment must be deleted: " + segment);
+    }
+
+    createKeys(20);
+    waitForCatchUp(follower, leader);
+
     cluster.shutdownOzoneManager(follower);
     cluster.restartOzoneManager(follower, true);
     waitForCatchUp(follower, leader);
@@ -236,6 +302,32 @@ public class TestOzoneManagerRaftLogGapRecovery extends TestOzoneManagerHA {
           ReplicationType.RATIS, ReplicationFactor.ONE, new HashMap<>())) {
         out.write(value);
       }
+    }
+  }
+
+  private static File findOpenSegment(File root) {
+    for (File segment : listSegmentFiles(root)) {
+      if (segment.getName().startsWith("log_inprogress_")) {
+        return segment;
+      }
+    }
+    return null;
+  }
+
+  private static void appendEntry(File segment, long term, long index) throws IOException {
+    ByteBuffer buf = ByteBuffer.allocateDirect(1024 * 1024);
+    try (SegmentedRaftLogOutputStream out = new SegmentedRaftLogOutputStream(
+        segment, true, 4 * 1024 * 1024, 4 * 1024 * 1024, buf)) {
+      out.write(LogEntryProto.newBuilder()
+          .setTerm(term)
+          .setIndex(index)
+          .setStateMachineLogEntry(StateMachineLogEntryProto.newBuilder()
+              .setCallId(index)
+              .setClientId(ByteString.copyFromUtf8("stray"))
+              .setLogData(ByteString.copyFromUtf8("e" + index))
+              .build())
+          .build());
+      out.flush();
     }
   }
 
