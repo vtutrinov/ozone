@@ -2171,17 +2171,19 @@
     <name>ozone.om.ratis.log.gap.check.enabled</name>
     <value>true</value>
     <tag>OZONE, OM, RATIS</tag>
-    <description>If true, every OM raft group fails fast at startup when its
-      Ratis segmented raft log has an inter-segment gap or a corrupt segment,
-      throwing an OMRaftLogInconsistencyException that points at the
+    <description>If true, an OM raft group refuses to start when its Ratis
+      segmented raft log is inconsistent (inter-segment gap, segment with a
+      gap or damaged bytes) and holds entries above the OM DB
+      (TransactionInfo) index, or cannot be read to its end. It throws an
+      OMRaftLogInconsistencyException that points at the
       'ozone repair om raft-log' tool. Disable only when intentionally
       bypassing that check during a manual recovery. Independent of this
-      switch, the OM always aligns a raft log whose last index is behind the
-      OM DB (TransactionInfo) index, the state left behind when the OM died
-      between installing a snapshot from the leader and purging its raft log
-      (HDDS-15068): the stale segment files, which only hold entries already
-      contained in the installed snapshot, are deleted so that the leader's
-      next append starts a fresh segment instead of corrupting the old one.
+      switch, the OM always deletes raft log segment files that only hold
+      entries already contained in the OM DB: a healthy log whose last index
+      is behind the DB index, the state left behind when the OM died between
+      installing a snapshot from the leader and purging its raft log
+      (HDDS-15068), and an inconsistent log whose highest index is not above
+      the DB index. The leader's next append then starts a fresh segment.
     </description>
   </property>
 

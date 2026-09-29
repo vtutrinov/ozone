@@ -35,6 +35,7 @@ import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
 import org.apache.hadoop.ozone.om.ratis.OMRaftLogAligner;
 import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
 import org.apache.ozone.test.GenericTestUtils;
+import org.apache.ratis.server.raftlog.RaftLog;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -52,8 +53,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       purging its raft log) must align the raft log at startup instead of
  *       letting Ratis append into the stale open segment, which is what
  *       corrupts the segment file and kills every following start.</li>
+ *   <li>A follower OM whose raft log is inconsistent but entirely covered by
+ *       its DB index must discard the log at startup and rejoin without any
+ *       operator action.</li>
  * </ul>
- * The fail-fast + repair-tool path for an already corrupt log lives in
+ * The fail-fast + repair-tool path for a corrupt log with unapplied entries
+ * lives in
  * {@link TestOzoneManagerRaftLogCorruptionFailFast}, because an OM whose
  * start failed cannot be restarted again inside the same mini cluster.
  */
@@ -132,6 +137,58 @@ public class TestOzoneManagerRaftLogGapRecovery extends TestOzoneManagerHA {
     // written into the stale open segment right after its last entry and the
     // *next* start dies with "gap between entry ...". Restart once more to pin
     // that regression.
+    cluster.shutdownOzoneManager(follower);
+    cluster.restartOzoneManager(follower, true);
+    waitForCatchUp(follower, leader);
+  }
+
+  @Test
+  void inconsistentLogCoveredByDbIsRepairedOnStartup() throws Exception {
+    MiniOzoneHAClusterImpl cluster = getCluster();
+    OzoneManager leader = cluster.getOMLeader();
+    assertNotNull(leader);
+    OzoneManager follower = pickFollower(cluster, leader);
+    File raftLogRoot = new File(follower.getOmRatisServer().getRatisStorageDir());
+
+    createKeys(20);
+    waitForCatchUp(follower, leader);
+    // The automatic repair only applies when nothing on disk is unapplied.
+    // Right after activity the log tail is a metadata entry that is applied a
+    // heartbeat later; wait until the follower has applied its whole log.
+    RaftLog followerLog = follower.getOmRatisServer()
+        .getServerDivision(follower.getOmRatisServer().getCurrentRaftGroupId()).getRaftLog();
+    GenericTestUtils.waitFor(() -> {
+      try {
+        return followerLog.getLastEntryTermIndex().getIndex()
+            == follower.getOmRatisServer().getLastAppliedTermIndex().getIndex();
+      } catch (Exception e) {
+        return false;
+      }
+    }, 200, 60_000);
+    cluster.shutdownOzoneManager(follower);
+
+    // Damage the layout with a segment that lies inside the range the
+    // follower has already applied: its in-progress segment is now followed
+    // by another segment, which Ratis refuses to load. Everything on disk is
+    // at or below the DB index, so the log must be discarded automatically.
+    File currentDir = TestOzoneManagerRaftLogCorruptionFailFast.findFirstCurrentDir(raftLogRoot);
+    assertNotNull(currentDir);
+    File bogus = TestOzoneManagerRaftLogCorruptionFailFast
+        .writeStandaloneClosedSegment(currentDir, 1L, 2L);
+    List<File> damagedSegments = listSegmentFiles(raftLogRoot);
+
+    GenericTestUtils.LogCapturer aligner = GenericTestUtils.LogCapturer.captureLogs(OMRaftLogAligner.LOG);
+    cluster.restartOzoneManager(follower, true);
+
+    assertTrue(aligner.getOutput().contains("covers every entry on disk"), aligner.getOutput());
+    assertTrue(!bogus.exists(), "the injected segment must be deleted");
+    for (File segment : damagedSegments) {
+      assertTrue(!segment.exists(), "damaged log segment must be deleted: " + segment);
+    }
+
+    createKeys(20);
+    waitForCatchUp(follower, leader);
+
     cluster.shutdownOzoneManager(follower);
     cluster.restartOzoneManager(follower, true);
     waitForCatchUp(follower, leader);

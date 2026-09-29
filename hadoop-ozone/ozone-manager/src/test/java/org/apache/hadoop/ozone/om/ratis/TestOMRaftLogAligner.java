@@ -19,6 +19,7 @@ package org.apache.hadoop.ozone.om.ratis;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -51,7 +52,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Unit tests for {@link OMRaftLogAligner}: the DB-ahead-of-raft-log state
  * (HDDS-15068) must be repaired by deleting the stale segments, a consistent
- * log must be left alone, and corrupt layouts must fail fast.
+ * log must be left alone, an inconsistent log that the DB fully covers must
+ * be deleted, and one that holds unapplied entries must fail fast.
  */
 class TestOMRaftLogAligner {
 
@@ -207,21 +209,66 @@ class TestOMRaftLogAligner {
     writeClosedSegment(10, 19);
 
     OMRaftLogInconsistencyException e = assertThrows(OMRaftLogInconsistencyException.class,
-        () -> OMRaftLogAligner.failOnInterSegmentGap(storage, GROUP));
+        () -> OMRaftLogAligner.failOnInconsistentLog(storage, ti(5), MAX_OP_SIZE, GROUP));
     assertTrue(e.getMessage().contains("corrupted segment layout"), e.getMessage());
   }
 
   @Test
-  void corruptOpenSegmentFailsFastInsteadOfAligning() throws Exception {
-    // Intra-segment gap, i.e. a log that was already corrupted by the bug.
+  void interSegmentGapCoveredByDbIsDeleted() throws Exception {
+    writeClosedSegment(0, 99);
+    writeOpenSegment(150, range(150, 160));
+
+    // Highest index on disk is 160 and the DB already holds it.
+    OMRaftLogAligner.preflight(storage, ti(160), new RaftProperties(),
+        new OzoneConfiguration(), GROUP);
+
+    assertTrue(segmentFileNames().isEmpty());
+  }
+
+  @Test
+  void corruptOpenSegmentCoveredByDbIsDeleted() throws Exception {
+    // The production shape after the bug: E followed by S+1 in one file,
+    // with the DB far past both.
     List<LogEntryProto> entries = range(100, 105);
     entries.addAll(range(300, 302));
     writeOpenSegment(100, entries);
 
+    assertEquals(1, OMRaftLogAligner.alignStaleRaftLog(storage, ti(500), MAX_OP_SIZE, GROUP));
+    assertTrue(segmentFileNames().isEmpty());
+  }
+
+  @Test
+  void corruptOpenSegmentWithUnappliedEntriesFailsFast() throws Exception {
+    List<LogEntryProto> entries = range(100, 105);
+    entries.addAll(range(300, 302));
+    writeOpenSegment(100, entries);
+
+    // DB at 200: entries 300..302 are on disk but not applied.
+    assertEquals(0, OMRaftLogAligner.alignStaleRaftLog(storage, ti(200), MAX_OP_SIZE, GROUP));
     OMRaftLogInconsistencyException e = assertThrows(OMRaftLogInconsistencyException.class,
-        () -> OMRaftLogAligner.alignStaleRaftLog(storage, ti(500), MAX_OP_SIZE, GROUP));
+        () -> OMRaftLogAligner.preflight(storage, ti(200), new RaftProperties(),
+            new OzoneConfiguration(), GROUP));
     assertTrue(e.getMessage().contains("is corrupt"), e.getMessage());
-    assertEquals(1, segmentFileNames().size(), "nothing may be deleted when the log is corrupt");
+    assertTrue(e.getMessage().contains("entries 201..302"), e.getMessage());
+    assertEquals(1, segmentFileNames().size(), "nothing may be deleted when entries are unapplied");
+  }
+
+  @Test
+  void unreadableOpenSegmentFailsFastWhateverTheDbIndex() throws Exception {
+    writeOpenSegment(100, range(100, 199));
+    File segment = new File(currentDir, "log_inprogress_100");
+    try (RandomAccessFile raf = new RandomAccessFile(segment, "rw")) {
+      // Damage the payload of an entry in the middle; later entries stay valid.
+      raf.seek(400);
+      raf.write(new byte[] {(byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF});
+    }
+
+    OMRaftLogInconsistencyException e = assertThrows(OMRaftLogInconsistencyException.class,
+        () -> OMRaftLogAligner.preflight(storage, ti(100_000), new RaftProperties(),
+            new OzoneConfiguration(), GROUP));
+    assertTrue(e.getMessage().contains("is corrupt"), e.getMessage());
+    assertTrue(e.getMessage().contains("cannot be read to the end"), e.getMessage());
+    assertEquals(1, segmentFileNames().size());
   }
 
   @Test
@@ -232,6 +279,7 @@ class TestOMRaftLogAligner {
     writeOpenSegment(100, entries);
 
     assertEquals(0, OMRaftLogAligner.alignStaleRaftLog(storage, ti(50), MAX_OP_SIZE, GROUP));
+    assertEquals(2, segmentFileNames().size());
   }
 
   // --- helpers ---

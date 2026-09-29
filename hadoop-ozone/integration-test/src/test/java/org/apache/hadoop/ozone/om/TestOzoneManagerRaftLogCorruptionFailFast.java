@@ -44,8 +44,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * A follower OM whose raft log is left with a gap (an already corrupt log)
- * must fail startup fast with {@link OMRaftLogInconsistencyException} that
+ * A follower OM whose raft log is inconsistent and holds entries above its DB
+ * index (so discarding the log would lose unapplied entries) must fail startup
+ * fast with {@link OMRaftLogInconsistencyException} that
  * points at the {@code ozone repair om raft-log} tool, and the tool must drop
  * the segments past the last good index.
  *
@@ -79,7 +80,9 @@ public class TestOzoneManagerRaftLogCorruptionFailFast extends TestOzoneManagerH
 
     // Inject an inter-segment gap into the offline follower's raft log: drop
     // a hand-crafted segment file whose startIndex is far past the current
-    // last index. The pre-flight in OMRaftLogAligner must refuse to start.
+    // last index and therefore far past the DB index. Those entries are not
+    // applied, so the pre-flight in OMRaftLogAligner must not repair the log
+    // on its own and must refuse to start.
     File currentDir = findFirstCurrentDir(raftLogRoot);
     assertNotNull(currentDir,
         "could not find any 'current' raft-log dir under " + raftLogRoot);
@@ -124,7 +127,7 @@ public class TestOzoneManagerRaftLogCorruptionFailFast extends TestOzoneManagerH
     return segments;
   }
 
-  private static File findFirstCurrentDir(File root) {
+  static File findFirstCurrentDir(File root) {
     if (!root.isDirectory()) {
       return null;
     }
@@ -144,7 +147,7 @@ public class TestOzoneManagerRaftLogCorruptionFailFast extends TestOzoneManagerH
     return null;
   }
 
-  private static File writeStandaloneClosedSegment(File dir, long startIdx, long endIdx)
+  static File writeStandaloneClosedSegment(File dir, long startIdx, long endIdx)
       throws IOException {
     File f = new File(dir, String.format("log_%d-%d", startIdx, endIdx));
     ByteBuffer buf = ByteBuffer.allocateDirect(1024 * 1024);

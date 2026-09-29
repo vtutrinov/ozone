@@ -30,8 +30,10 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.stream.Stream;
 
+import org.apache.hadoop.ozone.om.ratis.RaftLogSegmentReader;
 import org.apache.ratis.proto.RaftProtos.LogEntryProto;
 import org.apache.ratis.server.raftlog.segmented.LogSegmentPath;
+import org.apache.ratis.util.SizeInBytes;
 import picocli.CommandLine;
 
 /**
@@ -44,6 +46,8 @@ import picocli.CommandLine;
 @CommandLine.Command(name = "inspect",
     description = "List raft-log segments and detect inter- and intra-segment gaps.")
 public class RaftLogInspect implements Callable<Void> {
+
+  private static final SizeInBytes MAX_OP_SIZE = SizeInBytes.valueOf("32MB");
 
   @CommandLine.ParentCommand
   private RaftLogRepair parent;
@@ -120,9 +124,9 @@ public class RaftLogInspect implements Callable<Void> {
    * read, or -1 if the file could not be opened. Prints each intra-segment
    * gap with the surrounding {@code (term, index)} pair.
    *
-   * Uses reflection because Ratis 3.0.1 doesn't expose a public reader; if
-   * Ratis is upgraded and the API breaks, this method falls back to filename-
-   * only inspection so the caller still gets useful output.
+   * Uses {@link RaftLogSegmentReader}, which builds the Ratis reader
+   * reflectively; if Ratis is upgraded and the API breaks, this method falls
+   * back to filename-only inspection so the caller still gets useful output.
    */
   private long inspectEntries(File file, long declaredStart, long declaredEnd,
       boolean isOpen) {
@@ -191,28 +195,28 @@ public class RaftLogInspect implements Callable<Void> {
 
   static Object openInputStream(File file, long startIndex, long endIndex,
       boolean isOpen) throws ReflectiveOperationException {
-    Class<?> streamClass = Class.forName(
-        "org.apache.ratis.server.raftlog.segmented.SegmentedRaftLogInputStream");
-    Class<?> sizeClass = Class.forName("org.apache.ratis.util.SizeInBytes");
-    Object maxOpSize = sizeClass
-        .getMethod("valueOf", String.class).invoke(null, "32MB");
-    java.lang.reflect.Constructor<?> ctor = streamClass.getDeclaredConstructor(
-        File.class, long.class, long.class, boolean.class, sizeClass,
-        Class.forName(
-            "org.apache.ratis.server.metrics.SegmentedRaftLogMetrics"));
-    ctor.setAccessible(true);
-    return ctor.newInstance(file, startIndex, isOpen ? -1L : endIndex, isOpen,
-        maxOpSize, null);
+    try {
+      return RaftLogSegmentReader.open(file, startIndex, endIndex, isOpen, MAX_OP_SIZE);
+    } catch (IOException e) {
+      throw new ReflectiveOperationException(e);
+    }
   }
 
   static LogEntryProto nextEntry(Object stream)
       throws ReflectiveOperationException {
-    Object res = stream.getClass().getMethod("nextEntry").invoke(stream);
-    return (LogEntryProto) res;
+    try {
+      return ((RaftLogSegmentReader) stream).nextEntry();
+    } catch (IOException e) {
+      throw new ReflectiveOperationException(e);
+    }
   }
 
   static void closeInputStream(Object stream)
       throws ReflectiveOperationException {
-    stream.getClass().getMethod("close").invoke(stream);
+    try {
+      ((RaftLogSegmentReader) stream).close();
+    } catch (IOException e) {
+      throw new ReflectiveOperationException(e);
+    }
   }
 }
