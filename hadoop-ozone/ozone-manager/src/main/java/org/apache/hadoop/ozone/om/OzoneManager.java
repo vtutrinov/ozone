@@ -212,7 +212,6 @@ import org.apache.ratis.proto.RaftProtos;
 import org.apache.ratis.proto.RaftProtos.RaftPeerRole;
 import org.apache.ratis.protocol.RaftGroup;
 import org.apache.ratis.protocol.RaftGroupId;
-import org.apache.ratis.server.raftlog.RaftLog;
 import org.apache.ratis.protocol.RaftPeer;
 import org.apache.ratis.protocol.RaftPeerId;
 import org.apache.ratis.protocol.exceptions.AlreadyExistsException;
@@ -2253,6 +2252,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     initializeRatisServer(false);
     if (omRatisServer != null) {
       omRatisServer.start();
+      // stop() shut the previous server's scheduler down; the constructor is
+      // the only other place that schedules it.
+      omRatisServer.startSchedulingLeaderReconfiguration();
     }
 
     omRpcServer = getRpcServer(configuration);
@@ -4322,6 +4324,19 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    *         corresponding termIndex. Otherwise, return null.
    */
   public synchronized TermIndex installSnapshotFromLeader(RaftGroupId raftGroupId, String leaderId) {
+    if (omState != State.RUNNING && omState != State.BOOTSTRAPPING) {
+      // HDDS-15103: installing a checkpoint while OM start-up is still
+      // running races with service initialisation (e.g. the delegation token
+      // secret manager) and terminates the OM half-way through the install,
+      // leaving the DB ahead of the raft log (HDDS-15068). Ratis replies
+      // SNAPSHOT_UNAVAILABLE and the leader retries once we are running.
+      // BOOTSTRAPPING is reached only at the end of start(), with all services
+      // up, and a bootstrapping OM must be able to install a snapshot to catch
+      // up with a leader that has purged its log.
+      LOG.warn("OzoneManager is not in running state, state {}. Abort install snapshot from Leader {}.",
+          omState, leaderId);
+      return null;
+    }
     if (omRatisSnapshotProvider == null) {
       LOG.error("OM Snapshot Provider is not configured as there are no peer " +
           "nodes.");
@@ -4371,7 +4386,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   TermIndex installCheckpoint(RaftGroupId raftGroupId, String leaderId, Path checkpointLocation,
       TransactionInfo checkpointTrxnInfo) throws Exception {
     long startTime = Time.monotonicNow();
-    final long prePauseEndIdx = readRaftLogEndIndexQuietly(raftGroupId); // HDDS-15068 race-guard input.
     File oldDBLocation = metadataManager.getStore().getDbLocation();
     try {
       // Stop Background services
@@ -4439,7 +4453,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         LOG.info("Replaced DB with checkpoint from OM: {}, term: {}, " +
             "index: {}, time: {} ms", leaderId, term, lastAppliedIndex,
             Time.monotonicNow() - time);
-        purgeRaftLogPastSnapshotIfNeeded(raftGroupId, prePauseEndIdx, lastAppliedIndex, leaderId);
       } catch (Exception e) {
         LOG.error("Failed to install Snapshot from {} as OM failed to replace" +
             " DB with downloaded checkpoint. Reloading old OM state.",
@@ -4463,7 +4476,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       if (oldOmMetadataManagerStopped) {
         time = Time.monotonicNow();
         reloadOMState(lastAppliedIndex, term);
-        setTransactionInfo(raftGroupId, TransactionInfo.valueOf(termIndex));
+        // term/lastAppliedIndex now describe the installed checkpoint; the
+        // state machine's getLatestSnapshot() reads this map, so it must not
+        // keep the pre-install termIndex.
+        setTransactionInfo(raftGroupId,
+            TransactionInfo.valueOf(TermIndex.valueOf(term, lastAppliedIndex)));
         omRatisServer.getOmStateMachine().unpause(lastAppliedIndex, term);
         newMetadataManagerStarted = true;
         LOG.info("Reloaded OM state with Term: {} and Index: {}. Spend {} ms",
@@ -4521,56 +4538,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
         "Spend {} ms.", newTermIndex.getTerm(), newTermIndex.getIndex(),
         (Time.monotonicNow() - startTime));
     return newTermIndex;
-  }
-
-  /**
-   * Read the raft-log end index without throwing — returns {@code -1L} on any
-   * failure. Used by {@link #installCheckpoint} to capture state before the
-   * state machine pauses so the install-snapshot race guard can compare.
-   * See HDDS-15068.
-   */
-  private long readRaftLogEndIndexQuietly(RaftGroupId raftGroupId) {
-    try {
-      RaftLog raftLog =
-          omRatisServer.getServerDivision(raftGroupId).getRaftLog();
-      return raftLog.getNextIndex() - 1;
-    } catch (Exception e) {
-      LOG.warn("Could not read raft log end index before install-snapshot; "
-          + "skipping post-install gap guard.", e);
-      return -1L;
-    }
-  }
-
-  /**
-   * HDDS-15068 / HDDS-15103 guard: when the just-installed snapshot index is
-   * past the raft-log end index captured before {@code pause()}, purge the
-   * raft log up to the snapshot index. This makes subsequent leader appends
-   * land in a fresh segment that starts at {@code snapshotIndex + 1} instead
-   * of being mis-stitched into a segment whose tail is at the pre-snapshot
-   * end index, which is what produces the intra-segment gap that crashes the
-   * next OM startup with {@code IllegalStateException("gap between entries")}.
-   */
-  private void purgeRaftLogPastSnapshotIfNeeded(RaftGroupId raftGroupId,
-      long prePauseEndIdx, long snapshotIndex, String leaderId) {
-    if (prePauseEndIdx < 0 || snapshotIndex <= prePauseEndIdx) {
-      return;
-    }
-    LOG.warn("Install-snapshot index {} from leader {} is past raft log end "
-        + "index {}; purging raft log to align and prevent intra-segment gap "
-        + "(HDDS-15068).", snapshotIndex, leaderId, prePauseEndIdx);
-    try {
-      RaftLog raftLog =
-          omRatisServer.getServerDivision(raftGroupId).getRaftLog();
-      raftLog.purge(snapshotIndex).get();
-    } catch (Exception e) {
-      LOG.error("Failed to purge raft log past snapshot index {} after "
-          + "install-snapshot from {}. OM will continue, but the next startup "
-          + "may detect the gap and refuse to start. In that case run "
-          + "'ozone repair om raft-log inspect --raft-log-dir <dir>' and "
-          + "'ozone repair om raft-log truncate --raft-log-dir <dir> "
-          + "--index {}'.", snapshotIndex, leaderId,
-          prePauseEndIdx, e);
-    }
   }
 
   private void stopTrashEmptier() {

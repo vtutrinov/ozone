@@ -17,64 +17,51 @@
 package org.apache.hadoop.ozone.om;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.hdds.client.ReplicationFactor;
 import org.apache.hadoop.hdds.client.ReplicationType;
+import org.apache.hadoop.hdds.utils.TransactionInfo;
+import org.apache.hadoop.hdds.utils.db.DBCheckpoint;
 import org.apache.hadoop.ozone.MiniOzoneHAClusterImpl;
 import org.apache.hadoop.ozone.client.OzoneBucket;
 import org.apache.hadoop.ozone.client.OzoneVolume;
 import org.apache.hadoop.ozone.client.VolumeArgs;
 import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
-import org.apache.hadoop.ozone.om.exceptions.OMRaftLogInconsistencyException;
-import org.apache.hadoop.ozone.repair.om.raftlog.RaftLogRepair;
-import org.apache.hadoop.ozone.repair.om.raftlog.RaftLogTruncate;
-import org.apache.ratis.proto.RaftProtos.LogEntryProto;
-import org.apache.ratis.proto.RaftProtos.StateMachineLogEntryProto;
-import org.apache.ratis.server.raftlog.segmented.SegmentedRaftLogOutputStream;
-import org.apache.ratis.thirdparty.com.google.protobuf.ByteString;
-import org.junit.jupiter.api.AfterEach;
+import org.apache.hadoop.ozone.om.ratis.OMRaftLogAligner;
+import org.apache.hadoop.ozone.om.ratis.utils.OzoneManagerRatisUtils;
+import org.apache.ozone.test.GenericTestUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import picocli.CommandLine;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * Regression test for the raft-log gap recovery flow (HDDS-15068 family).
- *
- * Reproduces the operational scenarios behind the
- * {@code bugfix/raft-log-entry-gap} branch:
+ * Regression tests for the raft-log gap family (HDDS-15068 / HDDS-15103).
  * <ul>
- *   <li>A follower OM that misses a stretch of log entries should still come
- *       back cleanly via install-snapshot; our install-snapshot race guard in
- *       {@link OzoneManager#installCheckpoint} should not break that.</li>
- *   <li>A follower OM whose raft log is left with a gap (the actual prod
- *       failure mode) should fail startup fast with
- *       {@link OMRaftLogInconsistencyException} that points at the
- *       {@code ozone repair om raft-log} tool, and the tool should bring it
- *       back to a startable state.</li>
+ *   <li>A follower OM that misses a stretch of log entries must still come
+ *       back cleanly via install-snapshot; the startup pre-flight in
+ *       {@link OMRaftLogAligner} must not break that happy path.</li>
+ *   <li>A follower OM whose DB is ahead of its raft log (the state the OM is
+ *       left in when it dies between installing a leader checkpoint and
+ *       purging its raft log) must align the raft log at startup instead of
+ *       letting Ratis append into the stale open segment, which is what
+ *       corrupts the segment file and kills every following start.</li>
  * </ul>
+ * The fail-fast + repair-tool path for an already corrupt log lives in
+ * {@link TestOzoneManagerRaftLogCorruptionFailFast}, because an OM whose
+ * start failed cannot be restarted again inside the same mini cluster.
  */
 public class TestOzoneManagerRaftLogGapRecovery extends TestOzoneManagerHA {
 
   @BeforeEach
   void waitLeader() throws Exception {
     waitForLeaderToBeReady();
-  }
-
-  @AfterEach
-  void resetCluster() throws Exception {
-    MiniOzoneHAClusterImpl cluster = getCluster();
-    if (cluster != null) {
-      cluster.restartOzoneManager();
-    }
   }
 
   @Test
@@ -84,72 +71,87 @@ public class TestOzoneManagerRaftLogGapRecovery extends TestOzoneManagerHA {
     assertNotNull(leader);
     OzoneManager follower = pickFollower(cluster, leader);
 
-    cluster.stopOzoneManager(follower.getOMNodeId());
+    cluster.shutdownOzoneManager(follower);
 
     // Drive enough write traffic to cross SNAPSHOT_THRESHOLD + LOG_PURGE_GAP
     // (50 + 50 in the base class) so the offline OM cannot catch up via the
     // raft log on restart and must use install-snapshot.
     createKeys(150);
 
-    cluster.startInactiveOM(follower.getOMNodeId());
+    cluster.restartOzoneManager(follower, true);
 
-    // The new install-snapshot race guard must not break the happy path:
-    // after restart the follower's applied index should catch up to within a
-    // small margin of the leader's.
-    long leaderIdx = leader.getOmRatisServer().getLastAppliedTermIndex()
-        .getIndex();
-    OzoneManager restarted = cluster.getOzoneManager(follower.getOMNodeId());
-    org.apache.ozone.test.GenericTestUtils.waitFor(() -> {
-      try {
-        return restarted.getOmRatisServer().getLastAppliedTermIndex()
-            .getIndex() >= leaderIdx;
-      } catch (Exception e) {
-        return false;
-      }
-    }, 500, 60_000);
+    waitForCatchUp(follower, leader);
   }
 
   @Test
-  void corruptedRaftLogFailsFastAndRecoversViaRepairTool() throws Exception {
+  void dbAheadOfRaftLogIsAlignedOnStartup() throws Exception {
     MiniOzoneHAClusterImpl cluster = getCluster();
     OzoneManager leader = cluster.getOMLeader();
+    assertNotNull(leader);
     OzoneManager follower = pickFollower(cluster, leader);
-
-    cluster.stopOzoneManager(follower.getOMNodeId());
-
-    // Inject an inter-segment gap into the offline follower's raft log: drop
-    // a hand-crafted segment file whose startIndex is far past the current
-    // last index. The pre-flight scan in OzoneManagerStateMachine should
-    // refuse to start with OMRaftLogInconsistencyException.
+    File followerDb = follower.getMetadataManager().getStore().getDbLocation();
     File raftLogRoot = new File(follower.getOmRatisServer().getRatisStorageDir());
-    File currentDir = findFirstCurrentDir(raftLogRoot);
-    assertNotNull(currentDir,
-        "could not find any 'current' raft-log dir under " + raftLogRoot);
-    long gapStart = 9_000_000L;
-    long gapEnd = gapStart + 4L;
-    writeStandaloneClosedSegment(currentDir, gapStart, gapEnd);
 
+    cluster.shutdownOzoneManager(follower);
+
+    // Move the leader well past the stopped follower's raft log.
+    createKeys(150);
+
+    // Reproduce the HDDS-15068 state: replace the follower's DB with a leader
+    // checkpoint (what installCheckpoint does) but leave its raft log alone,
+    // so TransactionInfo index S is far past the raft log end index E.
+    DBCheckpoint checkpoint = leader.getMetadataManager().getStore().getCheckpoint(true);
+    long checkpointIndex;
     try {
-      cluster.startInactiveOM(follower.getOMNodeId());
-      fail("expected OMRaftLogInconsistencyException on startup, got none");
-    } catch (Exception e) {
-      assertTrue(causeChainContains(e, OMRaftLogInconsistencyException.class),
-          "expected OMRaftLogInconsistencyException in cause chain, got: " + e);
+      TransactionInfo checkpointTrxnInfo = OzoneManagerRatisUtils.getTrxnInfoFromCheckpoint(
+          getConf(), checkpoint.getCheckpointLocation());
+      checkpointIndex = checkpointTrxnInfo.getTransactionIndex();
+      FileUtils.deleteDirectory(followerDb);
+      FileUtils.copyDirectory(checkpoint.getCheckpointLocation().toFile(), followerDb);
+    } finally {
+      checkpoint.cleanupCheckpoint();
     }
 
-    // Repair: truncate the bogus segment by running the new tool
-    // programmatically. After repair the OM must start cleanly.
-    runRaftLogTruncate(raftLogRoot, gapStart - 1L);
+    List<File> staleSegments = listSegmentFiles(raftLogRoot);
+    assertTrue(staleSegments.size() > 0, "follower must have raft log segments before restart");
 
-    cluster.startInactiveOM(follower.getOMNodeId());
-    OzoneManager restarted = cluster.getOzoneManager(follower.getOMNodeId());
-    org.apache.ozone.test.GenericTestUtils.waitFor(restarted::isRunning,
-        500, 60_000);
+    GenericTestUtils.LogCapturer aligner = GenericTestUtils.LogCapturer.captureLogs(OMRaftLogAligner.LOG);
+    cluster.restartOzoneManager(follower, true);
+
+    assertTrue(aligner.getOutput().contains("OM DB index " + checkpointIndex + " is past the raft log end index"),
+        aligner.getOutput());
+    for (File segment : staleSegments) {
+      assertTrue(!segment.exists(), "stale segment must be deleted: " + segment);
+    }
+
+    // The follower must catch up through ordinary appends / install-snapshot.
+    createKeys(20);
+    waitForCatchUp(follower, leader);
+
+    // Without the aligner the leader's first append after the restart is
+    // written into the stale open segment right after its last entry and the
+    // *next* start dies with "gap between entry ...". Restart once more to pin
+    // that regression.
+    cluster.shutdownOzoneManager(follower);
+    cluster.restartOzoneManager(follower, true);
+    waitForCatchUp(follower, leader);
   }
 
   // --- helpers ---
 
-  private OzoneManager pickFollower(MiniOzoneHAClusterImpl cluster,
+  private static void waitForCatchUp(OzoneManager follower, OzoneManager leader)
+      throws Exception {
+    long leaderIdx = leader.getOmRatisServer().getLastAppliedTermIndex().getIndex();
+    GenericTestUtils.waitFor(() -> {
+      try {
+        return follower.getOmRatisServer().getLastAppliedTermIndex().getIndex() >= leaderIdx;
+      } catch (Exception e) {
+        return false;
+      }
+    }, 500, 120_000);
+  }
+
+  static OzoneManager pickFollower(MiniOzoneHAClusterImpl cluster,
       OzoneManager leader) {
     List<OzoneManager> all = cluster.getOzoneManagersList();
     for (OzoneManager om : all) {
@@ -180,75 +182,19 @@ public class TestOzoneManagerRaftLogGapRecovery extends TestOzoneManagerHA {
     }
   }
 
-  private File findFirstCurrentDir(File root) {
-    if (!root.isDirectory()) {
-      return null;
+  private static List<File> listSegmentFiles(File root) {
+    List<File> segments = new ArrayList<>();
+    File[] children = root.listFiles();
+    if (children == null) {
+      return segments;
     }
-    for (File child : root.listFiles()) {
-      if (!child.isDirectory()) {
-        continue;
-      }
-      File current = new File(child, "current");
-      if (current.isDirectory()) {
-        return current;
-      }
-      File deeper = findFirstCurrentDir(child);
-      if (deeper != null) {
-        return deeper;
+    for (File child : children) {
+      if (child.isDirectory()) {
+        segments.addAll(listSegmentFiles(child));
+      } else if (child.getName().startsWith("log_")) {
+        segments.add(child);
       }
     }
-    return null;
-  }
-
-  private void writeStandaloneClosedSegment(File dir, long startIdx, long endIdx)
-      throws IOException {
-    File f = new File(dir, String.format("log_%d-%d", startIdx, endIdx));
-    ByteBuffer buf = ByteBuffer.allocateDirect(1024 * 1024);
-    try (SegmentedRaftLogOutputStream out = new SegmentedRaftLogOutputStream(
-        f, false, 4 * 1024 * 1024, 4 * 1024 * 1024, buf)) {
-      for (long idx = startIdx; idx <= endIdx; idx++) {
-        out.write(LogEntryProto.newBuilder()
-            .setTerm(1)
-            .setIndex(idx)
-            .setStateMachineLogEntry(StateMachineLogEntryProto.newBuilder()
-                .setCallId(idx)
-                .setClientId(ByteString.copyFromUtf8("inject"))
-                .setLogData(ByteString.copyFromUtf8("e" + idx))
-                .build())
-            .build());
-      }
-      out.flush();
-    }
-  }
-
-  private void runRaftLogTruncate(File raftLogRoot, long lastGoodIndex)
-      throws Exception {
-    RaftLogRepair parent = new RaftLogRepair();
-    new CommandLine(parent);
-    java.lang.reflect.Field f = RaftLogRepair.class.getDeclaredField("raftLogDir");
-    f.setAccessible(true);
-    f.set(parent, raftLogRoot.getAbsolutePath());
-
-    RaftLogTruncate truncate = new RaftLogTruncate();
-    java.lang.reflect.Field p = RaftLogTruncate.class.getDeclaredField("parent");
-    p.setAccessible(true);
-    p.set(truncate, parent);
-    java.lang.reflect.Field idx = RaftLogTruncate.class.getDeclaredField("targetIndex");
-    idx.setAccessible(true);
-    idx.set(truncate, lastGoodIndex);
-    java.lang.reflect.Field dry = RaftLogTruncate.class.getDeclaredField("dryRun");
-    dry.setAccessible(true);
-    dry.set(truncate, false);
-
-    truncate.call();
-  }
-
-  private static boolean causeChainContains(Throwable top, Class<?> target) {
-    for (Throwable t = top; t != null; t = t.getCause()) {
-      if (target.isInstance(t)) {
-        return true;
-      }
-    }
-    return false;
+    return segments;
   }
 }

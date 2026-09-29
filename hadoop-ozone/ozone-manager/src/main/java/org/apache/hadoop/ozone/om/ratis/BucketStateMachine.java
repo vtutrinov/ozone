@@ -129,6 +129,10 @@ public class BucketStateMachine extends BaseStateMachine {
     getLifeCycle().startAndTransition(() -> {
       super.initialize(raftServer, raftGroupId, raftStorage);
       storage.init(raftStorage);
+      // Ratis opens the raft log right after initialize(); this is the last
+      // moment the segment files can be aligned with the DB snapshot.
+      OMRaftLogAligner.preflight(raftStorage, getLastAppliedTermIndex(), raftServer.getProperties(),
+          ozoneManager.getConfiguration(), getId() + "-" + raftGroupId);
       LOG.info("{}: initialize {} with {}", getId(), raftGroupId, getLastAppliedTermIndex());
     });
   }

@@ -1188,7 +1188,11 @@ public final class OzoneManagerRatisServer {
   }
 
   public void stopSchedulingLeaderReconfiguration() {
-    scheduler.shutdown();
+    // Scheduled by OzoneManager (constructor and restart()); a server that was
+    // stopped before that point has none.
+    if (scheduler != null) {
+      scheduler.shutdown();
+    }
   }
 
 }
