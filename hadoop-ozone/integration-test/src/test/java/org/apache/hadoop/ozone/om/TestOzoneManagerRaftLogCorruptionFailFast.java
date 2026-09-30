@@ -94,8 +94,11 @@ public class TestOzoneManagerRaftLogCorruptionFailFast extends TestOzoneManagerH
       cluster.restartOzoneManager(follower, false);
       fail("expected OMRaftLogInconsistencyException on startup, got none");
     } catch (Exception e) {
-      assertTrue(causeChainContains(e, OMRaftLogInconsistencyException.class),
-          "expected OMRaftLogInconsistencyException in cause chain, got: " + e);
+      // The actionable exception must be the one the operator sees first,
+      // not buried under Ratis' "Failed to initialize server" wrappers.
+      assertTrue(e instanceof OMRaftLogInconsistencyException,
+          "expected OMRaftLogInconsistencyException on top, got: " + e);
+      assertTrue(e.getMessage().contains("--index " + lastGoodIndex), e.getMessage());
     }
     assertTrue(bogus.exists(), "fail-fast must not touch the segment files");
 
@@ -189,14 +192,5 @@ public class TestOzoneManagerRaftLogCorruptionFailFast extends TestOzoneManagerH
     dry.set(truncate, false);
 
     truncate.call();
-  }
-
-  private static boolean causeChainContains(Throwable top, Class<?> target) {
-    for (Throwable t = top; t != null; t = t.getCause()) {
-      if (target.isInstance(t)) {
-        return true;
-      }
-    }
-    return false;
   }
 }

@@ -296,6 +296,7 @@ class TestOMRaftLogAligner {
     assertTrue(e.getMessage().contains("is corrupt"), e.getMessage());
     assertTrue(e.getMessage().contains("entries 104..105"), e.getMessage());
     assertTrue(e.getMessage().contains("3 entries after the index gap"), e.getMessage());
+    assertTrue(e.getMessage().contains("--index 105"), e.getMessage());
     assertEquals(1, segmentFileNames().size(), "nothing may be deleted when entries are unapplied");
   }
 

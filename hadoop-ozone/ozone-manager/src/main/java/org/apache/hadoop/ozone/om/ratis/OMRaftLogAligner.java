@@ -203,8 +203,10 @@ public final class OMRaftLogAligner {
   /**
    * Looks at the segment files of the group. Closed segments are judged by
    * their file names only; the open segment is read when it is the one thing
-   * that could still cover the DB index. Nothing else is read unless a
-   * problem was found, so a healthy log costs no additional I/O.
+   * that could still cover the DB index, which on a healthy node is the usual
+   * case since the DB is applied up to the last committed entry. That read is
+   * bounded by the segment size and is the same file Ratis parses right
+   * after. Nothing else is read unless a problem was found.
    */
   private static LogState inspect(RaftStorage raftStorage, TermIndex lastAppliedFromDb,
       SizeInBytes maxOpSize) throws IOException {
@@ -261,6 +263,11 @@ public final class OMRaftLogAligner {
 
     if (state.problem != null) {
       state.maxIndexOnDisk = findMaxIndexOnDisk(state, maxOpSize);
+      if (state.lastGoodIndex < 0) {
+        // Corrupt open segment or a file following it: what truncate must
+        // keep ends where the open segment's contiguous entries end.
+        state.lastGoodIndex = state.openSegmentContiguousEnd;
+      }
     }
     return state;
   }
@@ -285,7 +292,8 @@ public final class OMRaftLogAligner {
           range.getStartIndex(), range.getEndIndex(), true, maxOpSize)) {
         long expected = range.getStartIndex();
         boolean afterGap = false;
-        for (LogEntryProto entry = reader.nextEntry(); entry != null; entry = reader.nextEntry()) {
+        LogEntryProto entry;
+        for (entry = reader.nextEntry(); entry != null; entry = reader.nextEntry()) {
           if (afterGap) {
             state.unacknowledgedEntries++;
           } else if (entry.getIndex() == expected) {
@@ -302,6 +310,7 @@ public final class OMRaftLogAligner {
             return UNKNOWN_INDEX;
           }
         }
+        state.openSegmentContiguousEnd = Math.max(state.openSegmentContiguousEnd, expected - 1);
       } catch (IOException | RuntimeException e) {
         LOG.warn("Failed to read raft log segment {} to its end; its content is unknown.",
             segment.getPath(), e);
@@ -330,6 +339,8 @@ public final class OMRaftLogAligner {
     private long maxIndexOnDisk = RaftLog.INVALID_LOG_INDEX;
     /** Entries found after an index gap inside a segment file. */
     private int unacknowledgedEntries;
+    /** Last index of the open segment's contiguous entries, when it was walked. */
+    private long openSegmentContiguousEnd = RaftLog.INVALID_LOG_INDEX;
 
     private LogState(List<LogSegmentPath> segments, File dir, long dbIndex) {
       this.segments = segments;

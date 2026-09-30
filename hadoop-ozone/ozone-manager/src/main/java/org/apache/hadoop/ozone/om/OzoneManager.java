@@ -539,7 +539,13 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   }
 
   // Used in MiniOzoneCluster testing
-  private State omState;
+  private volatile State omState;
+  /**
+   * True once every service touched by {@link #installCheckpoint} is up, i.e.
+   * from just before {@link #bootstrap} runs in {@link #start()} and while the
+   * OM is running. Guards against HDDS-15103 (see installSnapshotFromLeader).
+   */
+  private volatile boolean installSnapshotAllowed;
   private Thread emptier;
 
   private static final int MSECS_PER_MINUTE = 60 * 1000;
@@ -2168,6 +2174,11 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     startJVMPauseMonitor();
     setStartTime();
 
+    // From here on every service that installCheckpoint stops and restarts
+    // is up, so a checkpoint from the leader can be installed safely; a
+    // bootstrapping OM needs that to catch up with a leader that has purged
+    // its log.
+    installSnapshotAllowed = true;
     if (omState == State.BOOTSTRAPPING) {
       bootstrap(omNodeDetails);
     }
@@ -2281,6 +2292,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
     startJVMPauseMonitor();
     setStartTime();
+    installSnapshotAllowed = true;
     omState = State.RUNNING;
     bucketNumbersFromConfig = configuration.getPositiveIntOrDefault(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
         OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
@@ -2754,6 +2766,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
     try {
       omState = State.STOPPED;
+      installSnapshotAllowed = false;
       // Cancel the metrics timer and set to null.
       if (metricsTimer != null) {
         metricsTimer.cancel();
@@ -4324,15 +4337,12 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
    *         corresponding termIndex. Otherwise, return null.
    */
   public synchronized TermIndex installSnapshotFromLeader(RaftGroupId raftGroupId, String leaderId) {
-    if (omState != State.RUNNING && omState != State.BOOTSTRAPPING) {
+    if (!installSnapshotAllowed) {
       // HDDS-15103: installing a checkpoint while OM start-up is still
       // running races with service initialisation (e.g. the delegation token
       // secret manager) and terminates the OM half-way through the install,
       // leaving the DB ahead of the raft log (HDDS-15068). Ratis replies
-      // SNAPSHOT_UNAVAILABLE and the leader retries once we are running.
-      // BOOTSTRAPPING is reached only at the end of start(), with all services
-      // up, and a bootstrapping OM must be able to install a snapshot to catch
-      // up with a leader that has purged its log.
+      // SNAPSHOT_UNAVAILABLE and the leader retries once we are ready.
       LOG.warn("OzoneManager is not in running state, state {}. Abort install snapshot from Leader {}.",
           omState, leaderId);
       return null;

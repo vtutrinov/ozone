@@ -794,6 +794,13 @@ public final class OzoneManagerRatisServer {
    */
   private OMRaftLogInconsistencyException maybeWrapGapException(Throwable top) {
     for (Throwable t = top; t != null; t = t.getCause()) {
+      if (t instanceof OMRaftLogInconsistencyException) {
+        // Thrown by OMRaftLogAligner inside StateMachine.initialize(); Ratis
+        // wraps it in CompletionException/IOException("Failed to initialize
+        // server"). Keep the actionable message on top.
+        return t == top ? (OMRaftLogInconsistencyException) t
+            : new OMRaftLogInconsistencyException(t.getMessage(), top);
+      }
       if (!(t instanceof IllegalStateException)) {
         continue;
       }
