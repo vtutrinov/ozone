@@ -35,7 +35,8 @@ import picocli.CommandLine;
         QuotaRepair.class,
         CompactOMDB.class,
         OMRatisLogRepair.class,
-        RaftLogRepair.class
+        RaftLogRepair.class,
+        SdpProtoMigration.class
     },
     description = "Operational tool to repair OM.")
 @MetaInfServices(RepairSubcommand.class)
