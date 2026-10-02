@@ -32,6 +32,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.ipc_.ProtobufHelper;
 import org.apache.hadoop.ipc_.ProtobufRpcEngine;
 import org.apache.hadoop.ipc_.RPC;
+import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
@@ -59,6 +60,8 @@ public class Hadoop3OmTransport implements OmTransport {
   private final HadoopRpcOMFollowerReadFailoverProxyProvider followerReadFailoverProxyProvider;
   // SDP (multi-raft): retries a request in the raft group reported by OMNotLeaderException
   private final boolean multiRaftEnabled;
+  // SDP (multi-raft): follower read for the read requests, the OMs check the raft group a read is served from
+  private final OzoneManagerProtocolPB followerReadProxy;
 
   public Hadoop3OmTransport(ConfigurationSource conf,
       UserGroupInformation ugi, String omServiceId) throws IOException {
@@ -100,17 +103,26 @@ public class Hadoop3OmTransport implements OmTransport {
     this.multiRaftEnabled = conf.getBoolean(OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
         OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT);
     if (multiRaftEnabled) {
-      // SDP (multi-raft): follower read is not supported together with bucket raft groups
+      // SDP (multi-raft): writes, and reads without follower read, go to the OM leading the raft group of the bucket.
+      // With follower read, the reads go through the follower read proxy provider: an OM serves a read of a bucket
+      // raft group after the ReadIndex (or within the lease) of that group, so the OMs need the LINEARIZABLE read
+      // option for reads on followers.
       this.rpcProxy = createRetryProxy(new OzoneRetryInvocationHandler<>(
           omFailoverProxyProvider, omFailoverProxyProvider.getRetryPolicy(maxFailovers)));
+      this.followerReadProxy = followerReadEnabled
+          ? OzoneManagerProtocolPB.newProxy(followerReadFailoverProxyProvider, maxFailovers) : null;
     } else {
       this.rpcProxy = OzoneManagerProtocolPB.newProxy(followerReadFailoverProxyProvider, maxFailovers);
+      this.followerReadProxy = null;
     }
   }
 
   @Override
   public OMResponse submitRequest(OMRequest payload) throws IOException {
     try {
+      if (followerReadProxy != null && OmUtils.isReadOnly(payload)) {
+        return followerReadProxy.submitRequest(NULL_RPC_CONTROLLER, payload);
+      }
       if (multiRaftEnabled) {
         omFailoverProxyProvider.setOmRequest(payload);
       }

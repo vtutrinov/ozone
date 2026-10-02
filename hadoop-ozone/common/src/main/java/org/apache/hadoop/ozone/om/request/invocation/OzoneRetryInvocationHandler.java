@@ -193,13 +193,14 @@ public class OzoneRetryInvocationHandler<T> implements RpcInvocationHandler {
   }
 
   /**
-   * SDP (multi-raft, SDPOZN-1979): a write request goes to the OM leading the raft group of its bucket, if known.
+   * SDP (multi-raft, SDPOZN-1979): a bucket request (write, or read of keys) goes to the OM leading the raft group of
+   * its bucket, if known.
    */
   @SuppressWarnings("unchecked")
   private T selectProxy(Object[] args) {
     if (args != null && args.length == 2 && args[1] instanceof OMRequest
         && proxyDescriptor.getProxyProvider() instanceof OMFailoverProxyProviderBase) {
-      final String bucketPath = OMFailoverProxyProviderBase.getWriteRequestBucketPath((OMRequest) args[1]);
+      final String bucketPath = OMFailoverProxyProviderBase.getRequestBucketPath((OMRequest) args[1]);
       if (bucketPath != null) {
         final T proxy = ((OMFailoverProxyProviderBase<T>) proxyDescriptor.getProxyProvider())
             .selectProxyInfo(bucketPath);

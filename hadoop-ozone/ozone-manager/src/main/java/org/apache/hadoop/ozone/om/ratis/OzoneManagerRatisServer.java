@@ -386,6 +386,16 @@ public final class OzoneManagerRatisServer {
   }
 
   /**
+   * SDP (multi-raft): submits a read request to the given raft group: a linearizable read (ReadIndex of the group)
+   * if the Raft server read option is LINEARIZABLE and the request allows it, a leader read otherwise.
+   */
+  public OMResponse submitReadRequest(OMRequest omRequest, RaftGroupId groupId) throws ServiceException {
+    RaftClientRequest raftClientRequest = createRaftRequest(omRequest, false, groupId);
+    RaftClientReply raftClientReply = submitRequestToRatis(raftClientRequest);
+    return createOmResponse(omRequest, raftClientReply, groupId);
+  }
+
+  /**
    * SDP (multi-raft): API used internally from OzoneManager Server to submit a
    * bucket write request to the raft group of the bucket.
    */

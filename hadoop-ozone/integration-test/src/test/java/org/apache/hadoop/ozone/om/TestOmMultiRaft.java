@@ -30,10 +30,12 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
 import static org.apache.ozone.test.GenericTestUtils.waitFor;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.google.protobuf.ServiceException;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -54,6 +56,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.utils.IOUtils;
+import org.apache.hadoop.ozone.ClientVersion;
 import org.apache.hadoop.ozone.MiniOzoneCluster;
 import org.apache.hadoop.ozone.MiniOzoneHAClusterImpl;
 import org.apache.hadoop.ozone.OmUtils;
@@ -62,10 +65,20 @@ import org.apache.hadoop.ozone.client.ObjectStore;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
+import org.apache.hadoop.ozone.om.exceptions.OMNotLeaderException;
 import org.apache.hadoop.ozone.om.helpers.BucketLayout;
 import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServerConfig;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.KeyArgs;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.LookupKeyRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMRequest;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Status;
+import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.Type;
+import org.apache.ratis.protocol.ClientId;
 import org.apache.ratis.protocol.RaftGroupId;
+import org.apache.ratis.protocol.RaftPeer;
+import org.apache.ratis.protocol.RaftPeerId;
+import org.apache.ratis.protocol.TransferLeadershipRequest;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -337,6 +350,99 @@ public class TestOmMultiRaft {
     assertNotEquals(objectIdBefore, getKeyObjectId(volumeName, bucketName, "after-restart"));
     assertEquals("before-restart".length(),
         objectStore.getVolume(volumeName).getBucket(bucketName).getKey("before-restart").getDataSize());
+  }
+
+  /**
+   * A read of the keys of a bucket is checked against the bucket raft group, which writes them, not against the OM
+   * raft group: the OM raft group leader may not have applied the latest writes of the bucket raft group.
+   */
+  @Test
+  void testBucketKeyReadsAreCheckedAgainstTheBucketRaftGroup() throws Exception {
+    waitForBucketRaftGroups(1 + MULTI_RAFT_BUCKET_GROUPS);
+    final String volumeName = "readvol";
+    final String bucketName = "readbucket";
+    final String keyName = "key";
+    objectStore.createVolume(volumeName);
+    objectStore.getVolume(volumeName).createBucket(bucketName);
+    writeKey(volumeName, bucketName, keyName);
+
+    final String bucketKey = cluster.getOMLeader().getMetadataManager().getBucketKey(volumeName, bucketName);
+    final RaftGroupId group = RaftGroupId.valueOf(
+        cluster.getOMLeader().getOmRaftGroupManager().getBucketRaftGroups().get(bucketKey));
+    final OMRequest lookupKey = OMRequest.newBuilder()
+        .setCmdType(Type.LookupKey)
+        .setVersion(ClientVersion.CURRENT_VERSION)
+        .setClientId(UUID.randomUUID().toString())
+        .setLookupKeyRequest(LookupKeyRequest.newBuilder().setKeyArgs(KeyArgs.newBuilder()
+            .setVolumeName(volumeName).setBucketName(bucketName).setKeyName(keyName)))
+        .build();
+
+    // the leader balancer may move the leadership meanwhile: retry until the OM raft group leader is not the leader
+    // of the bucket raft group while it serves the read
+    waitFor(() -> {
+      final OzoneManager mainLeader = cluster.getOMLeader();
+      if (mainLeader == null || !moveLeadershipAway(mainLeader, group)) {
+        return false;
+      }
+      try {
+        mainLeader.getOmServerProtocol().submitRequest(null, lookupKey);
+        LOG.info("{} served the read, it is the leader of {} again", mainLeader.getOMNodeId(), group);
+        return false;
+      } catch (ServiceException e) {
+        assertInstanceOf(OMNotLeaderException.class, e.getCause());
+        assertEquals(group, ((OMNotLeaderException) e.getCause()).getRaftGroupId());
+        return true;
+      }
+    }, 1000, 60_000);
+
+    // the leader of the bucket raft group serves it
+    waitFor(() -> {
+      final RaftPeerId groupLeader = cluster.getOMLeader().getOmRatisServer().getLeaderId(group);
+      for (int i = 0; groupLeader != null && i < NUM_OF_OMS; i++) {
+        final OzoneManager om = cluster.getOzoneManager(i);
+        if (om.getOmRatisServer().getRaftPeerId().equals(groupLeader)) {
+          try {
+            return om.getOmServerProtocol().submitRequest(null, lookupKey).getStatus() == Status.OK;
+          } catch (ServiceException e) {
+            LOG.info("Read on {} failed: {}", om.getOMNodeId(), e.getMessage());
+            return false;
+          }
+        }
+      }
+      return false;
+    }, 1000, 60_000);
+
+    // and the client finds the OM leading the bucket raft group
+    assertEquals(keyName.length(),
+        objectStore.getVolume(volumeName).getBucket(bucketName).getKey(keyName).getDataSize());
+  }
+
+  /** @return whether the given OM is not the leader of the raft group; asks it to transfer the leadership otherwise. */
+  private static boolean moveLeadershipAway(OzoneManager om, RaftGroupId group) {
+    final RaftPeerId self = om.getOmRatisServer().getRaftPeerId();
+    final RaftPeerId leader = om.getOmRatisServer().getLeaderId(group);
+    if (leader == null) {
+      return false;
+    }
+    if (!leader.equals(self)) {
+      return true;
+    }
+    final RaftPeerId target = om.getOmRatisServer().getServerDivision(group).getRaftConf().getCurrentPeers().stream()
+        .map(RaftPeer::getId)
+        .filter(id -> !id.equals(self))
+        .findFirst()
+        .orElse(null);
+    if (target == null) {
+      return false;
+    }
+    LOG.info("Transferring the leadership of {} from {} to {}", group, self, target);
+    try {
+      om.getOmRatisServer().getServer().transferLeadership(new TransferLeadershipRequest(ClientId.randomId(), self,
+          group, 0, target, 10_000));
+    } catch (IOException e) {
+      LOG.info("Leadership transfer of {} failed: {}", group, e.getMessage());
+    }
+    return false;
   }
 
   private static void waitForBucketRaftGroups(int expectedRaftGroupsCount) throws Exception {

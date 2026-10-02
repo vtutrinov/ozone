@@ -168,4 +168,52 @@ public final class OzoneMultiRaftUtils {
       return null;
     }
   }
+
+  /**
+   * The volume and bucket of a read request served from the state of a bucket raft group (keys, files, multipart
+   * uploads), so that its consistency is checked against that raft group.
+   * @return {volume, bucket}, or null for other requests
+   */
+  public static String[] getReadRequestBucket(OzoneManagerProtocolProtos.OMRequest omRequest) {
+    final OzoneManagerProtocolProtos.KeyArgs keyArgs;
+    switch (omRequest.getCmdType()) {
+    case LookupKey:
+      keyArgs = omRequest.getLookupKeyRequest().getKeyArgs();
+      break;
+    case GetKeyInfo:
+      keyArgs = omRequest.getGetKeyInfoRequest().getKeyArgs();
+      break;
+    case LookupFile:
+      keyArgs = omRequest.getLookupFileRequest().getKeyArgs();
+      break;
+    case GetFileStatus:
+      keyArgs = omRequest.getGetFileStatusRequest().getKeyArgs();
+      break;
+    case ListStatus:
+    case ListStatusLight:
+      keyArgs = omRequest.getListStatusRequest().getKeyArgs();
+      break;
+    case GetObjectTagging:
+      keyArgs = omRequest.getGetObjectTaggingRequest().getKeyArgs();
+      break;
+    case ListKeys:
+    case ListKeysLight:
+      return bucketOrNull(omRequest.getListKeysRequest().getVolumeName(),
+          omRequest.getListKeysRequest().getBucketName());
+    case ListMultiPartUploadParts:
+      return bucketOrNull(omRequest.getListMultipartUploadPartsRequest().getVolume(),
+          omRequest.getListMultipartUploadPartsRequest().getBucket());
+    case ListMultipartUploads:
+      return bucketOrNull(omRequest.getListMultipartUploadsRequest().getVolume(),
+          omRequest.getListMultipartUploadsRequest().getBucket());
+    default:
+      return null;
+    }
+    return bucketOrNull(keyArgs.getVolumeName(), keyArgs.getBucketName());
+  }
+
+  private static String[] bucketOrNull(String volumeName, String bucketName) {
+    return volumeName == null || volumeName.isEmpty() || bucketName == null || bucketName.isEmpty()
+        ? null : new String[] {volumeName, bucketName};
+  }
 }

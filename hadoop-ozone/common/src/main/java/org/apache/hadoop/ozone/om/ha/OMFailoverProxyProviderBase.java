@@ -241,8 +241,8 @@ public abstract class OMFailoverProxyProviderBase<T> implements
             if (suggestedLeaderAddress != null &&
                 suggestedNodeId != null &&
                 omProxies.contains(suggestedNodeId, suggestedLeaderAddress)) {
-              // SDP (multi-raft): send the next write requests of the bucket directly to the suggested leader
-              final String bucketWriteRequestPath = getWriteRequestBucketPath(omRequest.get());
+              // SDP (multi-raft): send the next requests of the bucket directly to the suggested leader
+              final String bucketWriteRequestPath = getRequestBucketPath(omRequest.get());
               if (bucketWriteRequestPath != null) {
                 setOmNodeToHandleRequestThroughRaftGroup(bucketWriteRequestPath, suggestedNodeId);
               }
@@ -432,7 +432,7 @@ public abstract class OMFailoverProxyProviderBase<T> implements
   /** SDP (multi-raft): the proxy of the given OM node. */
   abstract ProxyInfo<T> getProxy(String omNodeId);
 
-  /** SDP (multi-raft): routes the next write requests of the bucket to the given OM node. */
+  /** SDP (multi-raft): routes the next requests of the bucket to the given OM node. */
   public boolean setOmNodeToHandleRequestThroughRaftGroup(String bucket, String omNodeId) {
     if (omProxies.get(omNodeId) == null) {
       return false;
@@ -447,10 +447,18 @@ public abstract class OMFailoverProxyProviderBase<T> implements
     return omProxyInfo != null ? omProxyInfo.proxy : null;
   }
 
-  /** SDP (multi-raft): the volume/bucket a write request is routed by, null for reads and requests without one. */
-  public static String getWriteRequestBucketPath(OMRequest request) {
-    if (request == null || OmUtils.isReadOnly(request)) {
+  /**
+   * SDP (multi-raft): the volume/bucket a request is routed by: bucket write requests, and the reads of the state of
+   * a bucket raft group (keys, files, multipart uploads), are served by the OM leading the raft group of the bucket.
+   * @return null for requests without one
+   */
+  public static String getRequestBucketPath(OMRequest request) {
+    if (request == null) {
       return null;
+    }
+    if (OmUtils.isReadOnly(request)) {
+      final String[] bucket = OzoneMultiRaftUtils.getReadRequestBucket(request);
+      return bucket == null ? null : bucket[0] + "/" + bucket[1];
     }
     final String bucketName = OzoneMultiRaftUtils.getBucketName(request);
     if (bucketName == null || bucketName.isEmpty()) {
