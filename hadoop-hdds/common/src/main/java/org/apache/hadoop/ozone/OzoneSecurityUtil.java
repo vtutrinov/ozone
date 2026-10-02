@@ -40,6 +40,7 @@ import org.apache.hadoop.hdds.annotation.InterfaceAudience;
 import org.apache.hadoop.hdds.annotation.InterfaceStability;
 import org.apache.hadoop.hdds.conf.ConfigurationSource;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.hdds.scm.ScmConfigKeys;
 import org.apache.hadoop.hdds.security.SecurityConfig;
 import org.apache.hadoop.hdds.security.x509.certificate.utils.CertificateCodec;
 import org.slf4j.Logger;
@@ -201,6 +202,26 @@ public final class OzoneSecurityUtil {
               + "mode: {}. The daemon will perform a normal AS-REQ at "
               + "startup. Hadoop UGI internals may have changed.",
           e.toString());
+    }
+  }
+
+  /**
+   * In split-Kerberos mode (external=true, interservice=false) the SCM security service port requires Kerberos, so
+   * daemons running without a TGT reach SCM's certificate and secret-key service only through its SIMPLE sibling
+   * ({@code ozone.scm.security.service.rpc-address}). Without it they would retry the Kerberos port forever (and
+   * SCM's own CA certificate refresh too), so the daemon refuses to start instead.
+   * Called by the daemons that use the SCM security service: SCM, OM, datanode and Recon.
+   */
+  public static void requireScmSecuritySiblingInSplitMode(ConfigurationSource conf) {
+    if (!isSecurityEnabled(conf) || !isExternalKerberosEnabled(conf) || isInterServiceKerberosEnabled(conf)) {
+      return;
+    }
+    String sibling = conf.get(ScmConfigKeys.OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY);
+    if (sibling == null || sibling.trim().isEmpty()) {
+      throw new IllegalArgumentException("Split-Kerberos mode (" + OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY
+          + "=true, " + OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY + "=false) requires "
+          + ScmConfigKeys.OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY + ": daemons without a Kerberos ticket reach "
+          + "the SCM certificate and secret-key service only through this SIMPLE sibling port.");
     }
   }
 

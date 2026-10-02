@@ -31,6 +31,8 @@ data:
   OZONE-SITE.XML_ozone.security.kerberos.interservice.enabled: "false"
   # Sibling RPC port on OM: SIMPLE auth, addressed by S3G/Recon.
   OZONE-SITE.XML_ozone.om.service.rpc-address: om-0.om:9864
+  # SIMPLE sibling of the SCM security service for daemons without a TGT; required in split-Kerberos mode
+  OZONE-SITE.XML_ozone.scm.security.service.rpc-address: scm-0.scm:9962
 
   # Tokens stay HMAC-verified end-to-end.
   OZONE-SITE.XML_hdds.block.token.enabled: "true"

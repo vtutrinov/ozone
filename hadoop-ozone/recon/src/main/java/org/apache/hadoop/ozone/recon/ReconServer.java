@@ -384,6 +384,7 @@ public class ReconServer extends GenericCli implements Callable<Void> {
       OzoneConfiguration  conf) {
     try {
       OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+      OzoneSecurityUtil.requireScmSecuritySiblingInSplitMode(conf);
       // Recon talks to OM/SCM only; both endpoints are SIMPLE in split-Kerberos
       // mode. Skip the keytab login when interservice Kerberos is off so
       // operators can run Recon without a daemon principal.

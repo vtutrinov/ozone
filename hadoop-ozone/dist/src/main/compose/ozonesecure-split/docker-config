@@ -59,6 +59,9 @@ OZONE-SITE.XML_ozone.om.service.rpc-address=om:9864
 # for OM's pipeline-refresh and similar inter-service calls. The Kerberos
 # main port (9860) remains for `ozone admin scm`.
 OZONE-SITE.XML_ozone.scm.service.rpc-address=scm:9866
+# SIMPLE sibling of the SCM security service (certificates, secret keys) for daemons without a TGT; required in
+# split-Kerberos mode
+OZONE-SITE.XML_ozone.scm.security.service.rpc-address=scm:9962
 
 OZONE-SITE.XML_ozone.acl.enabled=true
 OZONE-SITE.XML_ozone.acl.authorizer.class=org.apache.hadoop.ozone.security.acl.OzoneNativeAuthorizer

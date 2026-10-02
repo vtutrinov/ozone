@@ -17,6 +17,7 @@
 
 package org.apache.hadoop.ozone;
 
+import static org.apache.hadoop.hdds.scm.ScmConfigKeys.OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_ENABLED_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_KERBEROS_ACCEPTOR_ONLY_ENABLED_KEY;
 import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY;
@@ -118,6 +119,36 @@ public class TestOzoneSecurityUtil {
     assertThrows(IllegalArgumentException.class,
         () -> OzoneSecurityUtil.validateKerberosFlags(conf,
             LoggerFactory.getLogger(TestOzoneSecurityUtil.class)));
+  }
+
+  @Test
+  public void splitModeRequiresScmSecuritySibling() {
+    OzoneConfiguration conf = new OzoneConfiguration();
+    conf.setBoolean(OZONE_SECURITY_ENABLED_KEY, true);
+    conf.setBoolean(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY, true);
+    conf.setBoolean(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY, false);
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+        () -> OzoneSecurityUtil.requireScmSecuritySiblingInSplitMode(conf));
+    assertTrue(ex.getMessage().contains(OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY));
+
+    conf.set(OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY, "scm:9962");
+    assertDoesNotThrow(() -> OzoneSecurityUtil.requireScmSecuritySiblingInSplitMode(conf));
+  }
+
+  @Test
+  public void scmSecuritySiblingNotRequiredOutsideSplitMode() {
+    // security off
+    assertDoesNotThrow(() -> OzoneSecurityUtil.requireScmSecuritySiblingInSplitMode(new OzoneConfiguration()));
+    // legacy secure: Kerberos everywhere
+    OzoneConfiguration both = new OzoneConfiguration();
+    both.setBoolean(OZONE_SECURITY_ENABLED_KEY, true);
+    assertDoesNotThrow(() -> OzoneSecurityUtil.requireScmSecuritySiblingInSplitMode(both));
+    // security without Kerberos: the SCM security port runs SIMPLE
+    OzoneConfiguration noKerberos = new OzoneConfiguration();
+    noKerberos.setBoolean(OZONE_SECURITY_ENABLED_KEY, true);
+    noKerberos.setBoolean(OZONE_SECURITY_KERBEROS_EXTERNAL_ENABLED_KEY, false);
+    noKerberos.setBoolean(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY, false);
+    assertDoesNotThrow(() -> OzoneSecurityUtil.requireScmSecuritySiblingInSplitMode(noKerberos));
   }
 
   @Test

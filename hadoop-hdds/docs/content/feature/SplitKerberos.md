@@ -108,7 +108,8 @@ authorisation remains HMAC-verified on both ports.
 | 9866 | `StorageContainerLocationProtocol` sibling for inter-service callers (OM pipeline refresh) | n/a | **SIMPLE** (Step M). New sibling RPC server; built when `ozone.scm.service.rpc-address` is set. Same protocol, different SASL profile, just like OM's split-port. |
 | 9863 | `ScmBlockLocationProtocol` (OM ↔ SCM block allocation) | Kerberos | SIMPLE. |
 | 9861 | `StorageContainerDatanodeProtocol` (DN heartbeats and reports) | Kerberos | SIMPLE. |
-| 9961 | `SCMSecurityProtocol` (cert issuance / secret-key vending — used by OM and DN internally) | Kerberos | SIMPLE. |
+| 9961 | `SCMSecurityProtocol` (cert issuance / secret-key vending; external `ozone admin cert`) | Kerberos | **Kerberos** (Step Q), so `ozone admin cert` keeps requiring a TGT. |
+| 9962 | `SCMSecurityProtocol` sibling for internal callers (OM / DN / Recon certificates, secret keys, SCM CA refresh) | n/a | **SIMPLE** (Step Q). Built when `ozone.scm.security.service.rpc-address` is set. **Required** in split mode: SCM, OM, datanodes and Recon refuse to start without it, because without a TGT they could never reach 9961 and would retry forever. |
 
 Why Step M had to exist: `StorageContainerLocationProtocol` is **both** an external admin surface *and* an inter-service surface. OM calls `getContainerWithPipelineBatch` on every key read that has to refresh pipeline info (see `KeyManagerImpl.refreshPipeline`). Step K kept 9860 on Kerberos to satisfy "Kerberos required for `ozone admin`"; Step L removed OM's TGT (acceptor-only). That left OM unable to talk to SCM on every read with `Failed to find any Kerberos tgt`. Step M adds a sibling SIMPLE port (default 9866) that internal callers route to via `HAUtils.getScmContainerClient(conf, ugi, internalCaller=true)`; OM uses that. External `ozone admin` keeps targeting 9860 over Kerberos.
 

@@ -31,3 +31,5 @@ spec:
   # Step M's SIMPLE-sibling RPC port — OM dials this via HAUtils'
   # internal-caller port rewrite (ozone.scm.service.rpc-address).
   - { name: service-rpc,   port: 9866 }
+  # SIMPLE sibling of the SCM security service (ozone.scm.security.service.rpc-address)
+  - { name: security-sibling, port: 9962 }

@@ -2228,8 +2228,10 @@
       enabled, SIMPLE otherwise — so external admin tools like "ozone admin
       cert list" authenticate with a TGT against it, while internal callers
       (OM/DN/Recon certificate issuance, SCM root-CA bootstrap, secret-key
-      fetch) route to this sibling and need no TGT. When unset, no sibling
-      server is built and the legacy single-port behaviour applies. The
+      fetch) route to this sibling and need no TGT. Required in split-Kerberos
+      mode (external Kerberos on, inter-service Kerberos off): SCM, OM,
+      datanodes and Recon refuse to start without it. When unset (other modes),
+      no sibling server is built and the legacy single-port behaviour applies. The
       recommended port is 9962. In HA deployments internal callers are
       routed by rewriting the port of every per-node
       ozone.scm.security.service.address.SERVICE_ID.NODE_ID entry (and the

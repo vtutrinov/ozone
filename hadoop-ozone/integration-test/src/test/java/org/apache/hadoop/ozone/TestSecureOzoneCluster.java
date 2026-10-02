@@ -702,6 +702,8 @@ final class TestSecureOzoneCluster {
     conf.setBoolean(OZONE_SECURITY_KERBEROS_INTERSERVICE_ENABLED_KEY, false);
     assertFalse(conf.getBoolean(IPC_CLIENT_FALLBACK_TO_SIMPLE_AUTH_ALLOWED_KEY,
         false), "Precondition: fallback flag should start unset");
+    conf.set(OZONE_SCM_SECURITY_SERVICE_RPC_ADDRESS_KEY,
+        InetAddress.getLocalHost().getCanonicalHostName() + ":" + getFreePort());
 
     scm = HddsTestUtils.getScmSimple(conf);
     try {

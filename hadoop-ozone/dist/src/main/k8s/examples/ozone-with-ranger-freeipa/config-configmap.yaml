@@ -91,6 +91,8 @@ data:
            rewrites ozone.scm.client.port to it. Same shape on OM for
            S3G→OM internal calls. -->
       <property><name>ozone.scm.service.rpc-address</name><value>0.0.0.0:9866</value></property>
+      <!-- SIMPLE sibling of the SCM security service for daemons without a TGT (split-Kerberos mode) -->
+      <property><name>ozone.scm.security.service.rpc-address</name><value>0.0.0.0:9962</value></property>
       <property><name>ozone.om.service.rpc-address</name><value>0.0.0.0:9864</value></property>
 
       <property><name>ozone.acl.enabled</name><value>true</value></property>
@@ -157,6 +159,8 @@ data:
       <property><name>ozone.s3g.secret.http.auth.type</name><value>simple</value></property>
 
       <property><name>ozone.scm.service.rpc-address</name><value>0.0.0.0:9866</value></property>
+      <!-- SIMPLE sibling of the SCM security service for daemons without a TGT (split-Kerberos mode) -->
+      <property><name>ozone.scm.security.service.rpc-address</name><value>0.0.0.0:9962</value></property>
       <property><name>ozone.om.service.rpc-address</name><value>0.0.0.0:9864</value></property>
 
       <property><name>ozone.acl.enabled</name><value>true</value></property>

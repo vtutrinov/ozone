@@ -1996,6 +1996,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
   private static void loginOMUserIfSecurityEnabled(OzoneConfiguration conf)
       throws IOException, AuthenticationException {
     OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+    OzoneSecurityUtil.requireScmSecuritySiblingInSplitMode(conf);
     // In split-Kerberos mode OM never initiates outbound Kerberos calls
     // (all inter-service traffic is SIMPLE via Step C-2 / IPC fallback).
     // Flip Krb5LoginModule to acceptor-only so the keytab login doesn't

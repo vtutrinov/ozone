@@ -285,6 +285,7 @@ public class HddsDatanodeService extends GenericCli implements Callable<Void>, S
       // client-side rewrites). So gate on the inter-service flag only:
       // external-only deployments can run without a dn keytab at all.
       OzoneSecurityUtil.validateKerberosFlags(conf, LOG);
+      OzoneSecurityUtil.requireScmSecuritySiblingInSplitMode(conf);
       // SecurityConfig is needed by the cert client even when no keytab login
       // happens (external=true, interservice=false): the cert client still
       // talks to SCM's cert service over SIMPLE to fetch/rotate the DN cert.
