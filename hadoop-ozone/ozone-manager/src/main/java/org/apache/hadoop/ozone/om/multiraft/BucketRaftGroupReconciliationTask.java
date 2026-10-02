@@ -55,9 +55,9 @@ import org.slf4j.LoggerFactory;
 
 /**
  * A background task that runs on the Ozone Manager leader to reconcile the
- * state of bucket Raft groups. It checks for any Raft groups that are closed
- * or have unhealthy peers and removes them. It also creates new Raft groups
- * if the number of existing groups is less than the expected count.
+ * state of bucket Raft groups. It removes the Raft groups that are closed, and creates new Raft groups (with new
+ * serials) if the number of existing groups is less than the expected count. Groups without a leader or with
+ * unhealthy peers are kept: they recover from their logs (SDP: the bucket raft groups survive OM restarts).
  */
 public class BucketRaftGroupReconciliationTask implements BackgroundTask {
 
@@ -83,9 +83,10 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
         LOG.trace("Start reconciling bucket group RaftGroup on leader {}", omRatisServer.getRaftPeerId());
         List<RaftGroup> groupsToBeReconfigured = new ArrayList<>();
         List<RaftGroup> existingRaftGroups = (List<RaftGroup>) omRatisServer.getServer().getGroups();
+        final long maxSerial = ozoneManager.getOmRaftGroupManager().getMaxBucketRaftGroupSerial();
         if (existingRaftGroups.size() == 1) { // consist of only main raft group, as like as an initial setup
           LOG.trace("Create all raft groups");
-          List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm, expectedRaftGroupsCount);
+          List<RaftGroupId> raftGroupIds = generateRaftGroups(maxSerial, expectedRaftGroupsCount);
           ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()), true);
         } else {
           for (RaftGroup raftGroup : existingRaftGroups) {
@@ -95,9 +96,13 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
             RaftGroupId groupId = raftGroup.getGroupId();
             DivisionInfo divisionInfo = omRatisServer.getServer().getDivision(groupId).getInfo();
             RaftPeerId leaderId = divisionInfo.getLeaderId();
-            if (leaderId == null || divisionInfo.getLifeCycleState().equals(LifeCycle.State.CLOSED)) {
+            if (divisionInfo.getLifeCycleState().equals(LifeCycle.State.CLOSED)) {
               LOG.warn("Raft group {} is closed, removing it.", groupId);
               groupsToBeReconfigured.add(raftGroup);
+            } else if (leaderId == null) {
+              // e.g. electing a leader after a restart: the group recovers from its log, removing it would lose
+              // the transactions not applied yet
+              LOG.info("Raft group {} has no leader yet.", groupId);
             } else {
               RaftPeerId raftGroupLeaderId = omRatisServer.getServer().getDivision(groupId).getInfo().getLeaderId();
 
@@ -134,12 +139,14 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
                     .stream()
                     .anyMatch(it -> !it.getIsHealthy());
                 if (isNotHealthy) {
-                  groupsToBeReconfigured.add(raftGroup);
+                  // a lagging or stopped peer catches up from the log (or a snapshot) of the group when it is back;
+                  // the group commits with a majority meanwhile
+                  LOG.warn("Raft group {} has unhealthy peers: {}", groupId,
+                      raftGroupHealthState.getPeerHealthInfoList());
                 }
               } catch (Exception e) {
                 LOG.warn("Failed to get raft group health state for group {}: {}",
                     groupId, e.getMessage());
-                groupsToBeReconfigured.add(raftGroup);
               }
             }
           }
@@ -148,17 +155,14 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
           if (ozoneManager.isMultiRaftEnabled()) {
             LOG.trace("Raft group to be reconfigured: {}", groupsToBeReconfigured);
             if (!groupsToBeReconfigured.isEmpty()) {
-              if (ozoneManager.isMultiRaftEnabled()) {
-                ozoneManager.moveOmToSafeMode();
-                List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm + 1, expectedRaftGroupsCount);
-                LOG.trace("Raft group to be created: {}", raftGroupIds);
-                ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()),
-                    false);
-              }
+              ozoneManager.moveOmToSafeMode();
             }
-            if (existingRaftGroups.size() < expectedRaftGroupsCount + 1) {
-              List<RaftGroupId> raftGroupIds = generateRaftGroups(currentMultiRaftTerm,
-                  expectedRaftGroupsCount - existingRaftGroups.size() + 1);
+            // removed groups are replaced by new ones, under new ids (serials)
+            final int remaining = existingRaftGroups.size() - 1 - groupsToBeReconfigured.size();
+            final int missing = expectedRaftGroupsCount - remaining;
+            if (missing > 0) {
+              List<RaftGroupId> raftGroupIds = generateRaftGroups(maxSerial, missing);
+              LOG.trace("Raft group to be created: {}", raftGroupIds);
               ozoneManager.createRaftGroups(raftGroupIds.stream().map(RaftId::getUuid).collect(Collectors.toList()),
                   false);
             }

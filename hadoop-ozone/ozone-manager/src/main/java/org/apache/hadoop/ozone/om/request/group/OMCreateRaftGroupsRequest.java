@@ -17,9 +17,19 @@
 
 package org.apache.hadoop.ozone.om.request.group;
 
+import static org.apache.hadoop.ozone.om.OmRaftGroupManager.MAX_BUCKET_RAFT_GROUP_SERIAL_KEY;
+import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.INVALID_REQUEST;
+
 import java.io.IOException;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import org.apache.hadoop.hdds.HddsUtils;
+import org.apache.hadoop.hdds.utils.db.cache.CacheKey;
+import org.apache.hadoop.hdds.utils.db.cache.CacheValue;
+import org.apache.hadoop.ozone.om.OmRaftGroupManager;
 import org.apache.hadoop.ozone.om.OzoneManager;
+import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.hadoop.ozone.om.execution.flowcontrol.ExecutionContext;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
 import org.apache.hadoop.ozone.om.request.util.OmResponseUtil;
@@ -49,6 +59,18 @@ public class OMCreateRaftGroupsRequest extends OMClientRequest {
   public OMClientResponse validateAndUpdateCache(OzoneManager ozoneManager, ExecutionContext context) {
     OMRequest omRequest = getOmRequest();
     CreateBucketRaftGroupsRequest createBucketRaftGroupsRequest = omRequest.getCreateBucketRaftGroupsRequest();
+    final OMResponse.Builder omResponse = OmResponseUtil.getOMResponseBuilder(omRequest);
+    final List<UUID> groupIds = createBucketRaftGroupsRequest.getGroupIdsList().stream()
+        .map(HddsUtils::fromProtobuf)
+        .collect(Collectors.toList());
+    final long maxSerial;
+    try {
+      maxSerial = validateSerials(ozoneManager.getOmRaftGroupManager().getMaxBucketRaftGroupSerial(), groupIds);
+    } catch (IOException e) {
+      LOG.warn("Rejected creating bucket raft groups {}: {}", groupIds, e.getMessage());
+      return new OMCreateRaftGroupsResponse(createErrorOMResponse(omResponse, e), -1);
+    }
+
     if (createBucketRaftGroupsRequest.getPurgeExistingRaftGroups()) {
       try {
         Iterable<RaftGroup> existingRaftGroups = ozoneManager.getOmRatisServer().getServer().getGroups();
@@ -61,16 +83,38 @@ public class OMCreateRaftGroupsRequest extends OMClientRequest {
         LOG.warn("Something went wrong on deleting existing raft groups", e);
       }
     }
-
-    createBucketRaftGroupsRequest.getGroupIdsList().forEach(groupId -> {
-      ozoneManager.createRaftGroupForBucket(RaftGroupId.valueOf(HddsUtils.fromProtobuf(groupId)));
-      ozoneManager.getOmRaftGroupManager().addGroupIdToRaftGroupCounter(HddsUtils.fromProtobuf(groupId));
+    // the serials are allocated before the groups are created: a failed creation does not make them reusable
+    ozoneManager.getMetadataManager().getMultiRaftInfoTable().addCacheEntry(
+        new CacheKey<>(MAX_BUCKET_RAFT_GROUP_SERIAL_KEY), CacheValue.get(context.getIndex(), maxSerial));
+    groupIds.forEach(groupId -> {
+      ozoneManager.createRaftGroupForBucket(RaftGroupId.valueOf(groupId));
+      ozoneManager.getOmRaftGroupManager().addGroupIdToRaftGroupCounter(groupId);
     });
-    final OMResponse.Builder omResponse =
-            OmResponseUtil.getOMResponseBuilder(omRequest);
+
     CreateBucketRaftGroupsResponse createBucketRaftGroupsResponse =
             CreateBucketRaftGroupsResponse.newBuilder().build();
     omResponse.setCreateBucketRaftGroupsResponse(createBucketRaftGroupsResponse);
-    return new OMCreateRaftGroupsResponse(omResponse.build());
+    return new OMCreateRaftGroupsResponse(omResponse.build(), maxSerial);
+  }
+
+  /**
+   * The ids of new bucket raft groups must carry serials above every serial allocated before, in ascending order:
+   * a group id, and with it the object IDs its transactions generate, is never reused.
+   * @return the new highest serial
+   */
+  public static long validateSerials(long maxSerial, List<UUID> groupIds) throws OMException {
+    long max = maxSerial;
+    for (UUID groupId : groupIds) {
+      final long serial = OmRaftGroupManager.getBucketRaftGroupSerial(groupId);
+      if (serial < 0) {
+        throw new OMException("Not a bucket raft group id: " + groupId, INVALID_REQUEST);
+      }
+      if (serial <= max) {
+        throw new OMException("Serial " + serial + " of bucket raft group " + groupId
+            + " is not above the highest serial allocated " + max, INVALID_REQUEST);
+      }
+      max = serial;
+    }
+    return max;
   }
 }

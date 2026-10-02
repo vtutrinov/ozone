@@ -18,6 +18,7 @@
 package org.apache.hadoop.ozone.om.ratis;
 
 import static org.apache.hadoop.ozone.OzoneConsts.TRANSACTION_INFO_KEY;
+import static org.apache.hadoop.ozone.om.exceptions.OMException.ResultCodes.NOT_SUPPORTED_OPERATION;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -25,7 +26,9 @@ import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 import org.apache.hadoop.hdds.tracing.TracingUtil;
 import org.apache.hadoop.hdds.utils.TransactionInfo;
+import org.apache.hadoop.ozone.om.OmRaftGroupManager;
 import org.apache.hadoop.ozone.om.OzoneManager;
+import org.apache.hadoop.ozone.om.exceptions.OMException;
 import org.apache.ratis.proto.RaftProtos;
 import org.apache.ratis.protocol.Message;
 import org.apache.ratis.protocol.RaftGroupId;
@@ -50,9 +53,26 @@ public class BucketStateMachine extends OzoneManagerStateMachine {
   private static final Logger LOG = LoggerFactory.getLogger(BucketStateMachine.class);
   private static final Logger LOG_MULTI_RAFT = LoggerFactory.getLogger("multiraft");
 
+  /** Serial of the group, the high bits of the object and update IDs its transactions generate. */
+  private final long serial;
+
   public BucketStateMachine(RaftGroupId raftGroupId, OzoneManager om) throws IOException {
     super(om, raftGroupId, "-" + raftGroupId + "-",
         TracingUtil.isTracingEnabled(om.getConfiguration()));
+    this.serial = OmRaftGroupManager.getBucketRaftGroupSerial(raftGroupId.getUuid());
+    if (serial < 0) {
+      throw new IOException("Raft group " + raftGroupId + " is not a bucket raft group: its id carries no serial."
+          + " Bucket raft groups created before serials were introduced must be removed from the OM Ratis storage.");
+    }
+  }
+
+  @Override
+  protected long toExecutionIndex(long logIndex) throws IOException {
+    if (logIndex > OmRaftGroupManager.MAX_BUCKET_RAFT_GROUP_INDEX) {
+      throw new OMException("Log index " + logIndex + " of bucket raft group " + getRaftGroupId() + " exceeds "
+          + OmRaftGroupManager.MAX_BUCKET_RAFT_GROUP_INDEX, NOT_SUPPORTED_OPERATION);
+    }
+    return OmRaftGroupManager.toExecutionIndex(serial, logIndex);
   }
 
   @Override

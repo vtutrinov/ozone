@@ -17,6 +17,9 @@
 
 package org.apache.hadoop.ozone.om.response.group;
 
+import static org.apache.hadoop.ozone.om.OmRaftGroupManager.MAX_BUCKET_RAFT_GROUP_SERIAL_KEY;
+import static org.apache.hadoop.ozone.om.codec.OMDBDefinition.MULTI_RAFT_INFO_TABLE;
+
 import java.io.IOException;
 import org.apache.hadoop.hdds.utils.db.BatchOperation;
 import org.apache.hadoop.ozone.om.OMMetadataManager;
@@ -25,17 +28,21 @@ import org.apache.hadoop.ozone.om.response.OMClientResponse;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.OMResponse;
 
 /**
- * Response for create raft groups response.
+ * Response for create raft groups response: persists the highest bucket raft group serial allocated.
  */
-@CleanupTableInfo
+@CleanupTableInfo(cleanupTables = {MULTI_RAFT_INFO_TABLE})
 public class OMCreateRaftGroupsResponse extends OMClientResponse {
 
-  public OMCreateRaftGroupsResponse(OMResponse omResponse) {
+  private final long maxBucketRaftGroupSerial;
+
+  public OMCreateRaftGroupsResponse(OMResponse omResponse, long maxBucketRaftGroupSerial) {
     super(omResponse);
+    this.maxBucketRaftGroupSerial = maxBucketRaftGroupSerial;
   }
 
   @Override
   protected void addToDBBatch(OMMetadataManager omMetadataManager, BatchOperation batchOperation) throws IOException {
-
+    omMetadataManager.getMultiRaftInfoTable().putWithBatch(batchOperation, MAX_BUCKET_RAFT_GROUP_SERIAL_KEY,
+        maxBucketRaftGroupSerial);
   }
 }

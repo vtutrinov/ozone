@@ -30,14 +30,18 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
 import static org.apache.ozone.test.GenericTestUtils.waitFor;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -46,17 +50,22 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
 import org.apache.hadoop.hdds.utils.IOUtils;
 import org.apache.hadoop.ozone.MiniOzoneCluster;
 import org.apache.hadoop.ozone.MiniOzoneHAClusterImpl;
+import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.OzoneConfigKeys;
 import org.apache.hadoop.ozone.client.ObjectStore;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
+import org.apache.hadoop.ozone.om.helpers.BucketLayout;
+import org.apache.hadoop.ozone.om.helpers.OmKeyInfo;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServerConfig;
+import org.apache.ratis.protocol.RaftGroupId;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -277,4 +286,94 @@ public class TestOmMultiRaft {
       }
     }
   }
+
+  /**
+   * The bucket raft groups survive OM restarts: they keep their ids (serials), logs and bucket assignments, and the
+   * object IDs their transactions generated do not collide with the IDs generated after the restart.
+   */
+  @Test
+  void testBucketRaftGroupsSurviveOmRestart() throws Exception {
+    final int expectedRaftGroupsCount = 1 + MULTI_RAFT_BUCKET_GROUPS;
+    waitForBucketRaftGroups(expectedRaftGroupsCount);
+    final String volumeName = "restartvol";
+    final String bucketName = "restartbucket";
+    objectStore.createVolume(volumeName);
+    objectStore.getVolume(volumeName).createBucket(bucketName);
+    writeKey(volumeName, bucketName, "before-restart");
+
+    final OzoneManager leader = cluster.getOMLeader();
+    final String bucketKey = leader.getMetadataManager().getBucketKey(volumeName, bucketName);
+    final Set<RaftGroupId> groupsBefore = new HashSet<>(leader.getOmRaftGroups().keySet());
+    final UUID bucketGroup = leader.getOmRaftGroupManager().getBucketRaftGroups().get(bucketKey);
+    assertNotNull(bucketGroup);
+    assertTrue(OmRaftGroupManager.getBucketRaftGroupSerial(bucketGroup) > 0);
+    final long objectIdBefore = getKeyObjectId(volumeName, bucketName, "before-restart");
+    // the key was created by the bucket raft group: its object ID is above every OM raft group object ID
+    assertTrue(objectIdBefore > OmUtils.getObjectIdFromTxId(OmUtils.EPOCH_WHEN_RATIS_ENABLED,
+        OmRaftGroupManager.MAX_BUCKET_RAFT_GROUP_INDEX));
+
+    cluster.restartOzoneManager();
+    cluster.waitForLeaderOM();
+    waitForBucketRaftGroups(expectedRaftGroupsCount);
+
+    for (int i = 0; i < NUM_OF_OMS; i++) {
+      final OzoneManager om = cluster.getOzoneManager(i);
+      assertEquals(groupsBefore, om.getOmRaftGroups().keySet(), "raft groups of " + om.getOMNodeId());
+      assertEquals(bucketGroup, om.getOmRaftGroupManager().getBucketRaftGroups().get(bucketKey),
+          "raft group of the bucket on " + om.getOMNodeId());
+      // the bucket raft group continues from its log, it is not re-created from index 0
+      assertTrue(om.getTransactionInfo(RaftGroupId.valueOf(bucketGroup)).getTransactionIndex() > 0);
+    }
+
+    waitFor(() -> {
+      try {
+        writeKey(volumeName, bucketName, "after-restart");
+        return true;
+      } catch (IOException e) {
+        LOG.info("Write after restart failed, retrying: {}", e.getMessage());
+        return false;
+      }
+    }, 1000, 120_000);
+    assertNotEquals(objectIdBefore, getKeyObjectId(volumeName, bucketName, "after-restart"));
+    assertEquals("before-restart".length(),
+        objectStore.getVolume(volumeName).getBucket(bucketName).getKey("before-restart").getDataSize());
+  }
+
+  private static void waitForBucketRaftGroups(int expectedRaftGroupsCount) throws Exception {
+    waitFor(() -> {
+      for (int i = 0; i < NUM_OF_OMS; i++) {
+        if (cluster.getOzoneManager(i).getOmRaftGroups().size() != expectedRaftGroupsCount) {
+          return false;
+        }
+      }
+      return true;
+    }, 1000, 120_000);
+  }
+
+  private static void writeKey(String volumeName, String bucketName, String keyName) throws IOException {
+    try (OzoneOutputStream stream = objectStore.getVolume(volumeName).getBucket(bucketName)
+        .createKey(keyName, keyName.length(), ReplicationConfig.getDefault(conf), Collections.emptyMap())) {
+      stream.write(keyName.getBytes(UTF_8));
+    }
+  }
+
+  /**
+   * The object ID of the key in the DB of the OM raft group leader. The leader may be a follower of the bucket raft
+   * group that wrote the key, and apply the write a little later.
+   */
+  private static long getKeyObjectId(String volumeName, String bucketName, String keyName) throws Exception {
+    final AtomicReference<OmKeyInfo> keyInfo = new AtomicReference<>();
+    waitFor(() -> {
+      final OzoneManager leader = cluster.getOMLeader();
+      try {
+        keyInfo.set(leader == null ? null : leader.getMetadataManager().getKeyTable(BucketLayout.OBJECT_STORE)
+            .get(leader.getMetadataManager().getOzoneKey(volumeName, bucketName, keyName)));
+      } catch (IOException e) {
+        return false;
+      }
+      return keyInfo.get() != null;
+    }, 100, 30_000);
+    return keyInfo.get().getObjectID();
+  }
+
 }

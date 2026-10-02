@@ -25,6 +25,7 @@ import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
@@ -52,6 +53,7 @@ import org.apache.hadoop.hdds.utils.db.cache.CacheValue;
 import org.apache.hadoop.ozone.OmUtils;
 import org.apache.hadoop.ozone.om.helpers.OMNodeDetails;
 import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
+import org.apache.hadoop.ozone.om.helpers.WithObjectID;
 import org.apache.hadoop.ozone.om.protocolPB.GrpcOmTransport;
 import org.apache.hadoop.ozone.om.protocolPB.OmTransport;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
@@ -75,6 +77,21 @@ public class OmRaftGroupManager {
   public static final Logger LOG = LoggerFactory.getLogger(OmRaftGroupManager.class);
 
   private static final long ASSIGNMENT_TIMEOUT_MS = 30_000;
+
+  /**
+   * Bucket raft group ids carry a serial, unique over the lifetime of the cluster: a new group always gets a serial
+   * above every earlier one (the high-water mark is replicated through the main raft group), so a group is never
+   * re-created with a log starting from 0 under an id used before. The serial also forms the high bits of the object
+   * and update IDs the group's transactions generate (see {@link #toExecutionIndex}).
+   */
+  private static final long BUCKET_RAFT_GROUP_UUID_MSB = 0x5d9b0c4e7a1d4b2eL;
+  /** Bits of a bucket raft group log index in the execution index, below the serial. */
+  public static final int BUCKET_RAFT_GROUP_INDEX_BITS = WithObjectID.RAFT_GROUP_SERIAL_SHIFT;
+  public static final long MAX_BUCKET_RAFT_GROUP_INDEX = (1L << BUCKET_RAFT_GROUP_INDEX_BITS) - 1;
+  /** Serials 1..1022: the execution index stays within OmUtils.MAX_TRXN_ID (2^54 - 2). */
+  public static final long MAX_BUCKET_RAFT_GROUP_SERIAL = (1L << (54 - BUCKET_RAFT_GROUP_INDEX_BITS)) - 2;
+  /** multiRaftInfoTable key of the highest bucket raft group serial allocated. */
+  public static final String MAX_BUCKET_RAFT_GROUP_SERIAL_KEY = "maxBucketRaftGroupSerial";
 
   private final int omRaftGroupCount;
   private final boolean multiRaftEnabled;
@@ -146,18 +163,25 @@ public class OmRaftGroupManager {
     bucketsPerRaftGroupCounter.clear();
   }
 
-  private void initBucketMap() {
+  /**
+   * Restores a bucket raft group this OM recovered from its Ratis storage on start, and the assignment of the
+   * buckets to it (persisted in the bucket info). A bucket assigned to a group that no longer exists is assigned
+   * again on its next write.
+   */
+  public void restoreRaftGroup(RaftGroupId bucketRaftGroupId) {
+    if (!multiRaftEnabled) {
+      return;
+    }
+    final UUID raftGroup = bucketRaftGroupId.getUuid();
+    bucketsPerRaftGroupCounter.putIfAbsent(raftGroup, 0);
     Iterator<Map.Entry<CacheKey<String>, CacheValue<OmBucketInfo>>> bucketIterator =
             metadataManager.getBucketIterator();
     while (bucketIterator.hasNext()) {
-      Map.Entry<CacheKey<String>, CacheValue<OmBucketInfo>> entry = bucketIterator.next();
-      OmBucketInfo bucketInfo = entry.getValue().getCacheValue();
-      if (bucketInfo != null) {
-        UUID raftGroup = bucketInfo.getRaftGroup();
-        if (raftGroup != null) {
-          String key = metadataManager.getBucketKey(bucketInfo.getVolumeName(), bucketInfo.getBucketName());
-          bucketRaftGroups.put(key, raftGroup);
-          bucketsPerRaftGroupCounter.compute(raftGroup, (k, v) -> v == null ? 1 : v + 1);
+      OmBucketInfo bucketInfo = bucketIterator.next().getValue().getCacheValue();
+      if (bucketInfo != null && raftGroup.equals(bucketInfo.getRaftGroup())) {
+        String key = metadataManager.getBucketKey(bucketInfo.getVolumeName(), bucketInfo.getBucketName());
+        if (bucketRaftGroups.putIfAbsent(key, raftGroup) == null) {
+          bucketsPerRaftGroupCounter.computeIfPresent(raftGroup, (k, v) -> v + 1);
         }
       }
     }
@@ -412,15 +436,44 @@ public class OmRaftGroupManager {
     return omRaftGroupCount;
   }
 
-  public static List<RaftGroupId> generateRaftGroups(long currentTerm, int count) {
+  /** Ids of {@code count} new bucket raft groups, with the serials following {@code maxSerial}. */
+  public static List<RaftGroupId> generateRaftGroups(long maxSerial, int count) {
     List<RaftGroupId> result = new ArrayList<>(count);
-    long startFrom = currentTerm * 100;
-    for (long i = startFrom; i < startFrom + count; i++) {
-      UUID raftGroupIdUUID = OmRaftGroupManager.toUuid(String.valueOf(i));
-      RaftGroupId groupId = RaftGroupId.valueOf(raftGroupIdUUID);
-      result.add(groupId);
+    for (long serial = maxSerial + 1; serial <= maxSerial + count; serial++) {
+      result.add(bucketRaftGroupId(serial));
     }
     return result;
+  }
+
+  public static RaftGroupId bucketRaftGroupId(long serial) {
+    Preconditions.checkArgument(serial > 0 && serial <= MAX_BUCKET_RAFT_GROUP_SERIAL,
+        "Bucket raft group serial %s out of range 1..%s", serial, MAX_BUCKET_RAFT_GROUP_SERIAL);
+    return RaftGroupId.valueOf(new UUID(BUCKET_RAFT_GROUP_UUID_MSB, serial));
+  }
+
+  /** @return the serial of a bucket raft group id, or -1 if it is not one (e.g. the main OM raft group). */
+  public static long getBucketRaftGroupSerial(UUID raftGroupUuid) {
+    final long serial = raftGroupUuid.getLeastSignificantBits();
+    return raftGroupUuid.getMostSignificantBits() == BUCKET_RAFT_GROUP_UUID_MSB
+        && serial > 0 && serial <= MAX_BUCKET_RAFT_GROUP_SERIAL ? serial : -1;
+  }
+
+  /**
+   * The index a transaction of the given bucket raft group executes with, i.e. the base of the object and update IDs
+   * it generates: the group serial above the log index, so that the groups, and the OM raft group (serial 0, whose
+   * indexes are used as they are), never generate the same IDs.
+   */
+  public static long toExecutionIndex(long serial, long logIndex) {
+    Preconditions.checkState(logIndex <= MAX_BUCKET_RAFT_GROUP_INDEX,
+        "Log index %s of the bucket raft group with serial %s exceeds %s", logIndex, serial,
+        MAX_BUCKET_RAFT_GROUP_INDEX);
+    return (serial << BUCKET_RAFT_GROUP_INDEX_BITS) | logIndex;
+  }
+
+  /** @return the highest bucket raft group serial allocated, as applied by the main raft group on this OM. */
+  public long getMaxBucketRaftGroupSerial() throws IOException {
+    final Long max = metadataManager.getMultiRaftInfoTable().get(MAX_BUCKET_RAFT_GROUP_SERIAL_KEY);
+    return max == null ? 0 : max;
   }
 
   public static UUID toUuid(String groupId) {

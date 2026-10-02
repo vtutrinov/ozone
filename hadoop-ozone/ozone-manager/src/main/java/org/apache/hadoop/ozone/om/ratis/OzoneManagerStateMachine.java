@@ -51,6 +51,7 @@ import org.apache.hadoop.ozone.audit.AuditLoggerType;
 import org.apache.hadoop.ozone.audit.OMSystemAction;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
 import org.apache.hadoop.ozone.om.OMMetrics;
+import org.apache.hadoop.ozone.om.OmRaftGroupManager;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.OzoneManagerPrepareState;
 import org.apache.hadoop.ozone.om.exceptions.OMException;
@@ -704,7 +705,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
   @VisibleForTesting
   OMResponse runCommand(OMRequest request, TermIndex termIndex) {
     try {
-      ExecutionContext context = ExecutionContext.of(termIndex.getIndex(), termIndex);
+      ExecutionContext context = ExecutionContext.of(toExecutionIndex(termIndex.getIndex()), termIndex);
       final OMClientResponse omClientResponse = handler.handleWriteRequest(
           request, context, ozoneManagerDoubleBuffer);
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
@@ -724,6 +725,21 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
       ExitUtils.terminate(1, errorMessage, e, LOG);
     }
     return null;
+  }
+
+  /**
+   * SDP (multi-raft): the index a transaction executes with, i.e. the base of the object and update IDs it generates.
+   * The OM raft group uses its log index; with bucket raft groups it must stay below the indexes of the bucket raft
+   * groups, which carry their serial above the log index (see {@link BucketStateMachine}). Beyond the limit the
+   * transactions fail (not INTERNAL_ERROR, which terminates the OM).
+   */
+  protected long toExecutionIndex(long logIndex) throws IOException {
+    if (ozoneManager.isMultiRaftEnabled() && logIndex > OmRaftGroupManager.MAX_BUCKET_RAFT_GROUP_INDEX) {
+      throw new OMException("Log index " + logIndex + " of the OM raft group exceeds "
+          + OmRaftGroupManager.MAX_BUCKET_RAFT_GROUP_INDEX + ", the limit with bucket raft groups",
+          OMException.ResultCodes.NOT_SUPPORTED_OPERATION);
+    }
+    return logIndex;
   }
 
   @VisibleForTesting
