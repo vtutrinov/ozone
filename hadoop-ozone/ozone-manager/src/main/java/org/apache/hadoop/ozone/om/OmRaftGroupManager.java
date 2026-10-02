@@ -31,9 +31,11 @@ import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -443,6 +445,18 @@ public class OmRaftGroupManager {
       result.add(bucketRaftGroupId(serial));
     }
     return result;
+  }
+
+  /**
+   * The bucket raft group ids SDP 1.4 may have created up to the given multi-raft term: name-based UUIDs of
+   * {@code term * 100 + i}, see the 1.4 generateRaftGroups.
+   */
+  public static Set<UUID> legacyBucketRaftGroupIds(long multiRaftTerm) {
+    final Set<UUID> ids = new HashSet<>();
+    for (long n = 0; n < (Math.max(multiRaftTerm, 0) + 1) * 100; n++) {
+      ids.add(toUuid(String.valueOf(n)));
+    }
+    return ids;
   }
 
   public static RaftGroupId bucketRaftGroupId(long serial) {

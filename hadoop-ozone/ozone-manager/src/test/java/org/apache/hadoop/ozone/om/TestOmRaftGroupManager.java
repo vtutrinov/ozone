@@ -43,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
@@ -199,5 +200,17 @@ public class TestOmRaftGroupManager {
     // ids without serial
     assertThrows(OMException.class,
         () -> OMCreateRaftGroupsRequest.validateSerials(0, Collections.singletonList(UUID.randomUUID())));
+  }
+
+  @Test
+  void testLegacyBucketRaftGroupIds() {
+    Set<UUID> legacy = OmRaftGroupManager.legacyBucketRaftGroupIds(1);
+    assertEquals(200, legacy.size());
+    assertTrue(legacy.contains(OmRaftGroupManager.toUuid("0")));
+    assertTrue(legacy.contains(OmRaftGroupManager.toUuid("199")));
+    assertFalse(legacy.contains(OmRaftGroupManager.toUuid("200")));
+    // neither current bucket raft groups nor other raft groups (e.g. random ids) are taken for 1.4 ones
+    assertFalse(legacy.contains(OmRaftGroupManager.bucketRaftGroupId(1).getUuid()));
+    assertFalse(legacy.contains(UUID.randomUUID()));
   }
 }

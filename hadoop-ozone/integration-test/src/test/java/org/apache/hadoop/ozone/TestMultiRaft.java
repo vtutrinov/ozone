@@ -23,7 +23,6 @@ import static org.apache.hadoop.ozone.OzoneConfigKeys.OZONE_ADMINISTRATORS_WILDC
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_ENABLED;
 import static org.apache.hadoop.ozone.om.OMConfigKeys.OZONE_OM_MULTI_RAFT_BUCKET_GROUPS;
 import static org.apache.ozone.test.GenericTestUtils.waitFor;
-import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -39,9 +38,10 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -55,6 +55,7 @@ import org.apache.hadoop.ozone.client.io.OzoneInputStream;
 import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
 import org.apache.hadoop.ozone.client.protocol.ClientProtocol;
 import org.apache.hadoop.ozone.om.OMConfigKeys;
+import org.apache.hadoop.ozone.om.OmRaftGroupManager;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.multiraft.OMHAMultiRaftMetrics;
 import org.apache.hadoop.ozone.om.ratis.BucketStateMachine;
@@ -294,21 +295,14 @@ class TestMultiRaft {
 
     String key = "testkey";
 
-    writeKey(ozoneClient, VOLUME_NAME, bucket1, key);
-    waitTermIndex(om1, 4L);
-    checkLastAppliedIndex(4L, om1);
-
-    writeKey(ozoneClient, VOLUME_NAME, bucket2, key);
-    waitTermIndex(om1, 8L);
-    checkLastAppliedIndex(8L, om1);
-
-    writeKey(ozoneClient, VOLUME_NAME, bucket3, key);
-    waitTermIndex(om1, 12L);
-    checkLastAppliedIndex(12L, om1);
-
-    writeKey(ozoneClient, VOLUME_NAME, bucket4, key);
-    waitTermIndex(om1, 16L);
-    checkLastAppliedIndex(16L, om1);
+    // with a single bucket raft group, every key write is applied by it
+    for (String bucket : Arrays.asList(bucket1, bucket2, bucket3, bucket4)) {
+      long appliedBefore = getBucketStateMachineAppliedIndex(om1);
+      writeKey(ozoneClient, VOLUME_NAME, bucket, key);
+      waitFor(() -> getBucketStateMachineAppliedIndex(om1) > appliedBefore, 100, 120000);
+      // the key was committed by the bucket raft group: its updateID carries the group serial above the log index
+      assertTrue(getKeyUpdateId(VOLUME_NAME, bucket, key) > OmRaftGroupManager.MAX_BUCKET_RAFT_GROUP_INDEX, bucket);
+    }
 
     checkKeyReading(VOLUME_NAME, bucket1, key);
     checkKeyReading(VOLUME_NAME, bucket2, key);
@@ -363,7 +357,8 @@ class TestMultiRaft {
     checkKeyReading(VOLUME_NAME, BUCKET_NAME, key1, "updated text 1");
 
     long keyUpdateId2 = getKeyUpdateId(VOLUME_NAME, BUCKET_NAME, key1);
-    assertTrue(keyUpdateId2 < keyUpdateId1);
+    // written by a bucket raft group: its updateIDs carry the group serial above the OM raft group log indexes
+    assertTrue(keyUpdateId2 > keyUpdateId1);
     cluster.getOzoneManager(0).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
     cluster.getOzoneManager(1).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
     cluster.getOzoneManager(2).getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
@@ -383,11 +378,13 @@ class TestMultiRaft {
     );
     checkKeyReading(VOLUME_NAME, BUCKET_NAME, key1, "updated text 2");
     long keyUpdateId3 = getKeyUpdateId(VOLUME_NAME, BUCKET_NAME, key1);
-    assertTrue(keyUpdateId3 > keyUpdateId2);
+    // written by the OM raft group again: the updateIDs of different raft groups are not ordered
+    assertTrue(keyUpdateId3 > keyUpdateId1);
+    assertTrue(keyUpdateId3 < keyUpdateId2);
   }
 
   @Test
-  void testCleaningRatisDirectory() throws InterruptedException, TimeoutException, IOException {
+  void testRatisDirectoriesSurviveRestart() throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true, 4);
     int expectedRaftGroupsCount = 5;
     OzoneManager om1 = cluster.getOzoneManager(0);
@@ -395,27 +392,88 @@ class TestMultiRaft {
     OzoneManager om3 = cluster.getOzoneManager(2);
 
     waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
+    waitMultiRaftTerm(1);
 
     UUID mainGroupUuid = cluster.getOzoneManager(0).getOmRatisServer().getCurrentRaftGroupId().getUuid();
     List<String> dirsListBefore0 = getDirsList(om1.getConfiguration());
     assertTrue(dirsListBefore0.contains(mainGroupUuid.toString()));
     List<String> dirsListBefore1 = getDirsList(om2.getConfiguration());
-    assertTrue(dirsListBefore1.contains(mainGroupUuid.toString()));
     List<String> dirsListBefore2 = getDirsList(om3.getConfiguration());
-    assertTrue(dirsListBefore2.contains(mainGroupUuid.toString()));
+    Set<RaftGroupId> groupsBefore = new HashSet<>(om1.getOmRaftGroups().keySet());
 
     cluster.restartOzoneManager();
     cluster.waitForClusterToBeReady();
 
+    // the bucket raft groups are recovered from their Ratis storage, not re-created
     waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
-    waitMultiRaftTerm(2);
-    checkRemovedDirs(om1, mainGroupUuid, dirsListBefore0);
-    checkRemovedDirs(om2, mainGroupUuid, dirsListBefore1);
-    checkRemovedDirs(om3, mainGroupUuid, dirsListBefore2);
+    for (OzoneManager om : Arrays.asList(om1, om2, om3)) {
+      assertEquals(groupsBefore, om.getOmRaftGroups().keySet(), om.getOMNodeId());
+    }
+    checkSameDirs(om1, dirsListBefore0);
+    checkSameDirs(om2, dirsListBefore1);
+    checkSameDirs(om3, dirsListBefore2);
+    assertEquals(1, cluster.getOMLeader().getCurrentMultiRaftTerm());
+  }
+
+  /**
+   * A new OM instance, as on a process restart, checks its Ratis storage in the constructor: it accepts the bucket
+   * raft group directories and recovers the groups, but still rejects (and keeps) unknown raft group directories.
+   */
+  @Test
+  void testOmProcessRestartRecoversBucketRaftGroups() throws Exception {
+    cluster = initClusterWithMultiRaft(true, 4);
+    OzoneManager om1 = cluster.getOzoneManager(0);
+    OzoneManager om2 = cluster.getOzoneManager(1);
+    OzoneManager om3 = cluster.getOzoneManager(2);
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 5);
+
+    OzoneManager follower = Stream.of(om1, om2, om3).filter(om -> !om.isLeaderReady()).findFirst().get();
+    Set<RaftGroupId> groups = new HashSet<>(follower.getOmRaftGroups().keySet());
+    OzoneConfiguration omConf = follower.getConfiguration();
+    follower.stop();
+    follower.join();
+
+    OzoneManager restarted = OzoneManager.createOm(omConf);
+    try {
+      restarted.start();
+      waitFor(() -> restarted.getOmRaftGroups().size() == 5, 1000, 120000);
+      assertEquals(groups, restarted.getOmRaftGroups().keySet());
+    } finally {
+      restarted.stop();
+      restarted.join();
+    }
+
+    // last: the failed construction may leave the OM DB open
+    File unknownGroupDir = new File(OzoneManagerRatisUtils.getOMRatisDirectory(omConf), UUID.randomUUID().toString());
+    assertTrue(unknownGroupDir.mkdirs());
+    assertThrows(IOException.class, () -> OzoneManager.createOm(omConf));
+    assertTrue(unknownGroupDir.exists(), "an unknown raft group directory must not be removed");
   }
 
   @Test
-  void testGroupsCorrectCreatingWhenLeaderChangingBetweenReconcilerCycles()
+  void testRatisDirectoriesRemovedWhenMultiRaftSwitchedOff() throws Exception {
+    cluster = initClusterWithMultiRaft(true, 4);
+    OzoneManager om1 = cluster.getOzoneManager(0);
+    OzoneManager om2 = cluster.getOzoneManager(1);
+    OzoneManager om3 = cluster.getOzoneManager(2);
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, 5);
+
+    for (OzoneManager om : Arrays.asList(om1, om2, om3)) {
+      om.getConfiguration().setBoolean(OZONE_OM_MULTI_RAFT_BUCKET_ENABLED, false);
+    }
+    cluster.restartOzoneManager();
+    cluster.waitForClusterToBeReady();
+
+    UUID mainGroupUuid = om1.getOmRatisServer().getCurrentRaftGroupId().getUuid();
+    for (OzoneManager om : Arrays.asList(om1, om2, om3)) {
+      assertEquals(1, om.getOmRaftGroups().size(), om.getOMNodeId());
+      assertEquals(Collections.singletonList(mainGroupUuid.toString()), getRaftGroupDirs(om.getConfiguration()),
+          om.getOMNodeId());
+    }
+  }
+
+  @Test
+  void testGroupsKeptWhenLeaderChangingBetweenReconcilerCycles()
       throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true, 4);
     int expectedRaftGroupsCount = 5;
@@ -425,78 +483,55 @@ class TestMultiRaft {
     OzoneManager om3 = cluster.getOzoneManager(2);
 
     waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
+    waitMultiRaftTerm(1);
+    Set<RaftGroupId> groupsBefore = new HashSet<>(om1.getOmRaftGroups().keySet());
 
     OzoneManager omLeader = cluster.getOMLeader();
-
     cluster.shutdownOzoneManager(omLeader);
     cluster.restartOzoneManager(omLeader, false);
-
-    waitOneOfOmRaftGroupsSizeOnNodesLess(om1, om2, om3, expectedRaftGroupsCount);
-
     waitLeaderElection();
 
-    Stream.of(om1, om2, om3)
-        .min(Comparator.comparingInt(el -> el.getOmRaftGroups().size()))
-        .ifPresent(it -> {
-          try {
-            cluster.getOMLeader().transferLeadership(it.getOMNodeId());
-          } catch (IOException e) {
-            throw new RuntimeException(e);
-          }
-        });
-
+    // move the leadership to the restarted OM, then restart the new leader
+    cluster.getOMLeader().transferLeadership(omLeader.getOMNodeId());
     waitLeaderElection();
-
     OzoneManager newOmLeader = cluster.getOMLeader();
     cluster.shutdownOzoneManager(newOmLeader);
     cluster.restartOzoneManager(newOmLeader, false);
-
     waitLeaderElection();
 
-    waitMultiRaftTerm(2);
-    waitOmRaftGroupsSizeOnNodesEqual(cluster.getOzoneManager(0), cluster.getOzoneManager(1), cluster.getOzoneManager(2),
-        expectedRaftGroupsCount);
-    assertAll("Assert groups count",
-        () -> assertEquals(5, cluster.getOzoneManager(0).getOmRaftGroups().size()),
-        () -> assertEquals(5, cluster.getOzoneManager(1).getOmRaftGroups().size()),
-        () -> assertEquals(5, cluster.getOzoneManager(2).getOmRaftGroups().size())
-    );
+    // a leader restart does not make the reconciler re-create the groups: the restarted OM recovers them
+    waitOmRaftGroupsSizeOnNodesEqual(cluster.getOzoneManager(0), cluster.getOzoneManager(1),
+        cluster.getOzoneManager(2), expectedRaftGroupsCount);
+    for (int i = 0; i < 3; i++) {
+      assertEquals(groupsBefore, cluster.getOzoneManager(i).getOmRaftGroups().keySet());
+    }
+    waitMultiRaftTerm(1);
   }
 
   @Test
-  void testMultiRaftTermIncreasing()
+  void testMultiRaftTermStableAcrossLeaderRestarts()
       throws InterruptedException, TimeoutException, IOException {
     cluster = initClusterWithMultiRaft(true, 4);
-    int expectedRaftGroupsCount;
 
     OzoneManager om1 = cluster.getOzoneManager(0);
     OzoneManager om2 = cluster.getOzoneManager(1);
     OzoneManager om3 = cluster.getOzoneManager(2);
 
-    expectedRaftGroupsCount = 5;
+    int expectedRaftGroupsCount = 5;
     waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
-
-    OzoneManager omLeader = cluster.getOMLeader();
-
+    // the initial creation of the bucket raft groups
     waitMultiRaftTerm(1);
 
-    cluster.shutdownOzoneManager(omLeader);
-    cluster.restartOzoneManager(omLeader, false);
+    for (int i = 0; i < 2; i++) {
+      OzoneManager omLeader = cluster.getOMLeader();
+      cluster.shutdownOzoneManager(omLeader);
+      cluster.restartOzoneManager(omLeader, false);
+      waitLeaderElection();
+    }
 
-    waitMultiRaftTerm(1);
+    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
+    // the term counts reconfigurations of the bucket raft groups, which restarts no longer cause
     assertEquals(1, cluster.getOMLeader().getCurrentMultiRaftTerm());
-
-    waitLeaderElection();
-
-    OzoneManager newOmLeader = cluster.getOMLeader();
-    cluster.shutdownOzoneManager(newOmLeader);
-    cluster.restartOzoneManager(newOmLeader, false);
-
-    waitLeaderElection();
-
-    waitOmRaftGroupsSizeOnNodesEqual(om1, om2, om3, expectedRaftGroupsCount);
-    waitMultiRaftTerm(2);
-    assertEquals(2, cluster.getOMLeader().getCurrentMultiRaftTerm());
   }
 
   @Test
@@ -743,19 +778,6 @@ class TestMultiRaft {
     );
   }
 
-  private static void waitOneOfOmRaftGroupsSizeOnNodesLess(OzoneManager om1, OzoneManager om2, OzoneManager om3,
-                                                           int expectedGroupSize)
-      throws TimeoutException, InterruptedException {
-    waitFor(
-        () ->
-            om1.getOmRaftGroups().size() < expectedGroupSize ||
-                om2.getOmRaftGroups().size() < expectedGroupSize ||
-                om3.getOmRaftGroups().size() < expectedGroupSize,
-        1000,
-        80000
-    );
-  }
-
   private void waitMultiRaftTerm(int expectedTerm) throws TimeoutException, InterruptedException {
     waitFor(
         () -> {
@@ -778,11 +800,22 @@ class TestMultiRaft {
     );
   }
 
-  private void checkRemovedDirs(OzoneManager om, UUID mainGroupUuid, List<String> dirsListBefore) {
-    List<String> dirsListAfter = getDirsList(om.getConfiguration());
-    assertTrue(dirsListAfter.contains(mainGroupUuid.toString()));
-    dirsListAfter.removeAll(dirsListBefore);
-    assertEquals(4, dirsListAfter.size());
+  private void checkSameDirs(OzoneManager om, List<String> dirsListBefore) {
+    assertEquals(new HashSet<>(dirsListBefore), new HashSet<>(getDirsList(om.getConfiguration())), om.getOMNodeId());
+  }
+
+  /** The raft group directories (named by the group UUID) in the OM Ratis storage. */
+  private List<String> getRaftGroupDirs(OzoneConfiguration configuration) {
+    List<String> groupDirs = new ArrayList<>();
+    for (String name : getDirsList(configuration)) {
+      try {
+        UUID.fromString(name);
+        groupDirs.add(name);
+      } catch (IllegalArgumentException e) {
+        // not a raft group
+      }
+    }
+    return groupDirs;
   }
 
   private List<String> getDirsList(OzoneConfiguration configuration) {
@@ -852,21 +885,10 @@ class TestMultiRaft {
     return ozoneKeyDetails.getUpdateId();
   }
 
-  private static void waitTermIndex(OzoneManager om, long expectedIndex)
-      throws TimeoutException, InterruptedException {
-    waitFor(
-        () -> om.getStateMachines().values().stream().filter(BucketStateMachine.class::isInstance)
-            .findFirst().map(StateMachine::getLastAppliedTermIndex)
-            .map(TermIndex::getIndex)
-            .orElse(0L) == expectedIndex, 100, 120000);
-  }
-
-  private static void checkLastAppliedIndex(Long expectedIndex, OzoneManager om) {
-    Long lastAppliedTermIndex =
-        om.getStateMachines().values().stream().filter(BucketStateMachine.class::isInstance)
-            .findFirst().map(StateMachine::getLastAppliedTermIndex)
-            .map(TermIndex::getIndex)
-            .orElse(0L);
-    assertEquals(expectedIndex, lastAppliedTermIndex);
+  private static long getBucketStateMachineAppliedIndex(OzoneManager om) {
+    return om.getStateMachines().values().stream().filter(BucketStateMachine.class::isInstance)
+        .findFirst().map(StateMachine::getLastAppliedTermIndex)
+        .map(TermIndex::getIndex)
+        .orElse(0L);
   }
 }

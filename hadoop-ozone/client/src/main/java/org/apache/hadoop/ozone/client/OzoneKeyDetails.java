@@ -128,6 +128,13 @@ public class OzoneKeyDetails extends OzoneKey {
     return generation;
   }
 
+  /** SDP: the update ID of the key is its generation (the key details carry it, not the plain OzoneKey fields). */
+  @Override
+  @JsonIgnore
+  public long getUpdateId() {
+    return generation != null ? generation : super.getUpdateId();
+  }
+
   public String getCompressionType() {
     return compressionType;
   }

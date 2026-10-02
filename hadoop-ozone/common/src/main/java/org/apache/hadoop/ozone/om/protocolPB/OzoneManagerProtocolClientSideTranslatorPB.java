@@ -423,9 +423,10 @@ public final class OzoneManagerProtocolClientSideTranslatorPB
     if (configuration == null) {
       return 1;
     }
-    return configuration.getInt(
-            OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
-            OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
+    // like the OM, an invalid (not positive) count falls back to the default
+    final int count = configuration.getInt(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
+        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
+    return count > 0 ? count : OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT;
   }
 
   private static boolean isMultiRaftEnabled(ConfigurationSource configuration) {

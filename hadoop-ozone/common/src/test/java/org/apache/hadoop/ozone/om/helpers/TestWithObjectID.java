@@ -21,7 +21,6 @@ import static org.apache.hadoop.ozone.om.helpers.WithObjectID.RAFT_GROUP_SERIAL_
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -31,11 +30,6 @@ class TestWithObjectID {
 
   private static final long GROUP_1 = 1L << RAFT_GROUP_SERIAL_SHIFT;
   private static final long GROUP_2 = 2L << RAFT_GROUP_SERIAL_SHIFT;
-
-  @AfterEach
-  void tearDown() {
-    WithObjectID.setUpdateIdCheckPerRaftGroup(false);
-  }
 
   private static OmVolumeArgs volumeWithUpdateID(long updateID) {
     return new OmVolumeArgs.Builder()
@@ -56,12 +50,10 @@ class TestWithObjectID {
     assertDoesNotThrow(() -> update(5, 5));
     assertDoesNotThrow(() -> update(5, 6));
     assertThrows(IllegalArgumentException.class, () -> update(6, 5));
-    assertThrows(IllegalArgumentException.class, () -> update(GROUP_1 + 1, 5));
   }
 
   @Test
   void updateIdMustNotDecreaseWithinRaftGroup() {
-    WithObjectID.setUpdateIdCheckPerRaftGroup(true);
     // same raft group: strict
     assertThrows(IllegalArgumentException.class, () -> update(6, 5));
     assertThrows(IllegalArgumentException.class, () -> update(GROUP_1 + 6, GROUP_1 + 5));

@@ -304,7 +304,6 @@ import org.apache.hadoop.ozone.om.helpers.SnapshotInfo;
 import org.apache.hadoop.ozone.om.helpers.TenantStateList;
 import org.apache.hadoop.ozone.om.helpers.TenantUserInfoValue;
 import org.apache.hadoop.ozone.om.helpers.TenantUserList;
-import org.apache.hadoop.ozone.om.helpers.WithObjectID;
 import org.apache.hadoop.ozone.om.lock.OMLockDetails;
 import org.apache.hadoop.ozone.om.lock.OzoneLockProvider;
 import org.apache.hadoop.ozone.om.multiraft.BucketRaftGroupsReconciler;
@@ -643,13 +642,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
           omNodeDetails.getRatisPort(), omNodeDetails.isRatisListener());
     }
     this.threadPrefix = omNodeDetails.threadNamePrefix();
-    isMultiRaftEnabled = configuration.getBoolean(
-        OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
-        OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT);
-    bucketNumbersFromConfig = configuration.getPositiveIntOrDefault(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
-        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
-    // index-based updateIDs of different raft groups are not comparable
-    WithObjectID.setUpdateIdCheckPerRaftGroup(isMultiRaftEnabled);
+    loadMultiRaftConf();
     loginOMUserIfSecurityEnabled(conf);
     setInstanceVariablesFromConf();
 
@@ -807,6 +800,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
 
     // SDP (multi-raft): the bucket raft groups are recovered from the Ratis storage together with the OM raft group
+    removeObsoleteBucketRaftGroups();
     initializeRatisDirs(conf);
     initializeRatisServer(isBootstrapping || isForcedBootstrapping);
 
@@ -914,6 +908,58 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
   private boolean bucketRaftGroupsCreated() {
     return omRaftGroups.size() == bucketNumbersFromConfig + 1;
+  }
+
+  /**
+   * SDP (multi-raft): removes, before Ratis recovers them, the bucket raft groups that must not run: all of them when
+   * multi-raft is switched off (the OM raft group handles all requests then), and the groups of SDP 1.4 (re-created
+   * by 1.4 on every start). Only directories recognized as bucket raft groups are removed: other directories are
+   * rejected by {@link #initializeRatisDirs} as before (e.g. another service sharing the Ratis storage dir). Their
+   * buckets are assigned again on the next write when multi-raft is switched on. Transactions such a group committed
+   * but did not apply are lost: switch multi-raft off with the writes stopped.
+   */
+  private void removeObsoleteBucketRaftGroups() {
+    final File ratisDir = new File(OzoneManagerRatisUtils.getOMRatisDirectory(configuration));
+    final String mainGroupDir = omRaftGroupName().getUuid().toString();
+    final File[] groupDirs = ratisDir.listFiles(file -> file.isDirectory() && !file.getName().equals(mainGroupDir));
+    if (groupDirs == null || groupDirs.length == 0) {
+      return;
+    }
+    Set<UUID> legacyIds = null;
+    for (File groupDir : groupDirs) {
+      final UUID groupUuid;
+      try {
+        groupUuid = UUID.fromString(groupDir.getName());
+      } catch (IllegalArgumentException e) {
+        continue; // not a raft group
+      }
+      final String reason;
+      if (OmRaftGroupManager.getBucketRaftGroupSerial(groupUuid) > 0) {
+        if (isMultiRaftEnabled) {
+          continue;
+        }
+        reason = "multi-raft is switched off";
+      } else {
+        if (legacyIds == null) {
+          try {
+            legacyIds = OmRaftGroupManager.legacyBucketRaftGroupIds(getBucketRaftGroupsReconfigurationIndex());
+          } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read the multi-raft term", e);
+          }
+        }
+        if (!legacyIds.contains(groupUuid)) {
+          continue; // not a bucket raft group
+        }
+        reason = "SDP 1.4 bucket raft group";
+      }
+      LOG.warn("Removing bucket raft group {} ({}) from {}", groupUuid, reason, ratisDir);
+      try {
+        org.apache.commons.io.FileUtils.deleteDirectory(groupDir);
+        metadataManager.getTransactionInfoTable().delete(TRANSACTION_INFO_KEY + RaftGroupId.valueOf(groupUuid));
+      } catch (IOException e) {
+        throw new UncheckedIOException("Failed to remove bucket raft group " + groupDir, e);
+      }
+    }
   }
 
   /** SDP (multi-raft): health of the peers of a bucket raft group; this OM must be its leader. */
@@ -2100,7 +2146,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     if (ratisDirFiles != null) {
       for (File ratisGroupDir : ratisDirFiles) {
         if (ratisGroupDir.isDirectory()) {
-          if (!ratisGroupDir.getName().equals(groupIDfromServiceID)) {
+          // SDP (multi-raft): the bucket raft groups are kept across restarts
+          if (!ratisGroupDir.getName().equals(groupIDfromServiceID) && !isBucketRaftGroupDir(ratisGroupDir)) {
             throw new IOException("Ratis group Dir on disk "
                 + ratisGroupDir.getName() + " does not match with RaftGroupID"
                 + groupIDfromServiceID + " generated from service id "
@@ -2402,6 +2449,9 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     auditMap.put("OmState", omState.name());
     auditMap.put("Trigger", "restart");
     setInstanceVariablesFromConf();
+    // SDP (multi-raft): the configuration may have changed, like on a start
+    loadMultiRaftConf();
+    omSafeModeManager = new SafeModeManager(configuration);
 
     LOG.info(buildRpcServerStartMessage("OzoneManager RPC server",
         omRpcAddress));
@@ -2447,6 +2497,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     metrics.stopSnapshotDirectoryMetrics();
     metrics.startSnapshotDirectoryMetrics(configuration, getMetadataManager());
 
+    removeObsoleteBucketRaftGroups();
     initializeRatisServer(false);
     if (omRatisServer != null) {
       omRatisServer.start();
@@ -2482,7 +2533,27 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     if (isMultiRaftEnabled) {
       bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
       bucketRaftGroupsReconciler.start();
+      if (omRatisServer != null) {
+        omRatisServer.startSchedulingLeaderReconfiguration();
+      }
     }
+  }
+
+  private boolean isBucketRaftGroupDir(File dir) {
+    try {
+      return isMultiRaftEnabled && OmRaftGroupManager.getBucketRaftGroupSerial(UUID.fromString(dir.getName())) > 0;
+    } catch (IllegalArgumentException e) {
+      return false;
+    }
+  }
+
+  /** SDP (multi-raft): reads whether bucket raft groups are enabled and how many. */
+  private void loadMultiRaftConf() {
+    isMultiRaftEnabled = configuration.getBoolean(
+        OZONE_OM_MULTI_RAFT_BUCKET_ENABLED,
+        OZONE_OM_MULTI_RAFT_BUCKET_ENABLED_DEFAULT);
+    bucketNumbersFromConfig = configuration.getPositiveIntOrDefault(OZONE_OM_MULTI_RAFT_BUCKET_GROUPS,
+        OZONE_OM_MULTI_RAFT_BUCKET_GROUPS_DEFAULT);
   }
 
   /**
@@ -2996,7 +3067,10 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
 
       if (omhaMetrics != null) {
         OMHAMetrics.unRegister();
+        // SDP (multi-raft): a restart creates them again, with the raft groups of the restarted OM
+        omhaMetrics = null;
       }
+      tmpLeadersMap.clear();
 
       if (this.getOmRatisServer() != null) {
         this.getOmRatisServer().stopSchedulingLeaderReconfiguration();

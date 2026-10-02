@@ -34,13 +34,6 @@ public abstract class WithObjectID extends WithMetadata {
    */
   public static final int RAFT_GROUP_SERIAL_SHIFT = 44;
 
-  /**
-   * SDP (multi-raft): with bucket raft groups, objects are updated by the transactions of different raft groups. The
-   * updateIDs one raft group generates grow monotonically, but those of different groups are not ordered, so the
-   * monotonic updateID check is applied to updates by the same raft group (same serial) only.
-   */
-  private static volatile boolean updateIdCheckPerRaftGroup = false;
-
   private final long objectID;
   private final long updateID;
 
@@ -78,22 +71,15 @@ public abstract class WithObjectID extends WithMetadata {
     return updateID;
   }
 
-  /** SDP (multi-raft): see {@link #updateIdCheckPerRaftGroup}; set by OzoneManager on startup. */
-  public static void setUpdateIdCheckPerRaftGroup(boolean perRaftGroup) {
-    updateIdCheckPerRaftGroup = perRaftGroup;
-  }
-
-  public static boolean isUpdateIdCheckPerRaftGroup() {
-    return updateIdCheckPerRaftGroup;
-  }
-
-  /** @return whether changing the updateID from {@code current} to {@code next} breaks the monotonic order. */
+  /**
+   * SDP (multi-raft): with bucket raft groups, objects are updated by the transactions of different raft groups. The
+   * updateIDs one raft group generates grow monotonically, but those of different groups are not ordered, so the
+   * monotonic updateID check applies to updates by the same raft group (same serial) only. Without bucket raft groups
+   * (also after multi-raft is switched off) all updateIDs have serial 0.
+   * @return whether changing the updateID from {@code current} to {@code next} breaks the monotonic order.
+   */
   static boolean isUpdateIdDecreasing(long current, long next) {
-    if (next >= current) {
-      return false;
-    }
-    return !updateIdCheckPerRaftGroup
-        || current >>> RAFT_GROUP_SERIAL_SHIFT == next >>> RAFT_GROUP_SERIAL_SHIFT;
+    return next < current && current >>> RAFT_GROUP_SERIAL_SHIFT == next >>> RAFT_GROUP_SERIAL_SHIFT;
   }
 
   /** Hook method, customized in subclasses. */

@@ -60,10 +60,9 @@ other SDP fields.
    The dry run prints the number of records per message type and the compression types it moves to field 1001;
    check that they are codec names. Repeat both steps for every OM snapshot checkpoint DB, if snapshots are used.
    The tool marks the DB as migrated and refuses to run twice.
-   With multi-raft enabled, also remove the SDP 1.4 bucket raft groups from the OM Ratis storage: every directory
-   in `ozone.om.ratis.storage.dir` except the one of the OM raft group. SDP 1.4 re-created them on every start;
-   2.2.1 keeps the groups across restarts, refuses group ids without a serial and creates new groups on start.
-   The buckets are assigned to the new groups on their next write.
+   With multi-raft enabled, the OMs remove the SDP 1.4 bucket raft groups (ids without serial) from the OM Ratis
+   storage on the first start, as SDP 1.4 did on every start, and create new groups; the buckets are assigned to
+   them on their next write.
 4. Start the new version and finalize the upgrade as described upstream.
 
 SCM and datanode metadata contain no SDP fields; nothing needs to be migrated there.

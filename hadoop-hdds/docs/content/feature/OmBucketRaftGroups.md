@@ -32,7 +32,8 @@ background services (key purge, open key cleanup) stay in the OM raft group. All
 ## Lifecycle
 
 * The bucket raft groups survive OM restarts: each group keeps its Ratis log and its own TransactionInfo in the
-  OM DB, and continues from them, like the OM raft group.
+  OM DB, and continues from them, like the OM raft group. A change of `ozone.om.multi.raft.bucket.groups` adds
+  groups on restart; it does not remove any.
 * The leader of the OM raft group creates missing groups and replaces groups that are closed. A group without a
   leader (e.g. electing after a restart) or with an unhealthy peer is kept: Raft commits with a majority and the
   peers catch up from the log.
@@ -47,7 +48,8 @@ raft group (serial 0) uses its log index. The groups never generate the same IDs
 FSO buckets, where object IDs are the parent references of files and directories. With multi-raft enabled, a raft
 group accepts 2^44 transactions (writes fail beyond).
 
-The updateIDs one raft group generates grow monotonically and the OM checks it. Updates of the same object by
+The updateIDs one raft group generates grow monotonically and the OM checks it (also after multi-raft is switched
+off). Updates of the same object by
 different raft groups (e.g. a key written by its bucket raft group, then its ACL changed through the OM raft group)
 are not ordered, and the check does not apply between them.
 
@@ -73,5 +75,6 @@ follows `OMNotLeaderException` of the group.
 * Up to 1022 bucket raft groups over the lifetime of a cluster, and 2^44 transactions per raft group.
 * A closed group is removed on all OMs and replaced; transactions it committed but not yet applied on the remaining
   OMs are lost. Its buckets are assigned again on their next write.
-* Bucket raft groups of SDP 1.4 (ids without serial) are not supported; see
-  [Upgrading from SDP Ozone 1.4]({{< ref "SdpUpgradeFrom14.md" >}}).
+* When multi-raft is switched off, the OMs remove the bucket raft groups on start; transactions a group committed
+  but did not apply yet are lost, so switch it off with the writes stopped. Bucket raft groups of SDP 1.4 (ids
+  without serial) are removed on start as well, see [Upgrading from SDP Ozone 1.4]({{< ref "SdpUpgradeFrom14.md" >}}).
