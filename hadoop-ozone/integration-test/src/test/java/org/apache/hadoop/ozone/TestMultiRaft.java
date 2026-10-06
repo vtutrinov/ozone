@@ -48,6 +48,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
+import org.apache.hadoop.hdds.protocol.OMInSafeModeException;
 import org.apache.hadoop.metrics2.impl.MetricsCollectorImpl;
 import org.apache.hadoop.ozone.client.OzoneBucket;
 import org.apache.hadoop.ozone.client.OzoneKeyDetails;
@@ -438,6 +439,15 @@ class TestMultiRaft {
       restarted.start();
       waitFor(() -> restarted.getOmRaftGroups().size() == 5, 1000, 120000);
       assertEquals(groups, restarted.getOmRaftGroups().keySet());
+      // and leaves the multi-raft safe mode, so that it serves the bucket write requests of the groups it leads
+      waitFor(() -> {
+        try {
+          restarted.getSafeModeManager().checkSafeMode();
+          return true;
+        } catch (OMInSafeModeException e) {
+          return false;
+        }
+      }, 1000, 120000);
     } finally {
       restarted.stop();
       restarted.join();

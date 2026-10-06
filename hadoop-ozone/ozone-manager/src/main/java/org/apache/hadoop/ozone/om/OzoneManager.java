@@ -643,6 +643,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
     this.threadPrefix = omNodeDetails.threadNamePrefix();
     loadMultiRaftConf();
+    // SDP (multi-raft): before the Ratis server, which recovers the bucket raft groups (and reports them ready)
+    omSafeModeManager = new SafeModeManager(configuration);
     loginOMUserIfSecurityEnabled(conf);
     setInstanceVariablesFromConf();
 
@@ -837,7 +839,6 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     omHostName = HddsUtils.getHostName(conf);
     raftClientProvider = RatisHelper.newRaftClient(configuration);
     multiRaftTerm.set(Optional.ofNullable(metadataManager.getMultiRaftInfoTable().get(MULTI_RAFT_TERM_KEY)).orElse(0L));
-    omSafeModeManager = new SafeModeManager(configuration);
     bucketRaftGroupsReconciler = new BucketRaftGroupsReconciler(this);
 
     // SDP (SDPOZN-1965, SDPOZN-2054): bucket rate limiters and their metrics
