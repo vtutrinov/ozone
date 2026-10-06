@@ -155,7 +155,9 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
         .setNameFormat(threadPrefix + "InstallSnapshotThread").build();
     this.installSnapshotExecutor =
         HadoopExecutors.newSingleThreadExecutor(installSnapshotThreadFactory);
-    this.nettyMetrics = NettyMetrics.create();
+    // SDP (multi-raft): the Netty metrics are a single JVM-wide source, registered by the OM raft group only; a second
+    // registration fails outside of the mini cluster (and a bucket raft group closing would unregister it)
+    this.nettyMetrics = this instanceof BucketStateMachine ? null : NettyMetrics.create();
   }
 
   @VisibleForTesting
