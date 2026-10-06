@@ -289,6 +289,12 @@ public class OzoneManagerProtocolServerSideTranslatorPB implements OzoneManagerP
     if (!ozoneManager.isMultiRaftEnabled()) {
       return mainGroupId;
     }
+    if (request.getCmdType() == Type.GetRaftGroupHealthState) {
+      // answered by the leader of the raft group it asks about
+      final RaftGroupId groupId =
+          RaftGroupId.valueOf(HddsUtils.fromProtobuf(request.getGetRaftGroupHealthStateRequest().getGroupId()));
+      return ozoneManager.getOmRaftGroups().containsKey(groupId) ? groupId : mainGroupId;
+    }
     final String[] bucket = OzoneMultiRaftUtils.getReadRequestBucket(request);
     if (bucket == null) {
       return mainGroupId;

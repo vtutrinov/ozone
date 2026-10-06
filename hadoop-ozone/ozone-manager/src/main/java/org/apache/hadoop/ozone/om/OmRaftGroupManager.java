@@ -340,7 +340,12 @@ public class OmRaftGroupManager {
         .filter(omNodeDetails -> omNodeDetails.getNodeId().equals(leaderPeerId.toString()))
         .findFirst()
         .orElseThrow(() -> new IOException("Unknown main OM raft group leader " + leaderPeerId));
-    OMResponse response = getOrCreateOmTransport(leader.getNodeId()).submitRequest(request, leader.getNodeId());
+    return submitToOm(leader.getNodeId(), request);
+  }
+
+  /** Submits the request to the given OM (over the OM gRPC transport). */
+  public OMResponse submitToOm(String omNodeId, OMRequest request) throws IOException {
+    OMResponse response = getOrCreateOmTransport(omNodeId).submitRequest(request, omNodeId);
     if (response.getStatus() != OzoneManagerProtocolProtos.Status.OK) {
       throw new IOException(request.getCmdType() + " failed with " + response.getStatus() + ": "
           + response.getMessage());

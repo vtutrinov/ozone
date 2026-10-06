@@ -24,9 +24,8 @@ import static org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos.
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.stream.Collectors;
-import org.apache.hadoop.hdds.protocol.proto.HddsProtos;
+import org.apache.hadoop.hdds.HddsUtils;
 import org.apache.hadoop.hdds.ratis.RatisHelper;
 import org.apache.hadoop.hdds.scm.ScmConfigKeys;
 import org.apache.hadoop.hdds.security.x509.exception.CertificateException;
@@ -34,9 +33,6 @@ import org.apache.hadoop.hdds.utils.BackgroundTask;
 import org.apache.hadoop.hdds.utils.BackgroundTaskResult;
 import org.apache.hadoop.ipc_.RPC;
 import org.apache.hadoop.ipc_.Server;
-import org.apache.hadoop.ozone.OmUtils;
-import org.apache.hadoop.ozone.client.OzoneClient;
-import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.om.OzoneManager;
 import org.apache.hadoop.ozone.om.ratis.OzoneManagerRatisServer;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
@@ -106,34 +102,26 @@ public class BucketRaftGroupReconciliationTask implements BackgroundTask {
             } else {
               RaftPeerId raftGroupLeaderId = omRatisServer.getServer().getDivision(groupId).getInfo().getLeaderId();
 
-              String omServiceId = OmUtils.getOzoneManagerServiceId(ozoneManager.getConfiguration());
-              String omHost = OmUtils.getAllOMHAAddresses(ozoneManager.getConfiguration(), omServiceId, true).stream()
-                  .filter(omNodeDetails -> omNodeDetails.getNodeId().equals(raftGroupLeaderId.toString()))
-                  .findFirst().get().getHostAddress();
-
-              try (OzoneClient omClient = OzoneClientFactory.getRpcClient(omHost,
-                  OmUtils.getOmRpcPort(ozoneManager.getConfiguration()), ozoneManager.getConfiguration())) {
-                UUID raftGroupUuid = groupId.getUuid();
-                OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse raftGroupHealthState;
+              try {
+                final OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest healthStateRequest =
+                    OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest.newBuilder()
+                        .setGroupId(HddsUtils.toProtobuf(groupId.getUuid()))
+                        .build();
+                final OzoneManagerProtocolProtos.GetRaftGroupHealthStateResponse raftGroupHealthState;
                 if (omRatisServer.getServer().getId().equals(raftGroupLeaderId)) {
                   // the current OM is the leader of the raft group that we are checking,
                   // there is no need to call the remote leader OM of the RAFT group
-                  raftGroupHealthState = ozoneManager.getRaftGroupHealthState(
-                      OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest.newBuilder()
-                          .setGroupId(HddsProtos.UUID.newBuilder()
-                              .setLeastSigBits(raftGroupUuid.getLeastSignificantBits())
-                              .setMostSigBits(raftGroupUuid.getMostSignificantBits())
-                              .build())
-                          .build());
+                  raftGroupHealthState = ozoneManager.getRaftGroupHealthState(healthStateRequest);
                 } else {
-                  raftGroupHealthState =
-                      omClient.getProxy().getRaftGroupHealthState(
-                          OzoneManagerProtocolProtos.GetRaftGroupHealthStateRequest.newBuilder()
-                              .setGroupId(HddsProtos.UUID.newBuilder()
-                                  .setLeastSigBits(raftGroupUuid.getLeastSignificantBits())
-                                  .setMostSigBits(raftGroupUuid.getMostSignificantBits())
-                                  .build())
-                              .build());
+                  // directly to the leader of the raft group, which answers the request (not through an OM client,
+                  // which would start with the OM raft group leader lookup and fail over to the group leader)
+                  raftGroupHealthState = ozoneManager.getOmRaftGroupManager().submitToOm(raftGroupLeaderId.toString(),
+                      OzoneManagerProtocolProtos.OMRequest.newBuilder()
+                          .setCmdType(OzoneManagerProtocolProtos.Type.GetRaftGroupHealthState)
+                          .setClientId(omRatisServer.getCurrentClientId().toString())
+                          .setGetRaftGroupHealthStateRequest(healthStateRequest)
+                          .build())
+                      .getGetRaftGroupHealthStateResponse();
                 }
                 boolean isNotHealthy = raftGroupHealthState.getPeerHealthInfoList()
                     .stream()
