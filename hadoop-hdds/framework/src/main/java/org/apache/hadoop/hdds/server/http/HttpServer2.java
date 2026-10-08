@@ -93,7 +93,6 @@ import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.CustomRequestLog;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.HttpConfiguration;
-import org.eclipse.jetty.server.HttpConnectionFactory;
 import org.eclipse.jetty.server.RequestLog;
 import org.eclipse.jetty.server.SecureRequestCustomizer;
 import org.eclipse.jetty.server.Server;
@@ -545,7 +544,8 @@ public final class HttpServer2 implements FilterContainer {
       ServerConnector conn = new ServerConnector(server,
           conf.getInt(HTTP_ACCEPTOR_COUNT_KEY, HTTP_ACCEPTOR_COUNT_DEFAULT),
           conf.getInt(HTTP_SELECTOR_COUNT_KEY, HTTP_SELECTOR_COUNT_DEFAULT));
-      ConnectionFactory connFactory = new HttpConnectionFactory(httpConfig);
+      ConnectionFactory connFactory =
+          new ChunkExtensionRejectingConnectionFactory(httpConfig);
       conn.addConnectionFactory(connFactory);
       if (Shell.WINDOWS) {
         // result of setting the SO_REUSEADDR flag is different on Windows

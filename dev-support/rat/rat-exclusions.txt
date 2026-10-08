@@ -28,6 +28,9 @@ src/main/resources/proto.lock
 # tools/fault-injection-service
 tools/fault-injection-service/README.md
 
+# SDP: patches for other components (applied to their own repos)
+dev-support/patches/**
+
 # hadoop-hdds/framework
 **/webapps/static/angular-1.8.0.min.js
 **/webapps/static/angular-nvd3-1.0.9.min.js

@@ -1,0 +1,947 @@
+From a99456f53cbe845b712b1389dbcd136b9c6ce842 Mon Sep 17 00:00:00 2001
+From: Slava Tutrinov <slava@tutrinov.pro>
+Date: Thu, 8 Oct 2026 14:51:06 +0300
+Subject: [PATCH] [SDPOZN] Audit: Elasticsearch low-level REST client 8.19.8,
+ httpcomponents 4.5.14/4.4.16
+
+ElasticSearchAuditDestination now uses only elasticsearch-rest-client 8.19.8
+(Java 8 bytecode) and builds the _bulk NDJSON body itself with Gson. The
+document format is the same as the old XContent output (UTC
+yyyy-MM-ddTHH:mm:ss.SSSZ dates, nulls kept, sets as arrays).
+
+The Elasticsearch server jar, the high-level client, x-content and the
+module clients are no longer pulled by ranger-plugins-audit nor packaged in
+plugin assemblies, which removes CVE-2025-37731, CVE-2025-37727 and the
+older server-side Elasticsearch CVEs from every plugin package. Ranger
+Admin and the embedded web server keep the 7.17 high-level client
+explicitly (no 8.x release of it exists).
+
+httpclient/httpmime 4.5.14, httpcore(-nio) 4.4.16, httpasyncclient 4.1.5:
+fixes CVE-2020-13956 and matches what the 8.19.8 REST client is built with.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ agents-audit/pom.xml                          |  63 +------
+ .../ElasticSearchAuditDestination.java        | 148 +++++++++++----
+ .../TestElasticSearchAuditDestination.java    | 173 ++++++++++++++++++
+ distro/src/main/assembly/hbase-agent.xml      |   6 -
+ distro/src/main/assembly/hdfs-agent.xml       |   6 -
+ distro/src/main/assembly/hive-agent.xml       |   6 -
+ distro/src/main/assembly/kms.xml              |   6 -
+ distro/src/main/assembly/knox-agent.xml       |   6 -
+ distro/src/main/assembly/plugin-atlas.xml     |   6 -
+ distro/src/main/assembly/plugin-kafka.xml     |   6 -
+ distro/src/main/assembly/plugin-kylin.xml     |   6 -
+ distro/src/main/assembly/plugin-ozone.xml     |   6 -
+ distro/src/main/assembly/plugin-presto.xml    |   6 -
+ distro/src/main/assembly/plugin-solr.xml      |   6 -
+ distro/src/main/assembly/plugin-sqoop.xml     |   6 -
+ distro/src/main/assembly/plugin-trino.xml     |   6 -
+ distro/src/main/assembly/plugin-yarn.xml      |   6 -
+ distro/src/main/assembly/storm-agent.xml      |   6 -
+ embeddedwebserver/pom.xml                     |  22 +++
+ pom.xml                                       |  15 +-
+ security-admin/pom.xml                        |  22 +++
+ 21 files changed, 341 insertions(+), 192 deletions(-)
+ create mode 100644 agents-audit/src/test/java/org/apache/ranger/audit/destination/TestElasticSearchAuditDestination.java
+
+diff --git a/agents-audit/pom.xml b/agents-audit/pom.xml
+index 5181c652a..0467b0a88 100644
+--- a/agents-audit/pom.xml
++++ b/agents-audit/pom.xml
+@@ -170,70 +170,15 @@
+             <artifactId>guava</artifactId>
+             <version>${google.guava.version}</version>
+         </dependency>
+-        <dependency>
+-            <groupId>org.elasticsearch</groupId>
+-            <artifactId>elasticsearch</artifactId>
+-            <version>${elasticsearch.version}</version>
+-            <exclusions>
+-                <exclusion>
+-                    <groupId>org.elasticsearch</groupId>
+-                    <artifactId>jna</artifactId>
+-                </exclusion>
+-                <exclusion>
+-                    <groupId>org.apache.logging.log4j</groupId>
+-                    <artifactId>*</artifactId>
+-                </exclusion>
+-            </exclusions>
+-        </dependency>
+-        <dependency>
+-            <groupId>org.elasticsearch</groupId>
+-            <artifactId>elasticsearch-core</artifactId>
+-            <version>${elasticsearch.version}</version>
+-        </dependency>
+-        <dependency>
+-            <groupId>org.elasticsearch</groupId>
+-            <artifactId>securesm</artifactId>
+-            <version>${securesm.version}</version>
+-        </dependency>
+         <dependency>
+             <groupId>org.elasticsearch.client</groupId>
+             <artifactId>elasticsearch-rest-client</artifactId>
+-            <version>${elasticsearch.version}</version>
++            <version>${elasticsearch.client.version}</version>
+         </dependency>
+         <dependency>
+-            <groupId>org.elasticsearch.client</groupId>
+-            <artifactId>elasticsearch-rest-high-level-client</artifactId>
+-            <version>${elasticsearch.version}</version>
+-        </dependency>
+-        <dependency>
+-            <groupId>org.elasticsearch.plugin</groupId>
+-            <artifactId>parent-join-client</artifactId>
+-            <version>${elasticsearch.version}</version>
+-        </dependency>
+-        <dependency>
+-            <groupId>org.elasticsearch.plugin</groupId>
+-            <artifactId>aggs-matrix-stats-client</artifactId>
+-            <version>${elasticsearch.version}</version>
+-        </dependency>
+-        <dependency>
+-            <groupId>org.elasticsearch.plugin</groupId>
+-            <artifactId>rank-eval-client</artifactId>
+-            <version>${elasticsearch.version}</version>
+-        </dependency>
+-        <dependency>
+-            <groupId>org.elasticsearch.plugin</groupId>
+-            <artifactId>lang-mustache-client</artifactId>
+-            <version>${elasticsearch.version}</version>
+-        </dependency>
+-        <dependency>
+-            <groupId>org.elasticsearch</groupId>
+-            <artifactId>elasticsearch-x-content</artifactId>
+-            <version>${elasticsearch.version}</version>
+-        </dependency>
+-        <dependency>
+-            <groupId>org.elasticsearch</groupId>
+-            <artifactId>elasticsearch-secure-sm</artifactId>
+-            <version>${elasticsearch.version}</version>
++            <groupId>junit</groupId>
++            <artifactId>junit</artifactId>
++            <scope>test</scope>
+         </dependency>
+         <dependency>
+             <groupId>org.apache.httpcomponents</groupId>
+diff --git a/agents-audit/src/main/java/org/apache/ranger/audit/destination/ElasticSearchAuditDestination.java b/agents-audit/src/main/java/org/apache/ranger/audit/destination/ElasticSearchAuditDestination.java
+index 1b17a934b..1a00cce65 100644
+--- a/agents-audit/src/main/java/org/apache/ranger/audit/destination/ElasticSearchAuditDestination.java
++++ b/agents-audit/src/main/java/org/apache/ranger/audit/destination/ElasticSearchAuditDestination.java
+@@ -20,20 +20,30 @@
+ package org.apache.ranger.audit.destination;
+ 
+ import java.io.File;
++import java.io.IOException;
+ import java.security.PrivilegedActionException;
++import java.text.SimpleDateFormat;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.Collection;
+ import java.util.Date;
+ import java.util.HashMap;
++import java.util.List;
+ import java.util.Locale;
+ import java.util.Map;
+ import java.util.Properties;
++import java.util.TimeZone;
+ import java.util.concurrent.ThreadFactory;
+ import java.util.concurrent.TimeUnit;
+ import java.util.concurrent.atomic.AtomicLong;
+ 
+ import com.google.common.util.concurrent.ThreadFactoryBuilder;
++import com.google.gson.Gson;
++import com.google.gson.GsonBuilder;
++import com.google.gson.JsonArray;
++import com.google.gson.JsonElement;
++import com.google.gson.JsonObject;
++import com.google.gson.JsonParser;
+ import org.apache.commons.lang.StringUtils;
+ import org.apache.http.HttpHost;
+ import org.apache.http.auth.AuthSchemeProvider;
+@@ -41,27 +51,35 @@
+ import org.apache.http.client.config.AuthSchemes;
+ import org.apache.http.config.Lookup;
+ import org.apache.http.config.RegistryBuilder;
++import org.apache.http.entity.ContentType;
++import org.apache.http.entity.StringEntity;
+ import org.apache.http.impl.auth.SPNegoSchemeFactory;
++import org.apache.http.util.EntityUtils;
+ import org.apache.ranger.audit.model.AuditEventBase;
+ import org.apache.ranger.audit.model.AuthzAuditEvent;
+ import org.apache.ranger.audit.provider.MiscUtil;
+ import org.apache.ranger.authorization.credutils.CredentialsProviderUtil;
+ import org.apache.ranger.authorization.credutils.kerberos.KerberosCredentialsProvider;
+-import org.elasticsearch.action.admin.indices.open.OpenIndexRequest;
+-import org.elasticsearch.action.bulk.BulkItemResponse;
+-import org.elasticsearch.action.bulk.BulkRequest;
+-import org.elasticsearch.action.bulk.BulkResponse;
+-import org.elasticsearch.action.index.IndexRequest;
+-import org.elasticsearch.client.RequestOptions;
++import org.elasticsearch.client.Request;
++import org.elasticsearch.client.Response;
++import org.elasticsearch.client.ResponseException;
+ import org.elasticsearch.client.RestClient;
+ import org.elasticsearch.client.RestClientBuilder;
+-import org.elasticsearch.client.RestHighLevelClient;
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+ import javax.security.auth.Subject;
+ import javax.security.auth.kerberos.KerberosTicket;
+ 
++/**
++ * Writes audit events to Elasticsearch with the low-level REST client and the
++ * bulk API.
++ * <p>
++ * SDP: the high-level REST client (and the Elasticsearch server jar it pulls
++ * in) has no 8.x release and was the source of the server-side CVEs reported
++ * against every plugin package. The low-level client works with both
++ * Elasticsearch 7.x and 8.x clusters and still runs on Java 8.
++ */
+ public class ElasticSearchAuditDestination extends AuditDestination {
+     private static final Logger LOG = LoggerFactory.getLogger(ElasticSearchAuditDestination.class);
+ 
+@@ -74,8 +92,18 @@ public class ElasticSearchAuditDestination extends AuditDestination {
+     public static final String CONFIG_PREFIX = "ranger.audit.elasticsearch";
+     public static final String DEFAULT_INDEX = "ranger_audits";
+ 
++    private static final ContentType NDJSON = ContentType.create("application/x-ndjson", "UTF-8");
++    // Same JSON as the high-level client's XContentBuilder: nulls kept, dates
++    // in strict_date_optional_time, UTC.
++    private static final Gson GSON = new GsonBuilder().serializeNulls().disableHtmlEscaping().create();
++    private static final ThreadLocal<SimpleDateFormat> DATE_FORMAT = ThreadLocal.withInitial(() -> {
++        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT);
++        format.setTimeZone(TimeZone.getTimeZone("UTC"));
++        return format;
++    });
++
+     private String index = "index";
+-    private volatile RestHighLevelClient client = null;
++    private volatile RestClient client = null;
+     private String protocol;
+     private String user;
+     private int port;
+@@ -118,7 +146,7 @@ public boolean log(Collection<AuditEventBase> events) {
+             logStatusIfRequired();
+             addTotalCount(events.size());
+ 
+-            RestHighLevelClient client = getClient();
++            RestClient client = getClient();
+             if (null == client) {
+                 // ElasticSearch is still not initialized. So need return error
+                 addDeferredCount(events.size());
+@@ -126,37 +154,39 @@ public boolean log(Collection<AuditEventBase> events) {
+             }
+ 
+             ArrayList<AuditEventBase> eventList = new ArrayList<>(events);
+-            BulkRequest bulkRequest = new BulkRequest();
++            String bulkBody;
+             try {
+-                for (AuditEventBase event : eventList) {
+-                    AuthzAuditEvent authzEvent = (AuthzAuditEvent) event;
+-                    String id = authzEvent.getEventId();
+-                    Map<String, Object> doc = toDoc(authzEvent);
+-                    bulkRequest.add(new IndexRequest(index).id(id).source(doc));
+-                }
++                bulkBody = toBulkBody(eventList);
+             } catch (Exception ex) {
+                 addFailedCount(eventList.size());
+                 logFailedEvent(eventList, ex);
++                return ret;
+             }
+-            BulkResponse response = client.bulk(bulkRequest, RequestOptions.DEFAULT);
+-            if (response.status().getStatus() >= 400) {
++            Request request = new Request("POST", "/_bulk");
++            request.setEntity(new StringEntity(bulkBody, NDJSON));
++            Response response;
++            try {
++                response = client.performRequest(request);
++            } catch (ResponseException e) {
+                 addFailedCount(eventList.size());
+-                logFailedEvent(eventList, "HTTP " + response.status().getStatus());
+-            } else {
+-                BulkItemResponse[] items = response.getItems();
+-                for (int i = 0; i < items.length; i++) {
+-                    AuditEventBase itemRequest = eventList.get(i);
+-                    BulkItemResponse itemResponse = items[i];
+-                    if (itemResponse.isFailed()) {
+-                        addFailedCount(1);
+-                        logFailedEvent(Arrays.asList(itemRequest), itemResponse.getFailureMessage());
+-                    } else {
+-                        if (LOG.isDebugEnabled()) {
+-                            LOG.debug(String.format("Indexed %s", itemRequest.getEventKey()));
+-                        }
+-                        addSuccessCount(1);
+-                        ret = true;
++                logFailedEvent(eventList, "HTTP " + e.getResponse().getStatusLine().getStatusCode());
++                return ret;
++            }
++            JsonArray items = JsonParser.parseString(EntityUtils.toString(response.getEntity()))
++                    .getAsJsonObject().getAsJsonArray("items");
++            for (int i = 0; i < eventList.size(); i++) {
++                AuditEventBase itemRequest = eventList.get(i);
++                String failure = items == null || i >= items.size()
++                        ? "missing bulk item response" : getBulkItemFailure(items.get(i));
++                if (failure != null) {
++                    addFailedCount(1);
++                    logFailedEvent(Arrays.asList(itemRequest), failure);
++                } else {
++                    if (LOG.isDebugEnabled()) {
++                        LOG.debug(String.format("Indexed %s", itemRequest.getEventKey()));
+                     }
++                    addSuccessCount(1);
++                    ret = true;
+                 }
+             }
+         } catch (Throwable t) {
+@@ -180,7 +210,7 @@ public boolean isAsync() {
+         return true;
+     }
+ 
+-    synchronized RestHighLevelClient getClient() {
++    synchronized RestClient getClient() {
+         if (client == null) {
+             synchronized (ElasticSearchAuditDestination.class) {
+                 if (client == null) {
+@@ -251,20 +281,20 @@ public static RestClientBuilder getRestClientBuilder(String urls, String protoco
+         return restClientBuilder;
+     }
+ 
+-    private RestHighLevelClient newClient() {
++    private RestClient newClient() {
+         try {
+             if (StringUtils.isNotBlank(user) && StringUtils.isNotBlank(password) && password.contains("keytab") && new File(password).exists()) {
+                 subject = CredentialsProviderUtil.login(user, password);
+             }
+             RestClientBuilder restClientBuilder =
+                     getRestClientBuilder(hosts, protocol, user, password, port);
+-            RestHighLevelClient restHighLevelClient = new RestHighLevelClient(restClientBuilder);
++            RestClient restClient = restClientBuilder.build();
+             if (LOG.isDebugEnabled()) {
+                 LOG.debug("Initialized client");
+             }
+             boolean exits = false;
+             try {
+-                exits = restHighLevelClient.indices().open(new OpenIndexRequest(this.index), RequestOptions.DEFAULT).isShardsAcknowledged();
++                exits = openIndex(restClient, this.index);
+             } catch (Exception e) {
+                 LOG.warn("Error validating index " + this.index);
+             }
+@@ -275,7 +305,7 @@ private RestHighLevelClient newClient() {
+             } else {
+                 LOG.info("Index does not exist");
+             }
+-            return restHighLevelClient;
++            return restClient;
+         } catch (Throwable t) {
+             lastLoggedAt.updateAndGet(lastLoggedAt -> {
+                 long now = System.currentTimeMillis();
+@@ -310,6 +340,46 @@ private String getStringProperty(Properties props, String propName, String defau
+         return value;
+     }
+ 
++    /**
++     * Opens the index, as the high-level client's indices().open() did.
++     *
++     * @return whether all shards acknowledged the open
++     */
++    private static boolean openIndex(RestClient restClient, String index) throws IOException {
++        Response response = restClient.performRequest(new Request("POST", "/" + index + "/_open"));
++        JsonElement acknowledged = JsonParser.parseString(EntityUtils.toString(response.getEntity()))
++                .getAsJsonObject().get("shards_acknowledged");
++        return acknowledged != null && acknowledged.getAsBoolean();
++    }
++
++    String toBulkBody(List<AuditEventBase> events) {
++        StringBuilder body = new StringBuilder();
++        for (AuditEventBase event : events) {
++            AuthzAuditEvent authzEvent = (AuthzAuditEvent) event;
++            JsonObject target = new JsonObject();
++            target.addProperty("_index", index);
++            target.addProperty("_id", authzEvent.getEventId());
++            JsonObject action = new JsonObject();
++            action.add("index", target);
++            body.append(GSON.toJson(action)).append('\n');
++            body.append(GSON.toJson(toDoc(authzEvent))).append('\n');
++        }
++        return body.toString();
++    }
++
++    /**
++     * @return the failure of one bulk item response, null if it succeeded
++     */
++    static String getBulkItemFailure(JsonElement item) {
++        JsonObject result = item.getAsJsonObject().entrySet().iterator().next().getValue().getAsJsonObject();
++        JsonElement error = result.get("error");
++        if (error != null && !error.isJsonNull()) {
++            return error.toString();
++        }
++        int status = result.has("status") ? result.get("status").getAsInt() : 0;
++        return status >= 300 ? "HTTP " + status : null;
++    }
++
+     Map<String, Object> toDoc(AuthzAuditEvent auditEvent) {
+         Map<String, Object> doc = new HashMap<String, Object>();
+         doc.put("id", auditEvent.getEventId());
+@@ -329,7 +399,7 @@ Map<String, Object> toDoc(AuthzAuditEvent auditEvent) {
+         doc.put("resType", auditEvent.getResourceType());
+         doc.put("reason", auditEvent.getResultReason());
+         doc.put("action", auditEvent.getAction());
+-        doc.put("evtTime", auditEvent.getEventTime());
++        doc.put("evtTime", auditEvent.getEventTime() == null ? null : DATE_FORMAT.get().format(auditEvent.getEventTime()));
+         doc.put("seq_num", auditEvent.getSeqNum());
+         doc.put("event_count", auditEvent.getEventCount());
+         doc.put("event_dur_ms", auditEvent.getEventDurationMS());
+diff --git a/agents-audit/src/test/java/org/apache/ranger/audit/destination/TestElasticSearchAuditDestination.java b/agents-audit/src/test/java/org/apache/ranger/audit/destination/TestElasticSearchAuditDestination.java
+new file mode 100644
+index 000000000..eabdb80fc
+--- /dev/null
++++ b/agents-audit/src/test/java/org/apache/ranger/audit/destination/TestElasticSearchAuditDestination.java
+@@ -0,0 +1,173 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ */
++
++package org.apache.ranger.audit.destination;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertTrue;
++
++import java.io.ByteArrayOutputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.OutputStream;
++import java.net.InetSocketAddress;
++import java.nio.charset.StandardCharsets;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.Collections;
++import java.util.Date;
++import java.util.HashSet;
++import java.util.List;
++import java.util.Properties;
++import java.util.concurrent.CopyOnWriteArrayList;
++
++import com.google.gson.JsonObject;
++import com.google.gson.JsonParser;
++import com.sun.net.httpserver.HttpExchange;
++import com.sun.net.httpserver.HttpServer;
++import org.apache.ranger.audit.model.AuditEventBase;
++import org.apache.ranger.audit.model.AuthzAuditEvent;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++
++/**
++ * Tests {@link ElasticSearchAuditDestination} against a stub Elasticsearch
++ * HTTP endpoint.
++ */
++public class TestElasticSearchAuditDestination {
++
++    private static final String INDEX = "ranger_audits";
++
++    private HttpServer server;
++    private final List<String> requests = new CopyOnWriteArrayList<>();
++    private volatile String bulkResponse;
++
++    @Before
++    public void setUp() throws IOException {
++        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
++        server.createContext("/", this::handle);
++        server.start();
++    }
++
++    @After
++    public void tearDown() {
++        server.stop(0);
++    }
++
++    @Test
++    public void indexesEventsWithBulkApi() throws Exception {
++        bulkResponse = "{\"took\":3,\"errors\":false,\"items\":["
++                + "{\"index\":{\"_index\":\"" + INDEX + "\",\"_id\":\"e1\",\"status\":201}},"
++                + "{\"index\":{\"_index\":\"" + INDEX + "\",\"_id\":\"e2\",\"status\":201}}]}";
++        ElasticSearchAuditDestination destination = newDestination();
++
++        assertTrue(destination.log(Arrays.asList(event("e1"), event("e2"))));
++
++        assertEquals("POST /" + INDEX + "/_open", requests.get(0).split("\n", 2)[0]);
++        String bulk = requests.get(1);
++        String[] lines = bulk.split("\n");
++        assertEquals("POST /_bulk", lines[0]);
++        // action + source line per event
++        assertEquals(5, lines.length);
++        JsonObject action = JsonParser.parseString(lines[1]).getAsJsonObject().getAsJsonObject("index");
++        assertEquals(INDEX, action.get("_index").getAsString());
++        assertEquals("e1", action.get("_id").getAsString());
++        JsonObject doc = JsonParser.parseString(lines[2]).getAsJsonObject();
++        assertEquals("e1", doc.get("id").getAsString());
++        assertEquals("alice", doc.get("reqUser").getAsString());
++        assertEquals("1970-01-01T00:00:01.234Z", doc.get("evtTime").getAsString());
++        assertEquals("[\"PII\"]", doc.get("tags").toString());
++        assertTrue(doc.has("zoneName") && doc.get("zoneName").isJsonNull());
++    }
++
++    @Test
++    public void failedBulkItemsAreNotSuccess() throws Exception {
++        bulkResponse = "{\"took\":3,\"errors\":true,\"items\":["
++                + "{\"index\":{\"_index\":\"" + INDEX + "\",\"_id\":\"e1\",\"status\":400,"
++                + "\"error\":{\"type\":\"mapper_parsing_exception\",\"reason\":\"bad\"}}}]}";
++        ElasticSearchAuditDestination destination = newDestination();
++
++        assertFalse(destination.log(Collections.singletonList(event("e1"))));
++    }
++
++    @Test
++    public void httpErrorIsNotSuccess() throws Exception {
++        bulkResponse = null; // stub answers 500
++        ElasticSearchAuditDestination destination = newDestination();
++
++        assertFalse(destination.log(new ArrayList<AuditEventBase>(Collections.singletonList(event("e1")))));
++    }
++
++    private ElasticSearchAuditDestination newDestination() {
++        String prefix = ElasticSearchAuditDestination.CONFIG_PREFIX;
++        Properties props = new Properties();
++        props.setProperty(prefix + "." + ElasticSearchAuditDestination.CONFIG_URLS, "127.0.0.1");
++        props.setProperty(prefix + "." + ElasticSearchAuditDestination.CONFIG_PORT,
++                String.valueOf(server.getAddress().getPort()));
++        props.setProperty(prefix + "." + ElasticSearchAuditDestination.CONFIG_USER, "elastic");
++        props.setProperty(prefix + "." + ElasticSearchAuditDestination.CONFIG_PWRD, "secret");
++        ElasticSearchAuditDestination destination = new ElasticSearchAuditDestination();
++        destination.init(props, prefix);
++        return destination;
++    }
++
++    private static AuthzAuditEvent event(String id) {
++        AuthzAuditEvent event = new AuthzAuditEvent();
++        event.setEventId(id);
++        event.setUser("alice");
++        event.setEventTime(new Date(1234));
++        event.setTags(new HashSet<>(Collections.singletonList("PII")));
++        return event;
++    }
++
++    private void handle(HttpExchange exchange) throws IOException {
++        String path = exchange.getRequestURI().getPath();
++        requests.add(exchange.getRequestMethod() + " " + path + "\n" + read(exchange.getRequestBody()));
++        String body;
++        int status;
++        if (path.endsWith("/_open")) {
++            status = 200;
++            body = "{\"acknowledged\":true,\"shards_acknowledged\":true}";
++        } else if (bulkResponse != null) {
++            status = 200;
++            body = bulkResponse;
++        } else {
++            status = 500;
++            body = "{\"error\":\"boom\"}";
++        }
++        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
++        exchange.getResponseHeaders().add("Content-Type", "application/json");
++        exchange.sendResponseHeaders(status, bytes.length);
++        try (OutputStream out = exchange.getResponseBody()) {
++            out.write(bytes);
++        }
++    }
++
++    private static String read(InputStream in) throws IOException {
++        ByteArrayOutputStream buf = new ByteArrayOutputStream();
++        byte[] chunk = new byte[4096];
++        int n;
++        while ((n = in.read(chunk)) > 0) {
++            buf.write(chunk, 0, n);
++        }
++        return new String(buf.toByteArray(), StandardCharsets.UTF_8);
++    }
++}
+diff --git a/distro/src/main/assembly/hbase-agent.xml b/distro/src/main/assembly/hbase-agent.xml
+index 7d47d657b..f9b65d976 100644
+--- a/distro/src/main/assembly/hbase-agent.xml
++++ b/distro/src/main/assembly/hbase-agent.xml
+@@ -64,13 +64,7 @@
+           <include>com.kstruct:gethostname4j:jar:${kstruct.gethostname4j.version}</include>
+           <include>net.java.dev.jna:jna:jar:${jna.version}</include>
+           <include>net.java.dev.jna:jna-platform:jar:${jna-platform.version}</include>
+-          <include>org.elasticsearch:elasticsearch</include>
+-          <include>org.elasticsearch:elasticsearch-core</include>
+-          <include>org.elasticsearch:elasticsearch-x-content</include>
+           <include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-          <include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-          <include>org.elasticsearch.plugin:rank-eval-client</include>
+-          <include>org.elasticsearch.plugin:lang-mustache-client</include>
+           <include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+           <include>org.apache.lucene:lucene-core</include>
+           <include>joda-time:joda-time</include>
+diff --git a/distro/src/main/assembly/hdfs-agent.xml b/distro/src/main/assembly/hdfs-agent.xml
+index cd7f0abd5..0d5d0d836 100644
+--- a/distro/src/main/assembly/hdfs-agent.xml
++++ b/distro/src/main/assembly/hdfs-agent.xml
+@@ -96,13 +96,7 @@
+           <include>com.kstruct:gethostname4j:jar:${kstruct.gethostname4j.version}</include>
+           <include>net.java.dev.jna:jna:jar:${jna.version}</include>
+           <include>net.java.dev.jna:jna-platform:jar:${jna-platform.version}</include>
+-          <include>org.elasticsearch:elasticsearch</include>
+-          <include>org.elasticsearch:elasticsearch-core</include>
+-          <include>org.elasticsearch:elasticsearch-x-content</include>
+           <include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-          <include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-          <include>org.elasticsearch.plugin:rank-eval-client</include>
+-          <include>org.elasticsearch.plugin:lang-mustache-client</include>
+           <include>org.apache.httpcomponents:httpcore-nio:jar:${httpcomponents.httpcore.version}</include>
+           <include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+           <include>org.apache.lucene:lucene-core</include>
+diff --git a/distro/src/main/assembly/hive-agent.xml b/distro/src/main/assembly/hive-agent.xml
+index 4931256c8..8b625a8f9 100644
+--- a/distro/src/main/assembly/hive-agent.xml
++++ b/distro/src/main/assembly/hive-agent.xml
+@@ -62,13 +62,7 @@
+           <include>com.kstruct:gethostname4j:jar:${kstruct.gethostname4j.version}</include>
+           <include>net.java.dev.jna:jna:jar:${jna.version}</include>
+           <include>net.java.dev.jna:jna-platform:jar:${jna-platform.version}</include>
+-          <include>org.elasticsearch:elasticsearch</include>
+-          <include>org.elasticsearch:elasticsearch-core</include>
+-          <include>org.elasticsearch:elasticsearch-x-content</include>
+           <include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-          <include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-          <include>org.elasticsearch.plugin:rank-eval-client</include>
+-          <include>org.elasticsearch.plugin:lang-mustache-client</include>
+           <include>org.apache.httpcomponents:httpcore-nio:jar:${httpcomponents.httpcore.version}</include>
+           <include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+           <include>org.apache.lucene:lucene-core</include>
+diff --git a/distro/src/main/assembly/kms.xml b/distro/src/main/assembly/kms.xml
+index 0387dc6b5..991fa882e 100755
+--- a/distro/src/main/assembly/kms.xml
++++ b/distro/src/main/assembly/kms.xml
+@@ -303,13 +303,7 @@
+                             <include>com.kstruct:gethostname4j:jar:${kstruct.gethostname4j.version}</include>
+                             <include>net.java.dev.jna:jna:jar:${jna.version}</include>
+                             <include>net.java.dev.jna:jna-platform:jar:${jna-platform.version}</include>
+-                            <include>org.elasticsearch:elasticsearch</include>
+-                            <include>org.elasticsearch:elasticsearch-core</include>
+-                            <include>org.elasticsearch:elasticsearch-x-content</include>
+                             <include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-                            <include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-                            <include>org.elasticsearch.plugin:rank-eval-client</include>
+-                            <include>org.elasticsearch.plugin:lang-mustache-client</include>
+                             <include>org.apache.httpcomponents:httpcore-nio:jar:${httpcomponents.httpcore.version}</include>
+                             <include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+                             <include>org.apache.lucene:lucene-core</include>
+diff --git a/distro/src/main/assembly/knox-agent.xml b/distro/src/main/assembly/knox-agent.xml
+index fa92ea0dc..a5b5bdb81 100644
+--- a/distro/src/main/assembly/knox-agent.xml
++++ b/distro/src/main/assembly/knox-agent.xml
+@@ -71,13 +71,7 @@
+           <include>com.kstruct:gethostname4j:jar:${kstruct.gethostname4j.version}</include>
+           <include>net.java.dev.jna:jna:jar:${jna.version}</include>
+           <include>net.java.dev.jna:jna-platform:jar:${jna-platform.version}</include>
+-          <include>org.elasticsearch:elasticsearch</include>
+-          <include>org.elasticsearch:elasticsearch-core</include>
+-          <include>org.elasticsearch:elasticsearch-x-content</include>
+           <include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-          <include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-          <include>org.elasticsearch.plugin:rank-eval-client</include>
+-          <include>org.elasticsearch.plugin:lang-mustache-client</include>
+           <include>org.apache.httpcomponents:httpcore-nio:jar:${httpcomponents.httpcore.version}</include>
+           <include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+           <include>org.apache.lucene:lucene-core</include>
+diff --git a/distro/src/main/assembly/plugin-atlas.xml b/distro/src/main/assembly/plugin-atlas.xml
+index e6ed56abf..6ffc4a838 100644
+--- a/distro/src/main/assembly/plugin-atlas.xml
++++ b/distro/src/main/assembly/plugin-atlas.xml
+@@ -77,13 +77,7 @@
+           <include>org.apache.knox:gateway-shell</include>
+           <include>org.apache.knox:gateway-i18n</include>
+           <include>org.wildfly.openssl:wildfly-openssl:jar:${wildfly.version}</include>
+-          <include>org.elasticsearch:elasticsearch</include>
+-          <include>org.elasticsearch:elasticsearch-core</include>
+-          <include>org.elasticsearch:elasticsearch-x-content</include>
+           <include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-          <include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-          <include>org.elasticsearch.plugin:rank-eval-client</include>
+-          <include>org.elasticsearch.plugin:lang-mustache-client</include>
+           <include>org.apache.httpcomponents:httpcore-nio:jar:${httpcomponents.httpcore.version}</include>
+           <include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+           <include>org.apache.lucene:lucene-core</include>
+diff --git a/distro/src/main/assembly/plugin-kafka.xml b/distro/src/main/assembly/plugin-kafka.xml
+index ed8ef6159..bd915b523 100644
+--- a/distro/src/main/assembly/plugin-kafka.xml
++++ b/distro/src/main/assembly/plugin-kafka.xml
+@@ -78,13 +78,7 @@
+ 					<include>com.kstruct:gethostname4j:jar:${kstruct.gethostname4j.version}</include>
+ 					<include>net.java.dev.jna:jna:jar:${jna.version}</include>
+ 					<include>net.java.dev.jna:jna-platform:jar:${jna-platform.version}</include>
+-					<include>org.elasticsearch:elasticsearch</include>
+-					<include>org.elasticsearch:elasticsearch-core</include>
+-					<include>org.elasticsearch:elasticsearch-x-content</include>
+ 					<include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-					<include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-					<include>org.elasticsearch.plugin:rank-eval-client</include>
+-					<include>org.elasticsearch.plugin:lang-mustache-client</include>
+ 					<include>org.apache.httpcomponents:httpcore-nio:jar:${httpcomponents.httpcore.version}</include>
+ 					<include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+ 					<include>org.apache.htrace:htrace-core4</include>
+diff --git a/distro/src/main/assembly/plugin-kylin.xml b/distro/src/main/assembly/plugin-kylin.xml
+index 74b9f4362..0979dfb0a 100644
+--- a/distro/src/main/assembly/plugin-kylin.xml
++++ b/distro/src/main/assembly/plugin-kylin.xml
+@@ -66,13 +66,7 @@
+               <include>com.kstruct:gethostname4j:jar:${kstruct.gethostname4j.version}</include>
+               <include>net.java.dev.jna:jna:jar:${jna.version}</include>
+               <include>net.java.dev.jna:jna-platform:jar:${jna-platform.version}</include>
+-              <include>org.elasticsearch:elasticsearch</include>
+-              <include>org.elasticsearch:elasticsearch-core</include>
+-              <include>org.elasticsearch:elasticsearch-x-content</include>
+               <include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-              <include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-              <include>org.elasticsearch.plugin:rank-eval-client</include>
+-              <include>org.elasticsearch.plugin:lang-mustache-client</include>
+               <include>org.apache.httpcomponents:httpcore-nio:jar:${httpcomponents.httpcore.version}</include>
+               <include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+               <include>org.apache.lucene:lucene-core</include>
+diff --git a/distro/src/main/assembly/plugin-ozone.xml b/distro/src/main/assembly/plugin-ozone.xml
+index 279b62cd6..ce49f8299 100644
+--- a/distro/src/main/assembly/plugin-ozone.xml
++++ b/distro/src/main/assembly/plugin-ozone.xml
+@@ -119,13 +119,7 @@
+                     <include>com.kstruct:gethostname4j</include>
+                     <include>net.java.dev.jna:jna</include>
+                     <include>net.java.dev.jna:jna-platform</include>
+-                    <include>org.elasticsearch:elasticsearch</include>
+-                    <include>org.elasticsearch:elasticsearch-core</include>
+-                    <include>org.elasticsearch:elasticsearch-x-content</include>
+                     <include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-                    <include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-                    <include>org.elasticsearch.plugin:rank-eval-client</include>
+-                    <include>org.elasticsearch.plugin:lang-mustache-client</include>
+                     <include>org.apache.httpcomponents:httpcore-nio:jar:${httpcomponents.httpcore.version}</include>
+                     <include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+                     <include>org.apache.lucene:lucene-core</include>
+diff --git a/distro/src/main/assembly/plugin-presto.xml b/distro/src/main/assembly/plugin-presto.xml
+index 82d1610aa..2d2964797 100644
+--- a/distro/src/main/assembly/plugin-presto.xml
++++ b/distro/src/main/assembly/plugin-presto.xml
+@@ -105,13 +105,7 @@
+                     <include>net.java.dev.jna:jna</include>
+                     <include>net.java.dev.jna:jna-platform</include>
+                     <include>com.kstruct:gethostname4j</include>
+-                    <include>org.elasticsearch:elasticsearch</include>
+-                    <include>org.elasticsearch:elasticsearch-core</include>
+-                    <include>org.elasticsearch:elasticsearch-x-content</include>
+                     <include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-                    <include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-                    <include>org.elasticsearch.plugin:rank-eval-client</include>
+-                    <include>org.elasticsearch.plugin:lang-mustache-client</include>
+                     <include>org.apache.httpcomponents:httpcore-nio:jar:${httpcomponents.httpcore.version}</include>
+                     <include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+                     <include>org.apache.lucene:lucene-core</include>
+diff --git a/distro/src/main/assembly/plugin-solr.xml b/distro/src/main/assembly/plugin-solr.xml
+index 382b57092..22479b514 100644
+--- a/distro/src/main/assembly/plugin-solr.xml
++++ b/distro/src/main/assembly/plugin-solr.xml
+@@ -58,13 +58,7 @@
+           <include>com.kstruct:gethostname4j:jar:${kstruct.gethostname4j.version}</include>
+           <include>net.java.dev.jna:jna:jar:${jna.version}</include>
+           <include>net.java.dev.jna:jna-platform:jar:${jna-platform.version}</include>
+-          <include>org.elasticsearch:elasticsearch</include>
+-          <include>org.elasticsearch:elasticsearch-core</include>
+-          <include>org.elasticsearch:elasticsearch-x-content</include>
+           <include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-          <include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-          <include>org.elasticsearch.plugin:rank-eval-client</include>
+-          <include>org.elasticsearch.plugin:lang-mustache-client</include>
+           <include>org.apache.httpcomponents:httpcore-nio:jar:${httpcomponents.httpcore.version}</include>
+           <include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+           <include>org.apache.lucene:lucene-core</include>
+diff --git a/distro/src/main/assembly/plugin-sqoop.xml b/distro/src/main/assembly/plugin-sqoop.xml
+index 13f74dc79..29320f20d 100644
+--- a/distro/src/main/assembly/plugin-sqoop.xml
++++ b/distro/src/main/assembly/plugin-sqoop.xml
+@@ -62,13 +62,7 @@
+           <include>com.kstruct:gethostname4j:jar:${kstruct.gethostname4j.version}</include>
+           <include>net.java.dev.jna:jna:jar:${jna.version}</include>
+           <include>net.java.dev.jna:jna-platform:jar:${jna-platform.version}</include>
+-          <include>org.elasticsearch:elasticsearch</include>
+-          <include>org.elasticsearch:elasticsearch-core</include>
+-          <include>org.elasticsearch:elasticsearch-x-content</include>
+           <include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-          <include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-          <include>org.elasticsearch.plugin:rank-eval-client</include>
+-          <include>org.elasticsearch.plugin:lang-mustache-client</include>
+           <include>org.apache.httpcomponents:httpcore-nio:jar:${httpcomponents.httpcore.version}</include>
+           <include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+           <include>org.apache.lucene:lucene-core</include>
+diff --git a/distro/src/main/assembly/plugin-trino.xml b/distro/src/main/assembly/plugin-trino.xml
+index 60b083ed6..1271f3987 100644
+--- a/distro/src/main/assembly/plugin-trino.xml
++++ b/distro/src/main/assembly/plugin-trino.xml
+@@ -113,13 +113,7 @@
+                     <include>net.java.dev.jna:jna</include>
+                     <include>net.java.dev.jna:jna-platform</include>
+                     <include>com.kstruct:gethostname4j</include>
+-                    <include>org.elasticsearch:elasticsearch</include>
+-                    <include>org.elasticsearch:elasticsearch-core</include>
+-                    <include>org.elasticsearch:elasticsearch-x-content</include>
+                     <include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-                    <include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-                    <include>org.elasticsearch.plugin:rank-eval-client</include>
+-                    <include>org.elasticsearch.plugin:lang-mustache-client</include>
+                     <include>org.apache.httpcomponents:httpcore-nio:jar:${httpcomponents.httpcore.version}</include>
+                     <include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+                     <include>org.apache.lucene:lucene-core</include>
+diff --git a/distro/src/main/assembly/plugin-yarn.xml b/distro/src/main/assembly/plugin-yarn.xml
+index c2b4ebc25..23bff380d 100644
+--- a/distro/src/main/assembly/plugin-yarn.xml
++++ b/distro/src/main/assembly/plugin-yarn.xml
+@@ -63,13 +63,7 @@
+           <include>com.kstruct:gethostname4j:jar:${kstruct.gethostname4j.version}</include>
+           <include>net.java.dev.jna:jna:jar:${jna.version}</include>
+           <include>net.java.dev.jna:jna-platform:jar:${jna-platform.version}</include>
+-          <include>org.elasticsearch:elasticsearch</include>
+-          <include>org.elasticsearch:elasticsearch-core</include>
+-          <include>org.elasticsearch:elasticsearch-x-content</include>
+           <include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-          <include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-          <include>org.elasticsearch.plugin:rank-eval-client</include>
+-          <include>org.elasticsearch.plugin:lang-mustache-client</include>
+           <include>org.apache.httpcomponents:httpcore-nio:jar:${httpcomponents.httpcore.version}</include>
+           <include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+           <include>org.apache.lucene:lucene-core</include>
+diff --git a/distro/src/main/assembly/storm-agent.xml b/distro/src/main/assembly/storm-agent.xml
+index 908415ffa..a54405af7 100644
+--- a/distro/src/main/assembly/storm-agent.xml
++++ b/distro/src/main/assembly/storm-agent.xml
+@@ -83,13 +83,7 @@
+               <include>com.kstruct:gethostname4j:jar:${kstruct.gethostname4j.version}</include>
+               <include>net.java.dev.jna:jna:jar:${jna.version}</include>
+               <include>net.java.dev.jna:jna-platform:jar:${jna-platform.version}</include>
+-              <include>org.elasticsearch:elasticsearch</include>
+-              <include>org.elasticsearch:elasticsearch-core</include>
+-              <include>org.elasticsearch:elasticsearch-x-content</include>
+               <include>org.elasticsearch.client:elasticsearch-rest-client</include>
+-              <include>org.elasticsearch.client:elasticsearch-rest-high-level-client</include>
+-              <include>org.elasticsearch.plugin:rank-eval-client</include>
+-              <include>org.elasticsearch.plugin:lang-mustache-client</include>
+               <include>org.apache.httpcomponents:httpcore-nio:jar:${httpcomponents.httpcore.version}</include>
+               <include>org.apache.httpcomponents:httpasyncclient:jar:${httpcomponents.httpasyncclient.version}</include>
+               <include>org.apache.lucene:lucene-core</include>
+diff --git a/embeddedwebserver/pom.xml b/embeddedwebserver/pom.xml
+index 595bb5f6a..075caa2bc 100644
+--- a/embeddedwebserver/pom.xml
++++ b/embeddedwebserver/pom.xml
+@@ -73,6 +73,28 @@
+             <artifactId>ranger-plugins-audit</artifactId>
+             <version>${project.version}</version>
+         </dependency>
++        <!-- SDP: ranger-plugins-audit now ships only the 8.x low-level REST client; Ranger Admin
++             still needs the high-level client, whose last release line is 7.17. -->
++        <dependency>
++            <groupId>org.elasticsearch.client</groupId>
++            <artifactId>elasticsearch-rest-high-level-client</artifactId>
++            <version>${elasticsearch.version}</version>
++            <exclusions>
++                <exclusion>
++                    <groupId>org.elasticsearch</groupId>
++                    <artifactId>jna</artifactId>
++                </exclusion>
++                <exclusion>
++                    <groupId>org.apache.logging.log4j</groupId>
++                    <artifactId>*</artifactId>
++                </exclusion>
++            </exclusions>
++        </dependency>
++        <dependency>
++            <groupId>org.elasticsearch.client</groupId>
++            <artifactId>elasticsearch-rest-client</artifactId>
++            <version>${elasticsearch.version}</version>
++        </dependency>
+ 	<dependency>
+             <groupId>org.apache.ranger</groupId>
+             <artifactId>ranger-plugins-common</artifactId>
+diff --git a/pom.xml b/pom.xml
+index 648235b62..f8e20d3e6 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -120,7 +120,13 @@
+         <!-- 7.10.2 is affected by CVE-2023-31418 (unauthenticated OOM DoS in the
+              elasticsearch server jar that elasticsearch-rest-high-level-client drags in).
+              Fixed in 7.17.13; 7.17.29 matches the upstream bump in RANGER-4939. -->
++        <!-- Elasticsearch server API: Ranger Admin (high-level REST client, no 8.x release) and
++             the Ranger Elasticsearch plugin. -->
+         <elasticsearch.version>7.17.29</elasticsearch.version>
++        <!-- SDP: low-level REST client used by ElasticSearchAuditDestination in every plugin.
++             8.19.8 is Java 8 compatible and drops the Elasticsearch server jar from plugin packages
++             (CVE-2025-37731, CVE-2025-37727 and older server-side CVEs). -->
++        <elasticsearch.client.version>8.19.8</elasticsearch.client.version>
+         <enunciate.version>2.13.2</enunciate.version>
+         <spotbugs.plugin.version>4.5.0.0</spotbugs.plugin.version>
+         <google.guava.version>27.0-jre</google.guava.version>
+@@ -141,10 +147,11 @@
+         <libfb303.version>0.9.3</libfb303.version>
+         <libthrift.version>0.13.0</libthrift.version>
+         <htrace-core.version>4.1.0-incubating</htrace-core.version>
+-        <httpcomponents.httpclient.version>4.5.6</httpcomponents.httpclient.version>
+-        <httpcomponents.httpcore.version>4.4.6</httpcomponents.httpcore.version>
+-        <httpcomponents.httpasyncclient.version>4.1.3</httpcomponents.httpasyncclient.version>
+-        <httpcomponents.httpmime.version>4.5.6</httpcomponents.httpmime.version>
++        <!-- SDP: 4.5.13+ fixes CVE-2020-13956; versions match what elasticsearch-rest-client 8.19.8 is built against. -->
++        <httpcomponents.httpclient.version>4.5.14</httpcomponents.httpclient.version>
++        <httpcomponents.httpcore.version>4.4.16</httpcomponents.httpcore.version>
++        <httpcomponents.httpasyncclient.version>4.1.5</httpcomponents.httpasyncclient.version>
++        <httpcomponents.httpmime.version>4.5.14</httpcomponents.httpmime.version>
+         <javax.persistence.version>2.1.0</javax.persistence.version>
+         <javax.servlet.version>3.1.0</javax.servlet.version>
+         <javax-inject.version>1</javax-inject.version>
+diff --git a/security-admin/pom.xml b/security-admin/pom.xml
+index 4693a8088..755b3dade 100644
+--- a/security-admin/pom.xml
++++ b/security-admin/pom.xml
+@@ -589,6 +589,28 @@
+             <artifactId>ranger-plugins-common</artifactId>
+             <version>${project.version}</version>
+         </dependency>
++        <!-- SDP: ranger-plugins-audit now ships only the 8.x low-level REST client; Ranger Admin
++             still needs the high-level client, whose last release line is 7.17. -->
++        <dependency>
++            <groupId>org.elasticsearch.client</groupId>
++            <artifactId>elasticsearch-rest-high-level-client</artifactId>
++            <version>${elasticsearch.version}</version>
++            <exclusions>
++                <exclusion>
++                    <groupId>org.elasticsearch</groupId>
++                    <artifactId>jna</artifactId>
++                </exclusion>
++                <exclusion>
++                    <groupId>org.apache.logging.log4j</groupId>
++                    <artifactId>*</artifactId>
++                </exclusion>
++            </exclusions>
++        </dependency>
++        <dependency>
++            <groupId>org.elasticsearch.client</groupId>
++            <artifactId>elasticsearch-rest-client</artifactId>
++            <version>${elasticsearch.version}</version>
++        </dependency>
+         <dependency>
+             <groupId>org.apache.ranger</groupId>
+             <artifactId>ugsync-util</artifactId>
+-- 
+2.55.0
+
